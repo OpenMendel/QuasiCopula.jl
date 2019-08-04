@@ -1,5 +1,5 @@
 function loglikelihood!(
-    gc::GaussianCopulaVC{T},
+    gc::GaussianCopulaVCObs{T},
     β::Vector{T},
     τ::T, # inverse of linear regression variance
     σ2::Vector{T},
@@ -8,7 +8,11 @@ function loglikelihood!(
     ) where T <: LinearAlgebra.BlasFloat
     n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
     npar = p + 1 + m
-    if needgrad; fill!(gc.∇, 0); fill!(gc.storage_p, 0); end
+    if needgrad
+        fill!(gc.∇β, 0)
+        fill!(gc.∇τ, 0)
+        fill!(gc.∇σ2, 0) 
+    end
     needhess && fill!(gc.H, 0)
     # evaluate copula loglikelihood
     sqrtτ = sqrt(τ)
@@ -20,7 +24,7 @@ function loglikelihood!(
     for k in 1:m
         mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
         if needgrad
-            BLAS.gemv!('T', σ2[k], gc.X, gc.storage_n, one(T), gc.storage_p)
+            BLAS.gemv!('T', σ2[k], gc.X, gc.storage_n, one(T), gc.∇β)
         end
         gc.q[k] = dot(gc.res, gc.storage_n) / 2
     end
@@ -28,10 +32,10 @@ function loglikelihood!(
     logl += log(1 + qsum)
     # gradient
     if needgrad
-        BLAS.gemv!('T', one(T), gc.X, gc.res, -inv(1 + qsum), gc.storage_p)
-        gc.∇[1:p] .= sqrtτ .* gc.storage_p
-        gc.∇[p+1] = (n - rss + 2qsum / (1 + qsum)) / 2τ
-        gc.∇[p+2:end] .= inv(1 + qsum) .* gc.q .- inv(1 + tsum) .* gc.t 
+        BLAS.gemv!('T', one(T), gc.X, gc.res, -inv(1 + qsum), gc.∇β)
+        gc.∇β  .*= sqrtτ
+        gc.∇τ[1] = (n - rss + 2qsum / (1 + qsum)) / 2τ
+        gc.∇σ2  .= inv(1 + qsum) .* gc.q .- inv(1 + tsum) .* gc.t 
     end
     # Hessian
     if needhess; end;
@@ -45,11 +49,19 @@ function loglikelihood!(
     needhess::Bool = false
     ) where T <: LinearAlgebra.BlasFloat
     logl = zero(T)
-    needgrad && fill!(gcm.∇, 0)
+    if needgrad
+        fill!(gcm.∇β, 0)
+        fill!(gcm.∇τ, 0)
+        fill!(gcm.∇σ2, 0) 
+    end
     needhess && fill!(gcm.H, 0)
     for i in eachindex(gcm.data)
         logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.σ2, needgrad, needhess)
-        needgrad && (gcm.∇ .+= gcm.data[i].∇)
+        if needgrad
+            gcm.∇β  .+= gcm.data[i].∇β
+            gcm.∇τ  .+= gcm.data[i].∇τ
+            gcm.∇σ2 .+= gcm.data[i].∇σ2
+        end
         needhess && (gcm.H .+= gcm.data[i].H)
     end
     logl
@@ -69,11 +81,11 @@ function fit!(
     optstat = MathProgBase.status(optm)
     optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
     copy_par!(gcm, MathProgBase.getsolution(optm))
-    update_res!(gcm)
+    loglikelihood!(gcm)
     gcm
 end
 
-function MathProgBase.initialize(gc::GaussianCopulaVCModel, requested_features::Vector{Symbol})
+function MathProgBase.initialize(gcm::GaussianCopulaVCModel, requested_features::Vector{Symbol})
     for feat in requested_features
         if !(feat in [:Grad])
             error("Unsupported feature $feat")
@@ -90,8 +102,11 @@ end
 
 function MathProgBase.eval_grad_f(gcm::GaussianCopulaVCModel, grad::Vector, par::Vector)
     copy_par!(gcm, par)
-    loglikelihood!(gcm, true, false)
-    copyto!(grad, gcm.∇)
+    logl = loglikelihood!(gcm, true, false)
+    copyto!(grad, 1, gcm.∇β, 1, gcm.p)
+    grad[gcm.p+1] = gcm.∇τ[1]
+    copyto!(grad, gcm.p+2, gcm.∇σ2, 1, gcm.m)
+    logl
 end
 
 function copy_par!(gcm::GaussianCopulaVCModel, par::Vector)

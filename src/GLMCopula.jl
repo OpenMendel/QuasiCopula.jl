@@ -6,32 +6,33 @@ using Convex, LinearAlgebra, MathProgBase, Reexport, SCS
 @reexport using Ipopt
 @reexport using NLopt
 
-export GaussianCopulaVC, GaussianCopulaVCModel
+export GaussianCopulaVCObs, GaussianCopulaVCModel
 export fit!, init_β!, loglikelihood!, standardize_res!, update_σ2!, update_quadform!
 
 """
-GaussianCopulaVC
-GaussianCopulaVC(y, X, V)
+GaussianCopulaVCObs
+GaussianCopulaVCObs(y, X, V)
 
 A single instance of Gaussian copula variance component data.
 """
-struct GaussianCopulaVC{T <: LinearAlgebra.BlasFloat}
+struct GaussianCopulaVCObs{T <: LinearAlgebra.BlasFloat}
     # data
     y::Vector{T}
     X::Matrix{T}
     V::Vector{Matrix{T}}
     # working arrays
-    ∇::Vector{T}    # gradient ∇_i
-    H::Matrix{T}    # Hessian H_i
+    ∇β::Vector{T}   # gradient wrt β
+    ∇τ::Vector{T}   # gradient wrt τ
+    ∇σ2::Vector{T}  # gradient wrt σ2
+    H::Matrix{T}    # Hessian H
     res::Vector{T}  # residual vector res_i
     xtx::Matrix{T}  # Xi'Xi
     t::Vector{T}    # t[k] = tr(V_i[k]) / 2
     q::Vector{T}    # q[k] = res_i' * V_i[k] * res_i
-    storage_p::Vector{T}
     storage_n::Vector{T}
 end
 
-function GaussianCopulaVC(
+function GaussianCopulaVCObs(
     y::Vector{T},
     X::Matrix{T},
     V::Vector{Matrix{T}}
@@ -39,21 +40,22 @@ function GaussianCopulaVC(
     n, p, m = size(X, 1), size(X, 2), length(V)
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
-    ∇   = Vector{T}(undef, p + 1 + m)
+    ∇β  = Vector{T}(undef, p)
+    ∇τ  = Vector{T}(undef, 1)
+    ∇σ2 = Vector{T}(undef, m)
     H   = Matrix{T}(undef, p + 1 + m, p + 1 + m)
     res = Vector{T}(undef, n)
     xtx = transpose(X) * X
     t   = [tr(V[k])/2 for k in 1:m] 
     q   = Vector{T}(undef, m)
-    storage_p = Vector{T}(undef, p)
     storage_n = Vector{T}(undef, n)
     # constructor
-    GaussianCopulaVC{T}(y, X, V, ∇, H, res, xtx, t, q, storage_p, storage_n)
+    GaussianCopulaVCObs{T}(y, X, V, ∇β, ∇τ, ∇σ2, H, res, xtx, t, q, storage_n)
 end
 
 struct GaussianCopulaVCModel{T <: LinearAlgebra.BlasFloat} <: MathProgBase.AbstractNLPEvaluator
     # data
-    data::Vector{GaussianCopulaVC{T}}
+    data::Vector{GaussianCopulaVCObs{T}}
     ntotal::Int     # total number of singleton observations
     p::Int          # number of mean parameters in linear regression
     m::Int          # number of variance components
@@ -62,7 +64,9 @@ struct GaussianCopulaVCModel{T <: LinearAlgebra.BlasFloat} <: MathProgBase.Abstr
     τ::Vector{T}    # inverse of linear regression variance parameter
     σ2::Vector{T}   # m-vector: [σ12, ..., σm2]
     # working arrays
-    ∇::Vector{T}    # gradient from all observations
+    ∇β::Vector{T}    # gradient from all observations
+    ∇τ::Vector{T}
+    ∇σ2::Vector{T}
     H::Matrix{T}    # Hessian from all observations
     XtX::Matrix{T}  # X'X = sum_i Xi'Xi
     TR::Matrix{T}   # n-by-m matrix with tik = tr(Vi[k]) / 2
@@ -72,13 +76,15 @@ struct GaussianCopulaVCModel{T <: LinearAlgebra.BlasFloat} <: MathProgBase.Abstr
     storage_σ2::Vector{T}
 end
 
-function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVC{T}}) where T <: LinearAlgebra.BlasFloat
+function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVCObs{T}}) where T <: LinearAlgebra.BlasFloat
     n, p, m = length(gcs), size(gcs[1].X, 2), length(gcs[1].V)
     npar = p + m + 1
     β   = Vector{T}(undef, p)
     τ   = Vector{T}(undef, 1)
     σ2  = Vector{T}(undef, m)
-    ∇   = Vector{T}(undef, npar)
+    ∇β  = Vector{T}(undef, p)
+    ∇τ  = Vector{T}(undef, 1)
+    ∇σ2 = Vector{T}(undef, m)
     H   = Matrix{T}(undef, npar, npar)
     XtX = zeros(T, p, p) # sum_i xi'xi
     TR  = Matrix{T}(undef, n, m)
@@ -93,7 +99,7 @@ function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVC{T}}) where T <: Line
     storage_m  = Vector{T}(undef, m)
     storage_σ2 = Vector{T}(undef, m)
     GaussianCopulaVCModel{T}(gcs, ntotal, p, m, β, τ, σ2, 
-        ∇, H, XtX, TR, QF, 
+        ∇β, ∇τ, ∇σ2, H, XtX, TR, QF, 
         storage_n, storage_m, storage_σ2)
 end
 
@@ -127,7 +133,7 @@ update_res!(gc, β)
 Update the residual vector according to `β`.
 """
 function update_res!(
-    gc::GaussianCopulaVC{T}, 
+    gc::GaussianCopulaVCObs{T}, 
     β::Vector{T}
     ) where T <: LinearAlgebra.BlasFloat
     copyto!(gc.res, gc.y)
@@ -142,7 +148,7 @@ function update_res!(gcm::GaussianCopulaVCModel{T}) where T <: LinearAlgebra.Bla
     nothing
 end
 
-function standardize_res!(gc::GaussianCopulaVC{T}, σinv::T) where T <: LinearAlgebra.BlasFloat
+function standardize_res!(gc::GaussianCopulaVCObs{T}, σinv::T) where T <: LinearAlgebra.BlasFloat
     gc.res .*= σinv
 end
 
@@ -160,7 +166,7 @@ update_quadform!(gc)
 
 Update the quadratic forms `(r^T V[k] r) / 2` according to the current residual `r`.
 """
-function update_quadform!(gc::GaussianCopulaVC)
+function update_quadform!(gc::GaussianCopulaVCObs)
     for k in 1:length(gc.V)
         gc.q[k] = dot(gc.res, mul!(gc.storage_n, gc.V[k], gc.res)) / 2
     end

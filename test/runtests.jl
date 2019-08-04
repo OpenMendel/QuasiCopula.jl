@@ -9,7 +9,7 @@ n = 100  # number of observations
 ns = rand(10:30, n) # ni in each observation
 p = 3   # number of mean parameters
 m = 2   # number of variance components
-gcs = Vector{GaussianCopulaVC{Float64}}(undef, n)
+gcs = Vector{GaussianCopulaVCObs{Float64}}(undef, n)
 # true parameter values
 βtruth = ones(p)
 σ2truth = collect(1.:m)
@@ -29,7 +29,7 @@ for i in 1:n
     # generate responses
     y = X * βtruth + Ωchol.L * randn(ni)
     # add to data
-    gcs[i] = GaussianCopulaVC(y, X, [V1, V2])
+    gcs[i] = GaussianCopulaVCObs(y, X, [V1, V2])
 end
 
 gcm = GaussianCopulaVCModel(gcs)
@@ -50,7 +50,7 @@ update_σ2!(gcm)
 # @btime loglikelihood!(gcm.data[1], gcm.β, gcm.τ[1], gcm.σ2, true, false)
 
 @show loglikelihood!(gcm, true, false)
-@show gcm.∇
+@show [gcm.∇β; gcm.∇τ; gcm.∇σ2]
 # @code_warntype loglikelihood!(gcm, false, false)
 # @code_llvm loglikelihood!(gcm, false, false)
 # @btime loglikelihood!(gcm, true, false)
@@ -76,7 +76,7 @@ fit!(gcm, solver) # force compilation
 @show gcm.β
 @show gcm.τ
 @show gcm.σ2
-@show gcm.∇
+@show [gcm.∇β; gcm.∇τ; gcm.∇σ2]
 @show loglikelihood!(gcm)
 # @btime fit!(gcm, solver)
 
