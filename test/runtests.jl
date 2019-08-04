@@ -72,7 +72,7 @@ update_σ2!(gcm)
 
 @info "MLE:"
 solver = Ipopt.IpoptSolver(print_level=0)
-fit!(gcm, solver) # force compilation
+fit!(gcm, solver)
 @show gcm.β
 @show gcm.τ
 @show gcm.σ2

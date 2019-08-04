@@ -2,12 +2,12 @@ __precompile__()
 
 module GLMCopula
 
-using Convex, LinearAlgebra, MathProgBase, Reexport, SCS
+using Convex, LinearAlgebra, MathProgBase, Reexport
 @reexport using Ipopt
 @reexport using NLopt
 
 export GaussianCopulaVCObs, GaussianCopulaVCModel
-export fit!, init_β!, loglikelihood!, standardize_res!, update_σ2!, update_quadform!
+export fit!, fitted, init_β!, loglikelihood!, standardize_res!, update_σ2!, update_quadform!
 
 """
 GaussianCopulaVCObs
@@ -209,6 +209,30 @@ function update_σ2!(gcm::GaussianCopulaVCModel, maxiter::Integer=1000, reltol::
         iter == maxiter && @warn "maximum iterations $maxiter reached"
     end
     gcm.σ2
+end
+
+function fitted(
+    gc::GaussianCopulaVCObs{T},
+    β::Vector{T},
+    τ::T,
+    σ2::Vector{T}) where T <: LinearAlgebra.BlasFloat
+    n, m = length(gc.y), length(gc.V)
+    μ̂ = gc.X * β
+    Ω = Matrix{T}(undef, n, n)
+    for k in 1:m
+        Ω .+= σ2[k] .* gc.V[k]
+    end
+    σ02 = inv(τ)
+    c = inv(1 + dot(σ2, gc.t)) # normalizing constant
+    V̂ = Matrix{T}(undef, n, n)
+    for j in 1:n
+        for i in 1:j-1
+            V̂[i, j] = c * σ02 * Ω[i, j]
+        end
+        V̂[j, j] = c * σ02 * (1 + Ω[j, j] + tr(Ω) / 2) 
+    end
+    LinearAlgebra.copytri!(V̂, 'U')
+    μ̂, V̂
 end
 
 include("fit_nlp.jl")
