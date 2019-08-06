@@ -6,7 +6,7 @@ using BenchmarkTools, GLMCopula
 Random.seed!(123)
 
 n = 100  # number of observations
-ns = rand(10:30, n) # ni in each observation
+ns = rand(100:300, n) # ni in each observation
 p = 3   # number of mean parameters
 m = 2   # number of variance components
 gcs = Vector{GaussianCopulaVCObs{Float64}}(undef, n)
@@ -45,7 +45,7 @@ update_σ2!(gcm)
 @show gcm.σ2
 # @btime update_σ2!(gcm) setup=(fill!(gcm.σ2, 1))
 
-# @show loglikelihood!(gcm.data[1], gcm.β, gcm.τ[1], gcm.σ2, true, false)
+@show loglikelihood!(gcm.data[1], gcm.β, gcm.τ[1], gcm.σ2, true, false)
 # @code_warntype loglikelihood!(gcm.data[1], gcm.β, gcm.τ[1], gcm.σ2, true, false)
 # @btime loglikelihood!(gcm.data[1], gcm.β, gcm.τ[1], gcm.σ2, true, false)
 
@@ -71,14 +71,14 @@ update_σ2!(gcm)
 # NLopt.NLoptSolver(algorithm=:LN_BOBYQA, maxeval=10000)
 
 @info "MLE:"
-solver = Ipopt.IpoptSolver(print_level=0)
-fit!(gcm, solver)
-@show gcm.β
-@show gcm.τ
-@show gcm.σ2
+solver = Ipopt.IpoptSolver(print_level=5)
+@time fit!(gcm, solver)
+@show [gcm.β; gcm.τ; gcm.σ2]
 @show [gcm.∇β; gcm.∇τ; gcm.∇σ2]
 @show loglikelihood!(gcm)
-# @btime fit!(gcm, solver)
+# @btime fit!(gcm, solver) setup=(init_β!(gcm); 
+#     standardize_res!(gcm); update_quadform!(gcm, true); fill!(gcm.σ2, 1);
+#     update_σ2!(gcm))
 
 # Profile.clear()
 # @profile begin
@@ -93,14 +93,22 @@ fit!(gcm, solver)
 #     #NLopt.NLoptSolver(algorithm=:LD_TNEWTON, maxeval=4000),
 #     # NLopt.NLoptSolver(algorithm=:LD_VAR1, maxeval=4000),
 #     # NLopt.NLoptSolver(algorithm=:LD_VAR2, maxeval=4000),
-#     Ipopt.IpoptSolver(print_level=3)
+#     Ipopt.IpoptSolver(print_level=0)
 #     ]
+#     println()
 #     @show solver
-#     # fill!(vcm.σ2, 0.25) # re-set starting point
-#     fit_mom!(vcm)
-#     @time fit!(vcm, solver)
-#     @show vcm.σ2
-#     @show composite_loglikelihood!(vcm)
+#     # re-set starting point
+#     init_β!(gcm)
+#     standardize_res!(gcm)
+#     update_quadform!(gcm, true)
+#     fill!(gcm.σ2, 1)
+#     update_σ2!(gcm)
+#     # fit 
+#     fit!(gcm, solver)
+#     @time fit!(gcm, solver)
+#     @show loglikelihood!(gcm)
+#     @show [gcm.β; gcm.τ; gcm.σ2]
+#     @show [gcm.∇β; gcm.∇τ; gcm.∇σ2]
 #     println()
 # end
 # end

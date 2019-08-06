@@ -13,7 +13,7 @@ export fit!, fitted, init_β!, loglikelihood!, standardize_res!, update_σ2!, up
 GaussianCopulaVCObs
 GaussianCopulaVCObs(y, X, V)
 
-A single instance of Gaussian copula variance component data.
+A realization of Gaussian copula variance component data.
 """
 struct GaussianCopulaVCObs{T <: LinearAlgebra.BlasFloat}
     # data
@@ -53,6 +53,13 @@ function GaussianCopulaVCObs(
     GaussianCopulaVCObs{T}(y, X, V, ∇β, ∇τ, ∇σ2, H, res, xtx, t, q, storage_n)
 end
 
+"""
+GaussianCopulaVCModel
+GaussianCopulaVCModel(gcs)
+
+Gaussian copula variance component model, which contains a vector of 
+`GaussianCopulaVCObs` as data `gcs`, parameters, and working arrays.
+"""
 struct GaussianCopulaVCModel{T <: LinearAlgebra.BlasFloat} <: MathProgBase.AbstractNLPEvaluator
     # data
     data::Vector{GaussianCopulaVCObs{T}}
@@ -64,7 +71,7 @@ struct GaussianCopulaVCModel{T <: LinearAlgebra.BlasFloat} <: MathProgBase.Abstr
     τ::Vector{T}    # inverse of linear regression variance parameter
     σ2::Vector{T}   # m-vector: [σ12, ..., σm2]
     # working arrays
-    ∇β::Vector{T}    # gradient from all observations
+    ∇β::Vector{T}   # gradient from all observations
     ∇τ::Vector{T}
     ∇σ2::Vector{T}
     H::Matrix{T}    # Hessian from all observations
@@ -116,7 +123,7 @@ function init_β!(gcm::GaussianCopulaVCModel{T}) where T <: LinearAlgebra.BlasFl
         BLAS.gemv!('T', one(T), gcm.data[i].X, gcm.data[i].y, one(T), xty)
     end
     # least square solution for β
-    gcm.β .= cholesky(Symmetric(gcm.XtX)) \ xty
+    ldiv!(gcm.β, cholesky(Symmetric(gcm.XtX)), xty)
     # accumulate residual sum of squares
     rss = zero(T)
     for i in eachindex(gcm.data)
@@ -187,9 +194,10 @@ update_σ2!(gc)
 Update the variance components `σ2` according to the current value of 
 `β` and `σ02`.
 """
-function update_σ2!(gcm::GaussianCopulaVCModel, maxiter::Integer=1000, reltol::Number=1e-6)
+function update_σ2!(gcm::GaussianCopulaVCModel, maxiter::Integer=5000, reltol::Number=1e-6)
     # MM iteration
     for iter in 1:maxiter
+        # store previous iterate
         copyto!(gcm.storage_σ2, gcm.σ2)
         # numerator in the multiplicative update
         mul!(gcm.storage_n, gcm.QF, gcm.σ2)
