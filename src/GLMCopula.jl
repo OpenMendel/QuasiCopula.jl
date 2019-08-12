@@ -111,9 +111,9 @@ function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVCObs{T}}) where T <: L
 end
 
 """
-init_β(gc)
+init_β(gcm)
 
-Initialize the linear regression parameters `β` and `σ20` by the least squares 
+Initialize the linear regression parameters `β` and `τ=σ0^{-2}` by the least squares 
 solution.
 """
 function init_β!(gcm::GaussianCopulaVCModel{T}) where T <: LinearAlgebra.BlasFloat   
@@ -196,6 +196,10 @@ Update the variance components `σ2` according to the current value of
 """
 function update_σ2!(gcm::GaussianCopulaVCModel, maxiter::Integer=5000, reltol::Number=1e-6)
     # MM iteration
+    # @show gcm.σ2
+    # @show gcm.τ
+    # @show gcm.QF
+    # @show gcm.TR
     for iter in 1:maxiter
         # store previous iterate
         copyto!(gcm.storage_σ2, gcm.σ2)

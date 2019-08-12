@@ -36,7 +36,7 @@ function loglikelihood!(
         gc.∇τ[1] = (n - rss + 2qsum / (1 + qsum)) / 2τ
         gc.∇σ2  .= inv(1 + qsum) .* gc.q .- inv(1 + tsum) .* gc.t 
     end
-    # Hessian
+    # Hessian: TODO
     if needhess; end;
     # output
     logl
@@ -72,10 +72,10 @@ function fit!(
     )
     npar = gcm.p + 1
     optm = MathProgBase.NonlinearModel(solver)
-    lb = [fill(-Inf, gcm.p); 0]
-    ub = fill(Inf, npar)
+    lb = fill(-Inf, npar)
+    ub = fill( Inf, npar)
     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Max, gcm)
-    MathProgBase.setwarmstart!(optm, [gcm.β; gcm.τ])
+    MathProgBase.setwarmstart!(optm, [gcm.β; log(gcm.τ[1])])
     MathProgBase.optimize!(optm)
     optstat = MathProgBase.status(optm)
     optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
@@ -113,12 +113,12 @@ function MathProgBase.eval_grad_f(gcm::GaussianCopulaVCModel, grad::Vector, par:
     update_σ2!(gcm)
     logl = loglikelihood!(gcm, true, false)
     copyto!(grad, 1, gcm.∇β, 1, gcm.p)
-    grad[gcm.p+1] = gcm.∇τ[1]
+    grad[gcm.p+1] = gcm.∇τ[1] * gcm.τ[1]
     logl
 end
 
 function copy_par!(gcm::GaussianCopulaVCModel, par::Vector)
     copyto!(gcm.β, 1, par, 1, gcm.p)
-    gcm.τ[1] = max(par[gcm.p+1], 0)
+    gcm.τ[1] = exp(par[end])
     par
 end
