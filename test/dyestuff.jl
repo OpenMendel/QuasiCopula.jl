@@ -27,22 +27,22 @@ init_β!(gcm)
 # update σ2 from β and τ using the MM algorithm
 standardize_res!(gcm)
 update_quadform!(gcm, true)
-fill!(gcm.σ2, 1)
-update_σ2!(gcm)
-@show gcm.σ2;
+fill!(gcm.Σ, 1)
+update_Σ!(gcm)
+@show gcm.Σ;
 @test loglikelihood!(gcm, true, false) ≈ -165.27260315
 @show gcm.∇β
 @show gcm.∇τ
-@show gcm.∇σ2
+@show gcm.∇Σ
 
 # fit model using NLP on profile loglikelihood
-@time GLMCopula.fit!(gcm, IpoptSolver(print_level=0))
+@time GLMCopula.fit!(gcm, IpoptSolver(print_level=5))
 @show gcm.β
 @show gcm.τ
-@show gcm.σ2
+@show gcm.Σ
 @test loglikelihood!(gcm, true, false) ≈  -163.40909306
 @show gcm.∇β
 @show gcm.∇τ
-@show gcm.∇σ2
+@show gcm.∇Σ
 
 end
