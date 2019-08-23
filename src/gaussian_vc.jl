@@ -76,14 +76,7 @@ function update_quadform!(gc::GaussianCopulaVCObs)
     gc.q
 end
 
-"""
-update_Σ!(gc)
-
-Update `τ` and variance components `Σ` according to the current value of 
-`β` by an MM algorithm. `gcm.QF` needs to hold qudratic forms calculated from 
-un-standardized residuals.
-"""
-function update_Σ!(
+function update_Σ_jensen!(
     gcm::GaussianCopulaVCModel{T}, 
     maxiter::Integer=50000,
     reltol::Number=1e-6,
@@ -126,6 +119,70 @@ function update_Σ!(
     end
     gcm.Σ
 end
+
+function update_Σ_quadratic!(
+    gcm::GaussianCopulaVCModel{T}, 
+    maxiter::Integer=50000,
+    reltol::Number=1e-6,
+    verbose::Bool=false) where T <: BlasReal
+    n, m = length(gcm.data), length(gcm.data[1].V)
+    # pre-compute quadratic forms and RSS
+    rsstotal = zero(T)
+    for i in eachindex(gcm.data)
+        update_res!(gcm.data[i], gcm.β)
+        rsstotal += abs2(norm(gcm.data[i].res))
+        update_quadform!(gcm.data[i])
+        gcm.QF[i, :] = gcm.data[i].q
+    end
+    qcolsum = sum(gcm.QF, dims=1)[:]
+    # define NNLS optimization problem
+    σ2 = Convex.Variable(m)
+    c  = Vector{T}(undef, m)
+    w  = Vector{T}(undef, n)
+    problem = minimize(0.5sumsquares(w .* (gcm.QF * σ2)) + dot(c, σ2), [σ2 >= 0])
+    # MM iteration
+    for iter in 1:maxiter
+        # store previous iterate
+        copyto!(gcm.storage_Σ, gcm.Σ)
+        # update τ
+        mul!(gcm.storage_n, gcm.QF, gcm.Σ) # gcm.storage_n[i] = q[i]
+        a, b = zero(T), - rsstotal / 2
+        for i in eachindex(gcm.data)
+            a += abs2(gcm.storage_n[i]) / (1 + gcm.τ[1] * gcm.storage_n[i])
+            b += gcm.storage_n[i]
+        end
+        gcm.τ[1] = (b + sqrt(abs2(b) + 2a * gcm.ntotal)) / 2a
+        # update variance components
+        for i in eachindex(gcm.data)
+            w[i] = gcm.τ[1] / sqrt(1 + gcm.τ[1] * gcm.storage_n[i])
+        end
+        mul!(gcm.storage_n, gcm.TR, gcm.storage_Σ)
+        gcm.storage_n .= inv.(1 .+ gcm.storage_n)
+        mul!(gcm.storage_m, transpose(gcm.TR), gcm.storage_n)
+        c .= gcm.storage_m .- gcm.τ[1] .* qcolsum
+        solve!(problem, GurobiSolver(OutputFlag=0))
+        gcm.Σ .= σ2.value
+        # monotonicity diagnosis
+        verbose && println(sum(log, 1 .+ gcm.τ[1] .* (gcm.QF * gcm.Σ)) - 
+            sum(log, 1 .+ gcm.TR * gcm.Σ) + 
+            gcm.ntotal / 2 * (log(gcm.τ[1]) - log(2π)) - 
+            rsstotal / 2 * gcm.τ[1])
+        # convergence check
+        gcm.storage_m .= gcm.Σ .- gcm.storage_Σ
+        norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1) && break
+        verbose && iter == maxiter && @warn "maximum iterations $maxiter reached"
+    end
+    gcm.Σ
+end
+
+"""
+update_Σ!(gc)
+
+Update `τ` and variance components `Σ` according to the current value of 
+`β` by an MM algorithm. `gcm.QF` needs to hold qudratic forms calculated from 
+un-standardized residuals.
+"""
+update_Σ! = update_Σ_quadratic!
 
 function fitted(
     gc::GaussianCopulaVCObs{T},

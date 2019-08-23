@@ -4,21 +4,41 @@ update_Σ!(gcm)
 Update the variance components `σ2` according to the current value of 
 `β` and `τ`.
 """
-function update_Σ!(gcm::GaussianCopulaLMMModel, maxiter::Integer=5000, reltol::Number=1e-6)
+function update_Σ!(
+    gcm::GaussianCopulaLMMModel{T}, 
+    maxiter::Integer=5000, 
+    reltol::Number=1e-6) where T<:BlasReal
+    # pre-compute
+    rsstotal = zero(T)
+    for i in eachindex(gcm.data)
+        update_res!(gcm.data[i], gcm.β)
+        rsstotal += abs2(norm(gcm.data[i].res))
+        # storage_q1 = Zi' * ri
+        mul!(gcm.data[i].storage_q1, transpose(gcm.data[i].Z), gcm.data[i].res)
+    end
+    H = Matrix{T}(undef, abs2(gcm.q). abs2(gcm.q))
+    # set up SDP optimization
+    Σ = Convex.Semidefinite(gcm.q)
+    C = Matrix{T}(undef, gcm.q, gcm.q)
+    problem = minimize(dot(Σ, H * Convex.vec(Σ)) + dot(C, Σ))
     # MM iteration
     for iter in 1:maxiter
-        # # store previous iterate
-        # copyto!(gcm.storage_σ2, gcm.σ2)
-        # # numerator in the multiplicative update
-        # mul!(gcm.storage_n, gcm.QF, gcm.σ2)
-        # gcm.storage_n .= inv.(gcm.storage_n .+ 1)
-        # mul!(gcm.storage_m, transpose(gcm.QF), gcm.storage_n)
-        # gcm.σ2 .*= gcm.storage_m
-        # # denominator in the multiplicative update
-        # mul!(gcm.storage_n, gcm.TR, gcm.σ2)
-        # gcm.storage_n .= inv.(gcm.storage_n .+ 1)
-        # mul!(gcm.storage_m, transpose(gcm.TR), gcm.storage_n)
-        # gcm.σ2 ./= gcm.storage_m
+        # update τ        
+        for i in eachindex(gcm.data)
+            # storage_q2 = Σ * Zi' * ri
+            mul!(gcm.data[i].storage_q2, gcm.Σ, gcm.data[i].storage_q1)
+            # storage_n[i] = (ri' * Zi * Σ * Zi' * ri) / 2
+            gcm.storage_n[i] = dot(gcm.data[i].storage_q1, gcm.data[i].storage_q2) / 2
+        end
+        for τiter in 1:10
+            tmp = zero(T)
+            for i in eachindex(gcm.storage_n)
+                tmp += gcm.storage_n[i] / (1 + gcm.τ[1] * gcm.storage_n[i])
+            end
+            gcm.τ[1] = (gcm.ntotal + 2gcm.τ[1] * tmp) / rsstotal
+        end
+        # update Σ by SDP
+        
         # # monotonicity diagnosis
         # # println(sum(log, (gcm.QF * gcm.σ2) .+ 1) - sum(log, gcm.TR * gcm.σ2 .+ 1))
         # # convergence check

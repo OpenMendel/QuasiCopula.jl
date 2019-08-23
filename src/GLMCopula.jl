@@ -2,7 +2,7 @@ __precompile__()
 
 module GLMCopula
 
-using Convex, LinearAlgebra, MathProgBase, Reexport
+using Convex, LinearAlgebra, MathProgBase, Reexport, Gurobi, Mosek, SCS
 using LinearAlgebra: BlasReal, copytri!
 @reexport using Ipopt
 @reexport using NLopt
@@ -139,6 +139,7 @@ struct GaussianCopulaLMMObs{T <: LinearAlgebra.BlasReal}
     Hτ::Matrix{T}   # Hessian wrt τ
     res::Vector{T}  # residual vector
     xtx::Matrix{T}  # Xi'Xi
+    ztz::Matrix{T}  # Zi'Zi
     storage_q::Vector{T}
     storage_nq::Matrix{T}
 end
@@ -158,11 +159,12 @@ function GaussianCopulaLMMObs(
     Hτ  = Matrix{T}(undef, 1, 1)
     res = Vector{T}(undef, n)
     xtx = transpose(X) * X
+    ztz = transpose(Z) * Z
     storage_q1 = Vector{T}(undef, q)
     storage_q2 = Vector{T}(undef, q)
     storage_nq = Matrix{T}(undef, n, q)
     # constructor
-    GaussianCopulaLMMObs{T}(y, X, Z, ∇β, ∇τ, ∇Σ, Hβ, Hτ, res, xtx, 
+    GaussianCopulaLMMObs{T}(y, X, Z, ∇β, ∇τ, ∇Σ, Hβ, Hτ, res, xtx, ztz, 
         storage_q1, storage_q2, storage_nq)
 end
 
@@ -192,7 +194,8 @@ struct GaussianCopulaLMMModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluato
     XtX::Matrix{T}  # X'X = sum_i Xi'Xi
     storage_n::Vector{T}
     storage_p::Vector{T}
-    storage_Σ::Vector{T}
+    storage_q::Vector{T}
+    storage_Σ::Matrix{T}
 end
 
 function GaussianCopulaLMMModel(gcs::Vector{GaussianCopulaLMMObs{T}}) where T <: BlasReal
@@ -214,13 +217,14 @@ function GaussianCopulaLMMModel(gcs::Vector{GaussianCopulaLMMObs{T}}) where T <:
     end
     storage_n = Vector{T}(undef, n)
     storage_p = Vector{T}(undef, p)
+    storage_q = Vector{T}(undef, q)
     storage_Σ = Matrix{T}(undef, q, q)
     GaussianCopulaLMMModel{T}(gcs, ntotal, p, q, β, τ, Σ, 
         ∇β, ∇τ, ∇Σ, Hβ, Hτ, XtX,
-        storage_n, storage_p, storage_Σ)
+        storage_n, storage_p, storage_q, storage_Σ)
 end
 
 include("gaussian_vc.jl")
-include("gaussian_lmm.jl")
+# include("gaussian_lmm.jl")
 
 end#module
