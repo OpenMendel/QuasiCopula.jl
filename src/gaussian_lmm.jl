@@ -1,54 +1,3 @@
-"""
-update_Σ!(gcm)
-
-Update the variance components `σ2` according to the current value of 
-`β` and `τ`.
-"""
-function update_Σ!(
-    gcm::GaussianCopulaLMMModel{T}, 
-    maxiter::Integer=5000, 
-    reltol::Number=1e-6) where T<:BlasReal
-    # pre-compute
-    rsstotal = zero(T)
-    for i in eachindex(gcm.data)
-        update_res!(gcm.data[i], gcm.β)
-        rsstotal += abs2(norm(gcm.data[i].res))
-        # storage_q1 = Zi' * ri
-        mul!(gcm.data[i].storage_q1, transpose(gcm.data[i].Z), gcm.data[i].res)
-    end
-    H = Matrix{T}(undef, abs2(gcm.q). abs2(gcm.q))
-    # set up SDP optimization
-    Σ = Convex.Semidefinite(gcm.q)
-    C = Matrix{T}(undef, gcm.q, gcm.q)
-    problem = minimize(dot(Σ, H * Convex.vec(Σ)) + dot(C, Σ))
-    # MM iteration
-    for iter in 1:maxiter
-        # update τ        
-        for i in eachindex(gcm.data)
-            # storage_q2 = Σ * Zi' * ri
-            mul!(gcm.data[i].storage_q2, gcm.Σ, gcm.data[i].storage_q1)
-            # storage_n[i] = (ri' * Zi * Σ * Zi' * ri) / 2
-            gcm.storage_n[i] = dot(gcm.data[i].storage_q1, gcm.data[i].storage_q2) / 2
-        end
-        for τiter in 1:10
-            tmp = zero(T)
-            for i in eachindex(gcm.storage_n)
-                tmp += gcm.storage_n[i] / (1 + gcm.τ[1] * gcm.storage_n[i])
-            end
-            gcm.τ[1] = (gcm.ntotal + 2gcm.τ[1] * tmp) / rsstotal
-        end
-        # update Σ by SDP
-        
-        # # monotonicity diagnosis
-        # # println(sum(log, (gcm.QF * gcm.σ2) .+ 1) - sum(log, gcm.TR * gcm.σ2 .+ 1))
-        # # convergence check
-        # gcm.storage_m .= gcm.σ2 .- gcm.storage_σ2
-        # norm(gcm.storage_m) < reltol * (norm(gcm.storage_σ2) + 1) && break
-        # iter == maxiter && @warn "maximum iterations $maxiter reached"
-    end
-    gcm.Σ
-end
-
 function loglikelihood!(
     gc::GaussianCopulaLMMObs{T},
     β::Vector{T},
@@ -68,20 +17,24 @@ function loglikelihood!(
     sqrtτ = sqrt(τ)
     update_res!(gc, β)
     standardize_res!(gc, sqrtτ)
-    rss  = abs2(norm(gc.res)) # RSS of standardized residual
-    mul!(gc.storage_q1, transpose(gc.Z), gc.res)
-    mul!(gc.storage_q2, Σ, gc.storage_q1)
-    tr = dot(gc.storage_nq, gc.Z) / 2
+    rss = abs2(norm(gc.res)) # RSS of standardized residual
+    tr = dot(gc.ztz, Σ) / 2
+    mul!(gc.storage_q1, transpose(gc.Z), gc.res) # storage_q1 = Z' * std residual
+    mul!(gc.storage_q2, Σ, gc.storage_q1)        # storage_q2 = Σ * Z' * std residual
     qf = dot(gc.storage_q1, gc.storage_q2) / 2
-    mul!(gc.storage_nq, gc.Z, Σ)
     logl = - log(1 + tr) - (n * log(2π) -  n * log(τ) + rss) / 2 + log(1 + qf)
     # gradient
     if needgrad
+        # wrt β
         mul!(gc.∇β, transpose(gc.X), gc.res)
-        BLAS.gemv!('T', -one(T), gc.Z, gc.storage_q2, one(T), gc.∇β)
-        gc.∇β  .*= sqrtτ
+        BLAS.gemv!('T', -inv(1 + qf), gc.xtz, gc.storage_q2, one(T), gc.∇β)
+        gc.∇β .*= sqrtτ
+        # wrt τ
         gc.∇τ[1] = (n - rss + 2qf / (1 + qf)) / 2τ
-        gc.∇σ2  .= 0 # TODO
+        # wrt Σ
+        copyto!(gc.∇Σ, gc.ztz)
+        BLAS.syrk!('U', 'N', (1//2)inv(1 + qf), gc.storage_q1, (-1//2)inv(1 + tr), gc.∇Σ)
+        copytri!(gc.∇Σ, 'U')
     end
     # Hessian: TODO
     if needhess; end;
@@ -89,3 +42,102 @@ function loglikelihood!(
     logl
 end
 
+function fit!(
+    gcm::GaussianCopulaLMMModel,
+    solver=Ipopt.IpoptSolver(print_level=0)
+    )
+    p, q = size(gcm.data[1].X, 2), size(gcm.data[1].Z, 2)
+    npar = p + 1 + (q * (q + 1)) >> 1
+    optm = MathProgBase.NonlinearModel(solver)
+    lb = fill(-Inf, npar)
+    ub = fill( Inf, npar)
+    MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Max, gcm)
+    # starting point
+    gcm.ΣL .= cholesky(Symmetric(gcm.Σ)).L
+    par0 = Vector{Float64}(undef, npar)
+    copyto!(par0, gcm.β)
+    par0[p+1] = log(gcm.τ[1])
+    offset = p + 2
+    for j in 1:q
+        par0[offset] = log(gcm.ΣL[j, j])
+        offset += 1
+        for i in j+1:q
+            par0[offset] = gcm.ΣL[i, j]
+        end
+    end
+    MathProgBase.setwarmstart!(optm, par0)
+    MathProgBase.optimize!(optm)
+    optstat = MathProgBase.status(optm)
+    optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
+    copy_par!(gcm, MathProgBase.getsolution(optm))
+    loglikelihood!(gcm)
+    gcm
+end
+
+"""
+    copy_par!(gcm, par)
+
+Translate optimization variables in `par` to the model parameters in `gcm`.
+"""
+function copy_par!(
+    gcm::GaussianCopulaLMMModel, 
+    par::Vector)
+    p, q = size(gcm.data[1].X, 2), size(gcm.data[1].Z, 2)
+    copyto!(gcm.β, 1, par, 1, p)
+    gcm.τ[1] = exp(par[p+1])
+    fill!(gcm.ΣL, 0)
+    offset = p + 2
+    for j in 1:q
+        gcm.ΣL[j, j] = exp(par[offset])
+        offset += 1
+        for i in j+1:q
+            gcm.ΣL[i, j] = par[offset]
+            offset += 1
+        end
+    end
+    mul!(gcm.Σ, gcm.ΣL, transpose(gcm.ΣL))
+    nothing
+end
+
+function MathProgBase.initialize(
+    gcm::GaussianCopulaLMMModel, 
+    requested_features::Vector{Symbol})
+    for feat in requested_features
+        if !(feat in [:Grad])
+            error("Unsupported feature $feat")
+        end
+    end
+end
+
+MathProgBase.features_available(gcm::GaussianCopulaLMMModel) = [:Grad]
+
+function MathProgBase.eval_f(
+    gcm::GaussianCopulaLMMModel, 
+    par::Vector)
+    copy_par!(gcm, par)
+    loglikelihood!(gcm, false, false)
+end
+
+function MathProgBase.eval_grad_f(
+    gcm::GaussianCopulaLMMModel, 
+    grad::Vector, 
+    par::Vector)
+    p, q = size(gcm.data[1].X, 2), size(gcm.data[1].Z, 2)
+    copy_par!(gcm, par)
+    loglikelihood!(gcm, true, false)
+    # gradient wrt β
+    copyto!(grad, 1, gcm.∇β, 1, p)
+    # gradient wrt log(τ)
+    grad[p+1] = gcm.∇τ[1] * gcm.τ[1]
+    mul!(gcm.storage_qq, gcm.∇Σ, gcm.ΣL)
+    offset = p + 2
+    for j in 1:q
+        grad[offset] = 2gcm.storage_qq[j, j] * gcm.ΣL[j, j]
+        offset += 1
+        for i in j+1:q
+            grad[offset] = 2(gcm.storage_qq[i, j] + gcm.storage_qq[j, i])
+            offset += 1
+        end
+    end
+    nothing
+end

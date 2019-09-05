@@ -76,6 +76,33 @@ function update_quadform!(gc::GaussianCopulaVCObs)
     gc.q
 end
 
+"""
+
+MM update to minimize ``n \\log (\\tau) - rss / 2 \\ln (\\tau) + 
+\\sum_i \\log (1 + \\tau * q_i)``.
+"""
+function update_τ(
+    τ0::T,
+    q::Vector{T},
+    n::Integer,
+    rss::T,
+    maxiter::Integer=50000,
+    reltol::Number=1e-6,
+    ) where T <: BlasReal
+    @assert τ0 ≥ 0 "τ0 has to be nonnegative"
+    τ = τ0
+    for τiter in 1:maxiter
+        τold = τ
+        tmp = zero(T)
+        for i in eachindex(q)
+            tmp += q[i] / (1 + τ * q[i])
+        end
+        τ = (n + 2τ * tmp) / rss
+        abs(τ - τold) < reltol * (abs(τold) + 1) && break
+    end
+    τ
+end
+
 function update_Σ_jensen!(
     gcm::GaussianCopulaVCModel{T}, 
     maxiter::Integer=50000,
@@ -92,13 +119,10 @@ function update_Σ_jensen!(
     for iter in 1:maxiter
         # store previous iterate
         copyto!(gcm.storage_Σ, gcm.Σ)
-        # numerator in the multiplicative update
+        # update τ
         mul!(gcm.storage_n, gcm.QF, gcm.Σ) # gcm.storage_n[i] = q[i]
-        tmp = zero(T)
-        for i in eachindex(gcm.data)
-            tmp += gcm.storage_n[i] / (1 + gcm.τ[1] * gcm.storage_n[i])
-        end
-        gcm.τ[1] = (gcm.ntotal + 2gcm.τ[1] * tmp) / rsstotal  # update τ
+        gcm.τ[1] = update_τ(gcm.τ[1], gcm.storage_n, gcm.ntotal, rsstotal, 1)
+        # numerator in the multiplicative update
         gcm.storage_n .= inv.(inv(gcm.τ[1]) .+ gcm.storage_n) # use newest τ to update Σ
         mul!(gcm.storage_m, transpose(gcm.QF), gcm.storage_n)
         gcm.Σ .*= gcm.storage_m
@@ -114,7 +138,11 @@ function update_Σ_jensen!(
             rsstotal / 2 * gcm.τ[1])
         # convergence check
         gcm.storage_m .= gcm.Σ .- gcm.storage_Σ
-        norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1) && break
+        # norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1) && break
+        if norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1)
+            verbose && println("iters=$iter")
+            break
+        end
         verbose && iter == maxiter && @warn "maximum iterations $maxiter reached"
     end
     gcm.Σ
@@ -124,6 +152,7 @@ function update_Σ_quadratic!(
     gcm::GaussianCopulaVCModel{T}, 
     maxiter::Integer=50000,
     reltol::Number=1e-6,
+    qpsolver=Ipopt.IpoptSolver(print_level=0),
     verbose::Bool=false) where T <: BlasReal
     n, m = length(gcm.data), length(gcm.data[1].V)
     # pre-compute quadratic forms and RSS
@@ -136,32 +165,45 @@ function update_Σ_quadratic!(
     end
     qcolsum = sum(gcm.QF, dims=1)[:]
     # define NNLS optimization problem
-    σ2 = Convex.Variable(m)
-    c  = Vector{T}(undef, m)
-    w  = Vector{T}(undef, n)
-    problem = minimize(0.5sumsquares(w .* (gcm.QF * σ2)) + dot(c, σ2), [σ2 >= 0])
+    H = Matrix{T}(undef, m, m)  # quadratic coefficient in QP
+    c = Vector{T}(undef, m)     # linear coefficient in QP
+    w = Vector{T}(undef, n)
     # MM iteration
     for iter in 1:maxiter
         # store previous iterate
         copyto!(gcm.storage_Σ, gcm.Σ)
         # update τ
         mul!(gcm.storage_n, gcm.QF, gcm.Σ) # gcm.storage_n[i] = q[i]
-        a, b = zero(T), - rsstotal / 2
+        # a, b = zero(T), - rsstotal / 2
+        # for i in eachindex(gcm.data)
+        #     a += abs2(gcm.storage_n[i]) / (1 + gcm.τ[1] * gcm.storage_n[i])
+        #     b += gcm.storage_n[i]
+        # end
+        # gcm.τ[1] = (b + sqrt(abs2(b) + 2a * gcm.ntotal)) / 2a
+        tmp = zero(T)
         for i in eachindex(gcm.data)
-            a += abs2(gcm.storage_n[i]) / (1 + gcm.τ[1] * gcm.storage_n[i])
-            b += gcm.storage_n[i]
+            tmp += gcm.storage_n[i] / (1 + gcm.τ[1] * gcm.storage_n[i])
         end
-        gcm.τ[1] = (b + sqrt(abs2(b) + 2a * gcm.ntotal)) / 2a
+        gcm.τ[1] = (gcm.ntotal + 2gcm.τ[1] * tmp) / rsstotal  # update τ
         # update variance components
         for i in eachindex(gcm.data)
-            w[i] = gcm.τ[1] / sqrt(1 + gcm.τ[1] * gcm.storage_n[i])
+            w[i] = abs2(gcm.τ[1]) / (1 + gcm.τ[1] * gcm.storage_n[i])
         end
+        mul!(H, transpose(gcm.QF) * Diagonal(w), gcm.QF)
         mul!(gcm.storage_n, gcm.TR, gcm.storage_Σ)
         gcm.storage_n .= inv.(1 .+ gcm.storage_n)
         mul!(gcm.storage_m, transpose(gcm.TR), gcm.storage_n)
-        c .= gcm.storage_m .- gcm.τ[1] .* qcolsum
-        solve!(problem, GurobiSolver(OutputFlag=0))
-        gcm.Σ .= σ2.value
+        c .= gcm.τ[1] .* qcolsum .- gcm.storage_m
+        # try unconstrained solution first
+        ldiv!(gcm.Σ, cholesky(Symmetric(H)), c)
+        # if violate nonnegativity constraint, resort to quadratic programming
+        if any(x -> x < 0, gcm.Σ)
+            @show "use QP"
+            qpsol = quadprog(-c, H, Matrix{T}(undef, 0, m), 
+                Vector{Char}(undef, 0), Vector{T}(undef, 0), 
+                fill(T(0), m), fill(T(Inf), m), qpsolver)
+            gcm.Σ .= qpsol.sol
+        end
         # monotonicity diagnosis
         verbose && println(sum(log, 1 .+ gcm.τ[1] .* (gcm.QF * gcm.Σ)) - 
             sum(log, 1 .+ gcm.TR * gcm.Σ) + 
@@ -169,7 +211,10 @@ function update_Σ_quadratic!(
             rsstotal / 2 * gcm.τ[1])
         # convergence check
         gcm.storage_m .= gcm.Σ .- gcm.storage_Σ
-        norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1) && break
+        if norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1)
+            println("iters=$iter")
+            break
+        end
         verbose && iter == maxiter && @warn "maximum iterations $maxiter reached"
     end
     gcm.Σ
@@ -182,7 +227,7 @@ Update `τ` and variance components `Σ` according to the current value of
 `β` by an MM algorithm. `gcm.QF` needs to hold qudratic forms calculated from 
 un-standardized residuals.
 """
-update_Σ! = update_Σ_quadratic!
+update_Σ! = update_Σ_jensen!
 
 function fitted(
     gc::GaussianCopulaVCObs{T},
@@ -257,7 +302,7 @@ function loglikelihood!(
 end
 
 function loglikelihood!(
-    gcm::Union{GaussianCopulaVCModel{T},GaussianCopulaLMMModel{T}},
+    gcm::Union{GaussianCopulaVCModel{T}, GaussianCopulaLMMModel{T}},
     needgrad::Bool = false,
     needhess::Bool = false
     ) where T <: BlasReal
@@ -288,7 +333,7 @@ function loglikelihood!(
 end
 
 function fit!(
-    gcm::Union{GaussianCopulaVCModel,GaussianCopulaLMMModel},
+    gcm::GaussianCopulaVCModel,
     solver=Ipopt.IpoptSolver(print_level=0)
     )
     optm = MathProgBase.NonlinearModel(solver)
@@ -305,7 +350,7 @@ function fit!(
 end
 
 function MathProgBase.initialize(
-    gcm::Union{GaussianCopulaVCModel,GaussianCopulaLMMModel}, 
+    gcm::GaussianCopulaVCModel, 
     requested_features::Vector{Symbol})
     for feat in requested_features
         if !(feat in [:Grad])
@@ -314,10 +359,10 @@ function MathProgBase.initialize(
     end
 end
 
-MathProgBase.features_available(gcm::Union{GaussianCopulaVCModel,GaussianCopulaLMMModel}) = [:Grad]
+MathProgBase.features_available(gcm::GaussianCopulaVCModel) = [:Grad]
 
 function MathProgBase.eval_f(
-    gcm::Union{GaussianCopulaVCModel,GaussianCopulaLMMModel}, 
+    gcm::GaussianCopulaVCModel, 
     par::Vector)
     copy_par!(gcm, par)
     # maximize σ2 and τ at current β using MM
@@ -327,7 +372,7 @@ function MathProgBase.eval_f(
 end
 
 function MathProgBase.eval_grad_f(
-    gcm::Union{GaussianCopulaVCModel,GaussianCopulaLMMModel}, 
+    gcm::GaussianCopulaVCModel, 
     grad::Vector, 
     par::Vector)
     copy_par!(gcm, par)
@@ -340,13 +385,13 @@ function MathProgBase.eval_grad_f(
 end
 
 function copy_par!(
-    gcm::Union{GaussianCopulaVCModel,GaussianCopulaLMMModel}, 
+    gcm::GaussianCopulaVCModel, 
     par::Vector)
     copyto!(gcm.β, par)
     par
 end
 
-function MathProgBase.hesslag_structure(gcm::Union{GaussianCopulaVCModel,GaussianCopulaLMMModel})
+function MathProgBase.hesslag_structure(gcm::GaussianCopulaVCModel)
     Iidx = Vector{Int}(undef, (gcm.p * (gcm.p + 1)) >> 1)
     Jidx = similar(Iidx)
     ct = 1
@@ -361,7 +406,7 @@ function MathProgBase.hesslag_structure(gcm::Union{GaussianCopulaVCModel,Gaussia
 end
 
 function MathProgBase.eval_hesslag(
-    gcm::Union{GaussianCopulaVCModel{T},GaussianCopulaLMMModel{T}},
+    gcm::GaussianCopulaVCModel{T},
     H::Vector{T},
     par::Vector{T},
     σ::T,

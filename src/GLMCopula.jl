@@ -130,42 +130,47 @@ struct GaussianCopulaLMMObs{T <: LinearAlgebra.BlasReal}
     # data
     y::Vector{T}
     X::Matrix{T}
-    V::AbstractMatrix{T}
+    Z::Matrix{T}
     # working arrays
     ∇β::Vector{T}   # gradient wrt β
     ∇τ::Vector{T}   # gradient wrt τ
-    ∇Σ::Vector{T}   # gradient wrt Σ 
+    ∇Σ::Matrix{T}   # gradient wrt Σ 
     Hβ::Matrix{T}   # Hessian wrt β
     Hτ::Matrix{T}   # Hessian wrt τ
+    HΣ::Matrix{T}   # Hessian wrt Σ
     res::Vector{T}  # residual vector
-    xtx::Matrix{T}  # Xi'Xi
-    ztz::Matrix{T}  # Zi'Zi
-    storage_q::Vector{T}
-    storage_nq::Matrix{T}
+    xtx::Matrix{T}  # Xi'Xi (p-by-p)
+    ztz::Matrix{T}  # Zi'Zi (q-by-q)
+    xtz::Matrix{T}  # Xi'Zi (p-by-q)
+    storage_q1::Vector{T}
+    storage_q2::Vector{T}
 end
 
 function GaussianCopulaLMMObs(
     y::Vector{T},
     X::Matrix{T},
-    Z::AbstractMatrix{T}
+    Z::Matrix{T}
     ) where T <: BlasReal
     n, p, q = size(X, 1), size(X, 2), size(Z, 2)
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
     ∇β  = Vector{T}(undef, p)
     ∇τ  = Vector{T}(undef, 1)
-    ∇Σ  = Vector{T}(undef, abs2(q))
+    ∇Σ  = Matrix{T}(undef, q, q)
     Hβ  = Matrix{T}(undef, p, p)
     Hτ  = Matrix{T}(undef, 1, 1)
+    HΣ  = Matrix{T}(undef, abs2(q), abs2(q))
     res = Vector{T}(undef, n)
     xtx = transpose(X) * X
     ztz = transpose(Z) * Z
+    xtz = transpose(X) * Z
     storage_q1 = Vector{T}(undef, q)
     storage_q2 = Vector{T}(undef, q)
-    storage_nq = Matrix{T}(undef, n, q)
     # constructor
-    GaussianCopulaLMMObs{T}(y, X, Z, ∇β, ∇τ, ∇Σ, Hβ, Hτ, res, xtx, ztz, 
-        storage_q1, storage_q2, storage_nq)
+    GaussianCopulaLMMObs{T}(y, X, Z, 
+        ∇β, ∇τ, ∇Σ, Hβ, Hτ, HΣ,
+        res, xtx, ztz, xtz,
+        storage_q1, storage_q2)
 end
 
 """
@@ -186,45 +191,45 @@ struct GaussianCopulaLMMModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluato
     τ::Vector{T}    # inverse of linear regression variance parameter
     Σ::Matrix{T}    # q-by-q (psd) matrix
     # working arrays
+    ΣL::Matrix{T}
     ∇β::Vector{T}   # gradient from all observations
     ∇τ::Vector{T}
-    ∇Σ::Vector{T}
+    ∇Σ::Matrix{T}
     Hβ::Matrix{T}   # Hessian from all observations
     Hτ::Matrix{T}
-    XtX::Matrix{T}  # X'X = sum_i Xi'Xi
-    storage_n::Vector{T}
-    storage_p::Vector{T}
-    storage_q::Vector{T}
-    storage_Σ::Matrix{T}
+    HΣ::Matrix{T}
+    XtX::Matrix{T}      # X'X = sum_i Xi'Xi
+    storage_qq::Matrix{T}
+    storage_nq::Matrix{T}
 end
 
 function GaussianCopulaLMMModel(gcs::Vector{GaussianCopulaLMMObs{T}}) where T <: BlasReal
     n, p, q = length(gcs), size(gcs[1].X, 2), size(gcs[1].Z, 2)
-    npar = p + abs2(q) + 1
+    npar = p + 1 + (q * (q + 1)) >> 1
     β   = Vector{T}(undef, p)
     τ   = Vector{T}(undef, 1)
     Σ   = Matrix{T}(undef, q, q)
+    ΣL  = similar(Σ)
     ∇β  = Vector{T}(undef, p)
     ∇τ  = Vector{T}(undef, 1)
-    ∇Σ  = Vector{T}(undef, abs2(q))
+    ∇Σ  = Matrix{T}(undef, q, q)
     Hβ  = Matrix{T}(undef, p, p)
     Hτ  = Matrix{T}(undef, 1, 1)
+    HΣ  = Matrix{T}(undef, abs2(q), abs2(q))
     XtX = zeros(T, p, p) # sum_i xi'xi
     ntotal = 0
     for i in eachindex(gcs)
-        ntotal  += length(gcs[i].y)
-        XtX    .+= gcs[i].xtx
+        ntotal   += length(gcs[i].y)
+        XtX     .+= gcs[i].xtx
     end
-    storage_n = Vector{T}(undef, n)
-    storage_p = Vector{T}(undef, p)
-    storage_q = Vector{T}(undef, q)
-    storage_Σ = Matrix{T}(undef, q, q)
-    GaussianCopulaLMMModel{T}(gcs, ntotal, p, q, β, τ, Σ, 
-        ∇β, ∇τ, ∇Σ, Hβ, Hτ, XtX,
-        storage_n, storage_p, storage_q, storage_Σ)
+    storage_qq = Matrix{T}(undef, q, q)
+    storage_nq = Matrix{T}(undef, n, q)
+    GaussianCopulaLMMModel{T}(gcs, ntotal, p, q, β, τ, Σ, ΣL,
+        ∇β, ∇τ, ∇Σ, Hβ, Hτ, HΣ, XtX,
+        storage_qq, storage_nq)
 end
 
 include("gaussian_vc.jl")
-# include("gaussian_lmm.jl")
+include("gaussian_lmm.jl")
 
 end#module
