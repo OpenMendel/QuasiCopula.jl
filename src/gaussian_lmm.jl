@@ -5,29 +5,33 @@ function loglikelihood!(
     Σ::Matrix{T},
     needgrad::Bool = false,
     needhess::Bool = false
-    ) where T <: LinearAlgebra.BlasFloat
+    ) where T <: BlasReal
     n, p, q = size(gc.X, 1), size(gc.X, 2), size(gc.Z, 2)
     if needgrad
         fill!(gc.∇β, 0)
         fill!(gc.∇τ, 0)
         fill!(gc.∇Σ, 0)
     end
-    needhess && fill!(gc.H, 0)
+    if needhess
+        fill!(gc.Hβ, 0)
+        fill!(gc.Hτ, 0)
+        fill!(gc.HΣ, 0)
+    end
     # evaluate copula loglikelihood
     sqrtτ = sqrt(τ)
     update_res!(gc, β)
     standardize_res!(gc, sqrtτ)
     rss = abs2(norm(gc.res)) # RSS of standardized residual
-    tr = dot(gc.ztz, Σ) / 2
+    tr = (1//2)dot(gc.ztz, Σ)
     mul!(gc.storage_q1, transpose(gc.Z), gc.res) # storage_q1 = Z' * std residual
     mul!(gc.storage_q2, Σ, gc.storage_q1)        # storage_q2 = Σ * Z' * std residual
-    qf = dot(gc.storage_q1, gc.storage_q2) / 2
-    logl = - log(1 + tr) - (n * log(2π) -  n * log(τ) + rss) / 2 + log(1 + qf)
+    qf = (1//2)dot(gc.storage_q1, gc.storage_q2)
+    logl = - (n * log(2π) -  n * log(τ) + rss) / 2 - log(1 + tr) + log(1 + qf)
     # gradient
     if needgrad
         # wrt β
         mul!(gc.∇β, transpose(gc.X), gc.res)
-        BLAS.gemv!('T', -inv(1 + qf), gc.xtz, gc.storage_q2, one(T), gc.∇β)
+        BLAS.gemv!('N', -inv(1 + qf), gc.xtz, gc.storage_q2, one(T), gc.∇β)
         gc.∇β .*= sqrtτ
         # wrt τ
         gc.∇τ[1] = (n - rss + 2qf / (1 + qf)) / 2τ
@@ -53,33 +57,25 @@ function fit!(
     ub = fill( Inf, npar)
     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Max, gcm)
     # starting point
-    gcm.ΣL .= cholesky(Symmetric(gcm.Σ)).L
     par0 = Vector{Float64}(undef, npar)
-    copyto!(par0, gcm.β)
-    par0[p+1] = log(gcm.τ[1])
-    offset = p + 2
-    for j in 1:q
-        par0[offset] = log(gcm.ΣL[j, j])
-        offset += 1
-        for i in j+1:q
-            par0[offset] = gcm.ΣL[i, j]
-        end
-    end
+    modelpar_to_optimpar!(par0, gcm)
     MathProgBase.setwarmstart!(optm, par0)
+    # optimize
     MathProgBase.optimize!(optm)
     optstat = MathProgBase.status(optm)
     optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
-    copy_par!(gcm, MathProgBase.getsolution(optm))
-    loglikelihood!(gcm)
+    # refresh gradient and Hessian
+    optimpar_to_modelpar!(gcm, MathProgBase.getsolution(optm))
+    loglikelihood!(gcm, true, true)
     gcm
 end
 
 """
-    copy_par!(gcm, par)
+    optimpar_to_modelpar!(gcm, par)
 
 Translate optimization variables in `par` to the model parameters in `gcm`.
 """
-function copy_par!(
+function optimpar_to_modelpar!(
     gcm::GaussianCopulaLMMModel, 
     par::Vector)
     p, q = size(gcm.data[1].X, 2), size(gcm.data[1].Z, 2)
@@ -99,6 +95,32 @@ function copy_par!(
     nothing
 end
 
+"""
+    modelpar_to_optimpar!(gcm, par)
+
+Translate model parameters in `gcm` to optimization variables in `par`.
+"""
+function modelpar_to_optimpar!(
+    par::Vector,
+    gcm::GaussianCopulaLMMModel
+    )
+    p, q = size(gcm.data[1].X, 2), size(gcm.data[1].Z, 2)
+    copyto!(par, gcm.β)
+    par[p+1] = log(gcm.τ[1])
+    Σchol = cholesky(Symmetric(gcm.Σ))
+    gcm.ΣL .= Σchol.L
+    offset = p + 2
+    for j in 1:q
+        par[offset] = log(gcm.ΣL[j, j])
+        offset += 1
+        for i in j+1:q
+            par[offset] = gcm.ΣL[i, j]
+            offset += 1
+        end
+    end
+    par
+end
+
 function MathProgBase.initialize(
     gcm::GaussianCopulaLMMModel, 
     requested_features::Vector{Symbol})
@@ -114,7 +136,7 @@ MathProgBase.features_available(gcm::GaussianCopulaLMMModel) = [:Grad]
 function MathProgBase.eval_f(
     gcm::GaussianCopulaLMMModel, 
     par::Vector)
-    copy_par!(gcm, par)
+    optimpar_to_modelpar!(gcm, par)
     loglikelihood!(gcm, false, false)
 end
 
@@ -123,12 +145,13 @@ function MathProgBase.eval_grad_f(
     grad::Vector, 
     par::Vector)
     p, q = size(gcm.data[1].X, 2), size(gcm.data[1].Z, 2)
-    copy_par!(gcm, par)
+    optimpar_to_modelpar!(gcm, par)
     loglikelihood!(gcm, true, false)
     # gradient wrt β
-    copyto!(grad, 1, gcm.∇β, 1, p)
+    copyto!(grad, gcm.∇β)
     # gradient wrt log(τ)
     grad[p+1] = gcm.∇τ[1] * gcm.τ[1]
+    # gradient wrt L
     mul!(gcm.storage_qq, gcm.∇Σ, gcm.ΣL)
     offset = p + 2
     for j in 1:q

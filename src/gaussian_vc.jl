@@ -289,7 +289,7 @@ function loglikelihood!(
     if needgrad
         inv1pq = inv(1 + qsum)
         if needhess
-            BLAS.syrk!('L', 'N', - abs2(inv1pq), gc.∇β, one(T), gc.Hβ) # only lower triangular
+            BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, one(T), gc.Hβ) # only lower triangular
             gc.Hτ[1, 1] = - abs2(qsum * inv1pq / τ)
         end
         BLAS.gemv!('T', one(T), gc.X, gc.res, -inv1pq, gc.∇β)

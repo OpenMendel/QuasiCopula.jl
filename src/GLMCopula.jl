@@ -124,7 +124,7 @@ end
 GaussianCopulaLMMObs
 GaussianCopulaLMMObs(y, X, Z)
 
-A realization of Gaussian copula linear mixed model data.
+A realization of Gaussian copula linear mixed model data instance.
 """
 struct GaussianCopulaLMMObs{T <: LinearAlgebra.BlasReal}
     # data
@@ -219,14 +219,15 @@ function GaussianCopulaLMMModel(gcs::Vector{GaussianCopulaLMMObs{T}}) where T <:
     XtX = zeros(T, p, p) # sum_i xi'xi
     ntotal = 0
     for i in eachindex(gcs)
-        ntotal   += length(gcs[i].y)
-        XtX     .+= gcs[i].xtx
+        ntotal  += length(gcs[i].y)
+        XtX    .+= gcs[i].xtx
     end
     storage_qq = Matrix{T}(undef, q, q)
     storage_nq = Matrix{T}(undef, n, q)
-    GaussianCopulaLMMModel{T}(gcs, ntotal, p, q, β, τ, Σ, ΣL,
-        ∇β, ∇τ, ∇Σ, Hβ, Hτ, HΣ, XtX,
-        storage_qq, storage_nq)
+    GaussianCopulaLMMModel{T}(gcs, ntotal, p, q, 
+        β, τ, Σ, ΣL,
+        ∇β, ∇τ, ∇Σ, Hβ, Hτ, HΣ, 
+        XtX, storage_qq, storage_nq)
 end
 
 include("gaussian_vc.jl")
