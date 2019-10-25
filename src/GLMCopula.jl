@@ -2,7 +2,7 @@ __precompile__()
 
 module GLMCopula
 
-using Convex, LinearAlgebra, MathProgBase, Reexport, Gurobi, Mosek, SCS
+using Convex, LinearAlgebra, MathProgBase, Reexport
 using LinearAlgebra: BlasReal, copytri!
 @reexport using Ipopt
 @reexport using NLopt
