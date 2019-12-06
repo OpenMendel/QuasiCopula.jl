@@ -158,7 +158,7 @@ function MathProgBase.eval_grad_f(
         grad[offset] = 2gcm.storage_qq[j, j] * gcm.ΣL[j, j]
         offset += 1
         for i in j+1:q
-            grad[offset] = 2(gcm.storage_qq[i, j] + gcm.storage_qq[j, i])
+            grad[offset] = 2gcm.storage_qq[i, j]
             offset += 1
         end
     end
