@@ -2,7 +2,7 @@ __precompile__()
 
 module GLMCopula
 
-using Convex, LinearAlgebra, MathProgBase, Reexport
+using Convex, LinearAlgebra, MathProgBase, Reexport, GLM
 using LinearAlgebra: BlasReal, copytri!
 @reexport using Ipopt
 @reexport using NLopt
@@ -19,7 +19,7 @@ GaussianCopulaVCObs(y, X, V)
 
 A realization of Gaussian copula variance component data.
 """
-struct GaussianCopulaVCObs{T <: BlasReal}
+struct GaussianCopulaVCObs{T <: BlasReal, D}
     # data
     y::Vector{T}
     X::Matrix{T}
@@ -36,13 +36,16 @@ struct GaussianCopulaVCObs{T <: BlasReal}
     q::Vector{T}    # q[k] = res_i' * V_i[k] * res_i / 2
     storage_n::Vector{T}
     storage_p::Vector{T}
+    d::D
+    μ::Vector{T}
 end
 
 function GaussianCopulaVCObs(
     y::Vector{T},
     X::Matrix{T},
-    V::Vector{Matrix{T}}
-    ) where T <: BlasReal
+    V::Vector{Matrix{T}},
+    d::D
+    ) where {T <: BlasReal, D}
     n, p, m = size(X, 1), size(X, 2), length(V)
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
@@ -57,9 +60,10 @@ function GaussianCopulaVCObs(
     q   = Vector{T}(undef, m)
     storage_n = Vector{T}(undef, n)
     storage_p = Vector{T}(undef, p)
+    μ = Vector{T}(undef, n)
     # constructor
-    GaussianCopulaVCObs{T}(y, X, V, ∇β, ∇τ, ∇Σ, Hβ, 
-        Hτ, res, xtx, t, q, storage_n, storage_p)
+    GaussianCopulaVCObs{T, D}(y, X, V, ∇β, ∇τ, ∇Σ, Hβ, 
+        Hτ, res, xtx, t, q, storage_n, storage_p, d, μ)
 end
 
 """
@@ -69,9 +73,9 @@ GaussianCopulaVCModel(gcs)
 Gaussian copula variance component model, which contains a vector of 
 `GaussianCopulaVCObs` as data, model parameters, and working arrays.
 """
-struct GaussianCopulaVCModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
+struct GaussianCopulaVCModel{T <: BlasReal, D} <: MathProgBase.AbstractNLPEvaluator
     # data
-    data::Vector{GaussianCopulaVCObs{T}}
+    data::Vector{GaussianCopulaVCObs{T, D}}
     ntotal::Int     # total number of singleton observations
     p::Int          # number of mean parameters in linear regression
     m::Int          # number of variance components
@@ -91,9 +95,10 @@ struct GaussianCopulaVCModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     storage_n::Vector{T}
     storage_m::Vector{T}
     storage_Σ::Vector{T}
+    d::D
 end
 
-function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVCObs{T}}) where T <: BlasReal
+function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVCObs{T, D}}) where {T <: BlasReal, D}
     n, p, m = length(gcs), size(gcs[1].X, 2), length(gcs[1].V)
     β   = Vector{T}(undef, p)
     τ   = Vector{T}(undef, 1)
@@ -115,9 +120,9 @@ function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVCObs{T}}) where T <: B
     storage_n = Vector{T}(undef, n)
     storage_m = Vector{T}(undef, m)
     storage_Σ = Vector{T}(undef, m)
-    GaussianCopulaVCModel{T}(gcs, ntotal, p, m, β, τ, Σ, 
+    GaussianCopulaVCModel{T, D}(gcs, ntotal, p, m, β, τ, Σ, 
         ∇β, ∇τ, ∇Σ, Hβ, Hτ, XtX, TR, QF,
-        storage_n, storage_m, storage_Σ)
+        storage_n, storage_m, storage_Σ, gcs[1].d)
 end
 
 """

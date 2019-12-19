@@ -12,7 +12,7 @@ function init_β!(
     for i in eachindex(gcm.data)
         BLAS.gemv!('T', one(T), gcm.data[i].X, gcm.data[i].y, one(T), xty)
     end
-    # least square solution for β
+    # least square solution for β s.t gcm.β = inv(cholesky(Symmetric(gcm.XtX)))*xty
     ldiv!(gcm.β, cholesky(Symmetric(gcm.XtX)), xty)
     # accumulate residual sum of squares
     rss = zero(T)
@@ -29,18 +29,32 @@ update_res!(gc, β)
 
 Update the residual vector according to `β`.
 """
+function glm_residual(d, gcs, β)
+    # get mu = canonicallinkinv(XB)
+    μ = map(x -> GLM.inverselink(canonicallink(d), x)[1], gcs.X*β)
+    # get residual gcs.res = (yi - mu)
+    return (μ, sqrt.(GLM.devresid.(d, gcs.y, μ)))
+end
+
+"""
+update_res!(gc, β)
+
+Update the residual vector according to `β`.
+"""
 function update_res!(
-    gc::Union{GaussianCopulaVCObs{T}, GaussianCopulaLMMObs{T}}, 
+    gc::Union{GaussianCopulaVCObs{T, D}, GaussianCopulaLMMModel{T}},
     β::Vector{T}
-    ) where T <: BlasReal
+    ) where {T <: BlasReal, D}
     copyto!(gc.res, gc.y)
-    BLAS.gemv!('N', -one(T), gc.X, β, one(T), gc.res)
+    μ, residual = glm_residual(gc.d, gc, β)
+    copyto!(gc.res, residual)
+    copyto!(gc.μ, μ)
     gc.res
 end
 
 function update_res!(
     gcm::Union{GaussianCopulaVCModel{T}, GaussianCopulaLMMModel{T}}
-    ) where T <: BlasReal
+    ) where {T <: BlasReal}
     for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
     end
@@ -103,6 +117,71 @@ function update_τ(
     τ
 end
 
+# from GLM package
+
+function loglik_obs end
+
+loglik_obs(::Bernoulli, y, μ, wt, ϕ) = wt*GLM.logpdf(Bernoulli(μ), y)
+loglik_obs(::Binomial, y, μ, wt, ϕ) = GLM.logpdf(Binomial(Int(wt), μ), Int(y*wt))
+loglik_obs(::Gamma, y, μ, wt, ϕ) = wt*GLM.logpdf(Gamma(inv(ϕ), μ*ϕ), y)
+loglik_obs(::InverseGaussian, y, μ, wt, ϕ) = wt*GLM.logpdf(InverseGaussian(μ, inv(ϕ)), y)
+loglik_obs(::Normal, y, μ, wt, ϕ) = wt*GLM.logpdf(Normal(μ, sqrt(ϕ)), y)
+loglik_obs(::Poisson, y, μ, wt, ϕ) = wt*GLM.logpdf(Poisson(μ), y)
+# We use the following parameterization for the Negative Binomial distribution:
+#    (Γ(r+y) / (Γ(r) * y!)) * μ^y * r^r / (μ+r)^{r+y}
+# The parameterization of NegativeBinomial(r=r, p) in Distributions.jl is
+#    Γ(r+y) / (y! * Γ(r)) * p^r(1-p)^y
+# Hence, p = r/(μ+r)
+loglik_obs(d::NegativeBinomial, y, μ, wt, ϕ) = wt*GLM.logpdf(NegativeBinomial(d.r, d.r/(μ+d.r)), y)
+
+
+
+
+"""
+    glmloglikelihood(d::UnivariateDistribution, y::AbstractVector, μ::AbstractVector)
+Calculates the loglikelihood of observing `y` given mean `μ` and some distribution 
+`d`. 
+Note that loglikelihood is the sum of the logpdfs for each observation. 
+For each logpdf from Normal, Gamma, and InverseGaussian, we scale by dispersion. 
+"""
+function glmloglikelihood(d, gcm)
+    μ = [zeros(size(gcm.data[i].X)) for i in eachindex(gcm.data)]
+    logl = 0.0
+    rsstotal = 0.0
+    β = gcm.β
+    for i in eachindex(gcm.data)
+        map!(x -> GLM.inverselink.(canonicallink(d), x)[1], μ[i], gcm.data[i].X*β)
+        rsstotal += abs2(norm(gcm.data[i].res))
+    end
+    
+    ϕ = rsstotal / (gcm.ntotal - 1)
+    for i in eachindex(gcm.data), j in eachindex(gcm.data[i].y)
+        logl += loglik_obs(d, gcm.data[i].y[j], μ[i][j], 1, ϕ) #wt = 1 because only have 1 sample to estimate a given mean 
+    end
+    return logl
+end
+
+# rss  = abs2(norm(gc.res)) # RSS of standardized residual
+#     tsum = dot(Σ, gc.t)
+#     #logl = - log(1 + tsum) - (n * log(2π) -  n * log(τ) + rss) / 2
+
+# function get_loglikelihood(gcs, rss, tsum)
+#     logpdf_term1 = -log(1 + tsum)
+#     logpdf_term2 = (n * log(τ) + rss) / 2
+
+
+# end
+
+
+function get_loglikelihood(gcm)
+    logpdf_term1 = -sum(log, 1 .+ gcm.TR * gcm.Σ)
+    logpdf_term2 = sum(log, 1 .+ gcm.τ[1] .* (gcm.QF * gcm.Σ))
+    logpdf_term3 = glmloglikelihood(gcm.d, gcm)
+    loglikelihood = logpdf_term1 + logpdf_term2 + logpdf_term3
+    return loglikelihood
+end
+
+            
 function update_Σ_jensen!(
     gcm::GaussianCopulaVCModel{T}, 
     maxiter::Integer=50000,
@@ -132,10 +211,7 @@ function update_Σ_jensen!(
         mul!(gcm.storage_m, transpose(gcm.TR), gcm.storage_n)
         gcm.Σ ./= gcm.storage_m
         # monotonicity diagnosis
-        verbose && println(sum(log, 1 .+ gcm.τ[1] .* (gcm.QF * gcm.Σ)) - 
-            sum(log, 1 .+ gcm.TR * gcm.Σ) + 
-            gcm.ntotal / 2 * (log(gcm.τ[1]) - log(2π)) - 
-            rsstotal / 2 * gcm.τ[1])
+        verbose && println(get_loglikelihood(gcm))
         # convergence check
         gcm.storage_m .= gcm.Σ .- gcm.storage_Σ
         # norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1) && break
@@ -205,10 +281,7 @@ function update_Σ_quadratic!(
             gcm.Σ .= qpsol.sol
         end
         # monotonicity diagnosis
-        verbose && println(sum(log, 1 .+ gcm.τ[1] .* (gcm.QF * gcm.Σ)) - 
-            sum(log, 1 .+ gcm.TR * gcm.Σ) + 
-            gcm.ntotal / 2 * (log(gcm.τ[1]) - log(2π)) - 
-            rsstotal / 2 * gcm.τ[1])
+        verbose && println(get_loglikelihood(gcm))
         # convergence check
         gcm.storage_m .= gcm.Σ .- gcm.storage_Σ
         if norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1)
@@ -273,9 +346,8 @@ function loglikelihood!(
     sqrtτ = sqrt(τ)
     update_res!(gc, β)
     standardize_res!(gc, sqrtτ)
-    rss  = abs2(norm(gc.res)) # RSS of standardized residual
     tsum = dot(Σ, gc.t)
-    logl = - log(1 + tsum) - (n * log(2π) -  n * log(τ) + rss) / 2
+    logl = - log(1 + tsum)
     for k in 1:m
         mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
         if needgrad # ∇β stores X'*Γ*res (standardized residual)
@@ -285,6 +357,11 @@ function loglikelihood!(
     end
     qsum  = dot(Σ, gc.q)
     logl += log(1 + qsum)
+    rss = abs2(norm(gc.res))
+    ϕ = rss/ n
+    for i in eachindex(gc.y)
+        logl += loglik_obs(gc.d, gc.y[i], gc.μ[i], 1, ϕ) #wt = 1 because only have 1 sample to estimate a given mean 
+    end
     # gradient
     if needgrad
         inv1pq = inv(1 + qsum)
