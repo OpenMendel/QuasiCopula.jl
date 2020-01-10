@@ -7,7 +7,7 @@ using LinearAlgebra: BlasReal, copytri!
 @reexport using Ipopt
 @reexport using NLopt
 
-export GaussianCopulaVCObs, GaussianCopulaVCModel
+export GaussianCopulaVCObs, GaussianCopulaVCModel, update_Σ_jensenHUA!
 export fit!, fitted, init_β!, loglikelihood!, standardize_res!
 export update_res!, update_Σ!
 
