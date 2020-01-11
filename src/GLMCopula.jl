@@ -9,7 +9,7 @@ using LinearAlgebra: BlasReal, copytri!
 
 export GaussianCopulaVCObs, GaussianCopulaVCModel, update_Σ_jensenHUA!
 export fit!, fitted, init_β!, loglikelihood!, standardize_res!
-export update_res!, update_Σ!
+export update_res2!, update_Σ!, loglikelihood2!
 
 export GaussianCopulaLMMObs, GaussianCopulaLMMModel
 

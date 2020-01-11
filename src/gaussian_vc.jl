@@ -5,8 +5,8 @@ Initialize the linear regression parameters `β` and `τ=σ0^{-2}` by the least
 squares solution.
 """
 function init_β!(
-    gcm::Union{GaussianCopulaVCModel{T},GaussianCopulaLMMModel{T}}
-    ) where T <: BlasReal
+    gcm::Union{GaussianCopulaVCModel{T, D}, GaussianCopulaLMMModel{T}}
+    ) where {T <: BlasReal, D}
     # accumulate sufficient statistics X'y
     xty = zeros(T, gcm.p) 
     for i in eachindex(gcm.data)
@@ -24,85 +24,63 @@ function init_β!(
     gcm.β
 end
 
-"""
-update_res!(gc, β)
-Update the residual vector according to `β`.
-"""
-function update_res!(
-    gc::Union{GaussianCopulaVCObs{T}, GaussianCopulaLMMObs{T}}, 
-    β::Vector{T}
-    ) where T <: BlasReal
-    copyto!(gc.res, gc.y)
-    BLAS.gemv!('N', -one(T), gc.X, β, one(T), gc.res)
-    gc.res
-end
-
-function update_res!(
-    gcm::Union{GaussianCopulaVCModel{T}, GaussianCopulaLMMModel{T}}
-    ) where T <: BlasReal
-    println("hi")
-    for i in eachindex(gcm.data)
-        update_res!(gcm.data[i], gcm.β)
-    end
-    nothing
-end
-
-
-
-"""
-update_res2!(gc, β)
-
-Update the residual vector according to `β`.
-"""
-function update_res2!(
-    gc::Union{GaussianCopulaVCObs{T, D}, GaussianCopulaLMMObs{T}}, 
-    β::Vector{T}
-    ) where {T <: BlasReal, D}
-    gc.res .= gc.X * β #fix
-    gc.res .= -1.0 .* GLM.linkinv.(canonicallink(gc.d), gc.res)
-    gc.res .+= gc.y
-    return (gc.res)
-end
-
-function update_res2!(
-    gcm::Union{GaussianCopulaVCModel{T}, GaussianCopulaLMMModel{T}}
-    ) where T <: BlasReal
-    for i in eachindex(gcm.data)
-        update_res2!(gcm.data[i], gcm.β)
-    end
-    nothing
-end
-
+# """
+# update_res!(gc, β)
+# Update the residual vector according to `β`.
+# """
 # function update_res!(
-#     gc::Union{GaussianCopulaVCObs{T, D}, GaussianCopulaLMMObs{T}}, 
+#     gc::Union{GaussianCopulaVCObs{T}, GaussianCopulaLMMObs{T}}, 
 #     β::Vector{T}
-#     ) where {T <: BlasReal, D}
+#     ) where T <: BlasReal
 #     copyto!(gc.res, gc.y)
-#     μ, residual = glm_residual(gc, β)
-#     copyto!(gc.res, residual)
-#     copyto!(gc.μ, μ)
+#     BLAS.gemv!('N', -one(T), gc.X, β, one(T), gc.res)
 #     gc.res
 # end
 
 # function update_res!(
 #     gcm::Union{GaussianCopulaVCModel{T}, GaussianCopulaLMMModel{T}}
-#     ) where {T <: BlasReal}
+#     ) where T <: BlasReal
+#     #println("hi")
 #     for i in eachindex(gcm.data)
 #         update_res!(gcm.data[i], gcm.β)
 #     end
 #     nothing
 # end
 
+"""
+update_res2!(gc, β)
+
+Update the residual vector according to `β` and the canonical inverse link to the given distribution.
+"""
+function update_res2!(
+    gc::Union{GaussianCopulaVCObs{T, D}, GaussianCopulaLMMObs{T}}, 
+    β::Vector{T}
+    ) where {T <: BlasReal, D}
+    gc.μ .= GLM.linkinv.(canonicallink(gc.d), gc.X * β)
+    gc.res .= gc.y .- gc.μ
+    return (gc.res)
+end
+
+function update_res2!(
+    gcm::Union{GaussianCopulaVCModel{T, D}, GaussianCopulaLMMModel{T}}
+    ) where {T <: BlasReal, D}
+    for i in eachindex(gcm.data)
+        update_res2!(gcm.data[i], gcm.β)
+    end
+    nothing
+end
+
+
 function standardize_res!(
-    gc::Union{GaussianCopulaVCObs{T}, GaussianCopulaLMMObs{T}}, 
+    gc::Union{GaussianCopulaVCObs{T, D}, GaussianCopulaLMMObs{T}}, 
     σinv::T
-    ) where T <: BlasReal
+    ) where {T <: BlasReal, D}
     gc.res .*= σinv
 end
 
 function standardize_res!(
-    gcm::Union{GaussianCopulaVCModel{T}, GaussianCopulaLMMModel{T}}
-    ) where T <: BlasReal
+    gcm::Union{GaussianCopulaVCModel{T, D}, GaussianCopulaLMMModel{T}}
+    ) where {T <: BlasReal, D}
     σinv = sqrt(gcm.τ[1])
     # standardize residual
     for i in eachindex(gcm.data)
@@ -166,119 +144,65 @@ loglik_obs(::Poisson, y, μ, wt, ϕ) = wt*GLM.logpdf(Poisson(μ), y)
 # Hence, p = r/(μ+r)
 loglik_obs(d::NegativeBinomial, y, μ, wt, ϕ) = wt*GLM.logpdf(NegativeBinomial(d.r, d.r/(μ+d.r)), y)
 
-
-
-
-"""
-    glmloglikelihood(d::UnivariateDistribution, y::AbstractVector, μ::AbstractVector)
-Calculates the loglikelihood of observing `y` given mean `μ` and some distribution 
-`d`. 
-Note that loglikelihood is the sum of the logpdfs for each observation. 
-For each logpdf from Normal, Gamma, and InverseGaussian, we scale by dispersion. 
-"""
-function glmloglikelihood(d, gcm)
-    μ = [zeros(size(gcm.data[i].X)) for i in eachindex(gcm.data)]
-    logl = 0.0
-    rsstotal = 0.0
-    β = gcm.β
-    for i in eachindex(gcm.data)
-        map!(x -> GLM.inverselink.(canonicallink(d), x)[1], μ[i], gcm.data[i].X*β)
-        rsstotal += abs2(norm(gcm.data[i].res))
-    end
-    
-    ϕ = rsstotal / (gcm.ntotal - 1)
-    for i in eachindex(gcm.data), j in eachindex(gcm.data[i].y)
-        logl += loglik_obs(d, gcm.data[i].y[j], μ[i][j], 1, ϕ) #wt = 1 because only have 1 sample to estimate a given mean 
-    end
-    return logl
-end
-
-# rss  = abs2(norm(gc.res)) # RSS of standardized residual
-#     tsum = dot(Σ, gc.t)
-#     #logl = - log(1 + tsum) - (n * log(2π) -  n * log(τ) + rss) / 2
-
-# function get_loglikelihood(gcs, rss, tsum)
-#     logpdf_term1 = -log(1 + tsum)
-#     logpdf_term2 = (n * log(τ) + rss) / 2
-
-
+# function update_Σ_jensenHUA!(
+#     gcm::GaussianCopulaVCModel{T, D}, 
+#     maxiter::Integer=50000,
+#     reltol::Number=1e-6,
+#     verbose::Bool=false) where {T <: BlasReal, D}
+#     rsstotal = zero(T)
+#     println(gcm.data[1].res)
+#     println(gcm.data[1].q)
+#     for i in eachindex(gcm.data)
+#         update_res!(gcm.data[i], gcm.β)
+#         rsstotal += abs2(norm(gcm.data[i].res))
+#         GLMCopula.update_quadform!(gcm.data[i])
+#         gcm.QF[i, :] = gcm.data[i].q        
+#     end
+#     # MM iteration
+#     for iter in 1:maxiter
+#         # store previous iterate
+#         copyto!(gcm.storage_Σ, gcm.Σ)
+#         # update τ
+#         mul!(gcm.storage_n, gcm.QF, gcm.Σ) # gcm.storage_n[i] = q[i]
+#         gcm.τ[1] = GLMCopula.update_τ(gcm.τ[1], gcm.storage_n, gcm.ntotal, rsstotal, 1)
+#         # numerator in the multiplicative update
+#         gcm.storage_n .= inv.(inv(gcm.τ[1]) .+ gcm.storage_n) # use newest τ to update Σ
+#         mul!(gcm.storage_m, transpose(gcm.QF), gcm.storage_n)
+#         gcm.Σ .*= gcm.storage_m
+#         # denominator in the multiplicative update
+#         mul!(gcm.storage_n, gcm.TR, gcm.storage_Σ)
+#         gcm.storage_n .= inv.(1 .+ gcm.storage_n)
+#         mul!(gcm.storage_m, transpose(gcm.TR), gcm.storage_n)
+#         gcm.Σ ./= gcm.storage_m
+#         # monotonicity diagnosis
+#         verbose && println(sum(log, 1 .+ gcm.τ[1] .* (gcm.QF * gcm.Σ)) - 
+#             sum(log, 1 .+ gcm.TR * gcm.Σ) + 
+#             gcm.ntotal / 2 * (log(gcm.τ[1]) - log(2π)) - 
+#             rsstotal / 2 * gcm.τ[1])
+#         # convergence check
+#         gcm.storage_m .= gcm.Σ .- gcm.storage_Σ
+#         # norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1) && break
+#         if norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1)
+#             verbose && println("iters=$iter")
+#             break
+#         end
+#         verbose && iter == maxiter && @warn "maximum iterations $maxiter reached"
+#     end
+#     gcm.Σ
 # end
 
-
-function get_loglikelihood(gcm)
-    logpdf_term1 = -sum(log, 1 .+ gcm.TR * gcm.Σ)
-    logpdf_term2 = sum(log, 1 .+ gcm.τ[1] .* (gcm.QF * gcm.Σ))
-    logpdf_term3 = glmloglikelihood(gcm.d, gcm)
-    loglikelihood = logpdf_term1 + logpdf_term2 + logpdf_term3
-    return loglikelihood
-end
-
-function update_Σ_jensenHUA!(
-    gcm::GaussianCopulaVCModel{T}, 
-    maxiter::Integer=50000,
-    reltol::Number=1e-6,
-    verbose::Bool=false) where T <: Real
-    rsstotal = zero(T)
-    println(gcm.data[1].res)
-    println(gcm.data[1].q)
-    for i in eachindex(gcm.data)
-        update_res!(gcm.data[i], gcm.β)
-        rsstotal += abs2(norm(gcm.data[i].res))
-        GLMCopula.update_quadform!(gcm.data[i])
-        gcm.QF[i, :] = gcm.data[i].q        
-    end
-    # MM iteration
-    for iter in 1:maxiter
-        # store previous iterate
-        copyto!(gcm.storage_Σ, gcm.Σ)
-        # update τ
-        mul!(gcm.storage_n, gcm.QF, gcm.Σ) # gcm.storage_n[i] = q[i]
-        gcm.τ[1] = GLMCopula.update_τ(gcm.τ[1], gcm.storage_n, gcm.ntotal, rsstotal, 1)
-        # numerator in the multiplicative update
-        gcm.storage_n .= inv.(inv(gcm.τ[1]) .+ gcm.storage_n) # use newest τ to update Σ
-        mul!(gcm.storage_m, transpose(gcm.QF), gcm.storage_n)
-        gcm.Σ .*= gcm.storage_m
-        # denominator in the multiplicative update
-        mul!(gcm.storage_n, gcm.TR, gcm.storage_Σ)
-        gcm.storage_n .= inv.(1 .+ gcm.storage_n)
-        mul!(gcm.storage_m, transpose(gcm.TR), gcm.storage_n)
-        gcm.Σ ./= gcm.storage_m
-        # monotonicity diagnosis
-        verbose && println(sum(log, 1 .+ gcm.τ[1] .* (gcm.QF * gcm.Σ)) - 
-            sum(log, 1 .+ gcm.TR * gcm.Σ) + 
-            gcm.ntotal / 2 * (log(gcm.τ[1]) - log(2π)) - 
-            rsstotal / 2 * gcm.τ[1])
-        # convergence check
-        gcm.storage_m .= gcm.Σ .- gcm.storage_Σ
-        # norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1) && break
-        if norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1)
-            verbose && println("iters=$iter")
-            break
-        end
-        verbose && iter == maxiter && @warn "maximum iterations $maxiter reached"
-    end
-    gcm.Σ
-end
-
-
-
-            
 function update_Σ_jensen!(
-    gcm::GaussianCopulaVCModel{T}, 
+    gcm::GaussianCopulaVCModel{T, D}, 
     maxiter::Integer=50000,
     reltol::Number=1e-6,
-    verbose::Bool=false) where T <: BlasReal
+    verbose::Bool=false) where {T <: BlasReal, D}
     rsstotal = zero(T)
-    println(gcm.data[1].res)
-    println(gcm.data[1].q)
     for i in eachindex(gcm.data)
         update_res2!(gcm.data[i], gcm.β)
         rsstotal += abs2(norm(gcm.data[i].res))
         update_quadform!(gcm.data[i])
         gcm.QF[i, :] = gcm.data[i].q        
     end
-    println(gcm.data[1].res)
-    println(gcm.data[1].q)
     # MM iteration
     for iter in 1:maxiter
         # store previous iterate
@@ -310,11 +234,11 @@ function update_Σ_jensen!(
 end
 
 function update_Σ_quadratic!(
-    gcm::GaussianCopulaVCModel{T}, 
+    gcm::GaussianCopulaVCModel{T, D}, 
     maxiter::Integer=50000,
     reltol::Number=1e-6,
     qpsolver=Ipopt.IpoptSolver(print_level=0),
-    verbose::Bool=false) where T <: BlasReal
+    verbose::Bool=false) where {T <: BlasReal, D}
     n, m = length(gcm.data), length(gcm.data[1].V)
     # pre-compute quadratic forms and RSS
     rsstotal = zero(T)
@@ -388,10 +312,10 @@ un-standardized residuals.
 update_Σ! = update_Σ_jensen!
 
 function fitted(
-    gc::GaussianCopulaVCObs{T},
+    gc::GaussianCopulaVCObs{T, D},
     β::Vector{T},
     τ::T,
-    Σ::Vector{T}) where T <: BlasReal
+    Σ::Vector{T}) where {T <: BlasReal, D}
     n, m = length(gc.y), length(gc.V)
     μ̂ = glm_residual(gc, β)[1]
     Ω = Matrix{T}(undef, n, n)
@@ -427,16 +351,34 @@ end
 #     At_mul_B!(v.df, v.df2, x, z, v.r, v.r)
 # end
 
+"""
+The deviance of a GLM can be evaluated as the sum of the squared deviance residuals. Calculation
+of sqared deviance residuals is accomplished by `devresid` which is implemented in GLM.jl
+"""
+function deviance(gc::GaussianCopulaVCObs{T, D}) where {T <: BlasReal, D}
+    dev = 0.0
+    @inbounds for j in eachindex(gc.y)
+        dev += GLM.devresid(gc.d, gc.y[j], gc.μ[j])
+    end
+    return dev
+end
 
+"""
+    loglikelihood2!(gc::GaussianCopulaVCObs{T, D})
+Calculates the loglikelihood of observing `y` given mean `μ` and some distribution 
+`d`. 
+Note that loglikelihood is the sum of the logpdfs for each observation. 
+For each logpdf from Normal, Gamma, and InverseGaussian, we scale by dispersion. 
+"""
 
-function loglikelihood!(
-    gc::GaussianCopulaVCObs{T},
+function loglikelihood2!(
+    gc::GaussianCopulaVCObs{T, D},
     β::Vector{T},
     τ::T, # inverse of linear regression variance
     Σ::Vector{T},
     needgrad::Bool = false,
     needhess::Bool = false
-    ) where T <: BlasReal
+    ) where {T <: BlasReal, D}
     n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
     needgrad = needgrad || needhess
     if needgrad
@@ -450,8 +392,7 @@ function loglikelihood!(
     update_res2!(gc, β)
     standardize_res!(gc, sqrtτ)
     tsum = dot(Σ, gc.t)
-    logl = - log(1 + tsum)
-    #println(logl)
+    logl = - log(1 + tsum) 
     for k in 1:m
         mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
         if needgrad # ∇β stores X'*Γ*res (standardized residual)
@@ -462,11 +403,10 @@ function loglikelihood!(
     qsum  = dot(Σ, gc.q)
     logl += log(1 + qsum)
     rss = abs2(norm(gc.res))
-    ϕ = rss/ n
-    for i in eachindex(gc.y)
-        logl += loglik_obs(gc.d, gc.y[i], gc.μ[i], 1, ϕ) #wt = 1 because only have 1 sample to estimate a given mean 
+    ϕ = GLMCopula.deviance(gc) / n
+    @inbounds for j in eachindex(gc.y)
+        logl += GLM.loglik_obs(gc.d, gc.y[j], gc.μ[j], 1, ϕ)
     end
-    #println(logl)
     # gradient
     if needgrad
         inv1pq = inv(1 + qsum)
@@ -474,7 +414,7 @@ function loglikelihood!(
             BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, one(T), gc.Hβ) # only lower triangular
             gc.Hτ[1, 1] = - abs2(qsum * inv1pq / τ)
         end
-        BLAS.gemv!('T', one(T), gc.X, gc.res, -inv1pq, gc.∇β)
+        BLAS.gemv!('T', 1.0, gc.X, gc.res, -inv1pq, gc.∇β)
         gc.∇β .*= sqrtτ
         gc.∇τ  .= (n - rss + 2qsum * inv1pq) / 2τ
         gc.∇Σ  .= inv1pq .* gc.q .- inv(1 + tsum) .* gc.t 
@@ -483,11 +423,11 @@ function loglikelihood!(
     logl
 end
 
-function loglikelihood!(
-    gcm::Union{GaussianCopulaVCModel{T}, GaussianCopulaLMMModel{T}},
+function loglikelihood2!(
+    gcm::Union{GaussianCopulaVCModel{T, D}, GaussianCopulaLMMModel{T}},
     needgrad::Bool = false,
     needhess::Bool = false
-    ) where T <: BlasReal
+    ) where {T <: BlasReal, D}
     logl = zero(T)
     if needgrad
         fill!(gcm.∇β, 0)
@@ -499,8 +439,8 @@ function loglikelihood!(
         gcm.Hτ .= - gcm.ntotal / 2abs2(gcm.τ[1])
     end
     for i in eachindex(gcm.data)
-        logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.Σ, needgrad, needhess)
-        println(logl)
+        logl += loglikelihood2!(gcm.data[i], gcm.β, gcm.τ[1], gcm.Σ, needgrad, needhess)
+        #println(logl)
         if needgrad
             gcm.∇β .+= gcm.data[i].∇β
             gcm.∇τ .+= gcm.data[i].∇τ
@@ -528,7 +468,7 @@ function fit!(
     optstat = MathProgBase.status(optm)
     optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
     copy_par!(gcm, MathProgBase.getsolution(optm))
-    loglikelihood!(gcm)
+    loglikelihood2!(gcm)
     gcm
 end
 
@@ -551,7 +491,7 @@ function MathProgBase.eval_f(
     # maximize σ2 and τ at current β using MM
     update_Σ!(gcm)
     # evaluate loglikelihood
-    loglikelihood!(gcm, false, false)
+    loglikelihood2!(gcm, false, false)
 end
 
 function MathProgBase.eval_grad_f(
@@ -562,7 +502,7 @@ function MathProgBase.eval_grad_f(
     # maximize σ2 and τ at current β using MM
     update_Σ!(gcm)
     # evaluate gradient
-    logl = loglikelihood!(gcm, true, false)
+    logl = loglikelihood2!(gcm, true, false)
     copyto!(grad, gcm.∇β)
     nothing
 end
@@ -589,16 +529,16 @@ function MathProgBase.hesslag_structure(gcm::GaussianCopulaVCModel)
 end
 
 function MathProgBase.eval_hesslag(
-    gcm::GaussianCopulaVCModel{T},
+    gcm::GaussianCopulaVCModel{T, D},
     H::Vector{T},
     par::Vector{T},
     σ::T,
-    μ::Vector{T}) where T <: BlasReal
+    μ::Vector{T}) where {T <: BlasReal, D}
     copy_par!(gcm, par)
     # maximize σ2 and τ at current β using MM
     update_Σ!(gcm)
     # evaluate Hessian
-    loglikelihood!(gcm, true, true)
+    loglikelihood2!(gcm, true, true)
     # copy Hessian elements into H
     ct = 1
     for j in 1:gcm.p
