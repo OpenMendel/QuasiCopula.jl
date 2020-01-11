@@ -5,7 +5,7 @@ Initialize the linear regression parameters `β` and `τ=σ0^{-2}` by the least
 squares solution.
 """
 function init_β!(
-    gcm::Union{GaussianCopulaVCModel{T, D}, GaussianCopulaLMMModel{T}}
+    gcm::Union{GaussianCopulaVCModel{T, D}, GaussianCopulaLMMModel{T, D}}
     ) where {T <: BlasReal, D}
     # accumulate sufficient statistics X'y
     xty = zeros(T, gcm.p) 
@@ -53,7 +53,7 @@ update_res2!(gc, β)
 Update the residual vector according to `β` and the canonical inverse link to the given distribution.
 """
 function update_res2!(
-    gc::Union{GaussianCopulaVCObs{T, D}, GaussianCopulaLMMObs{T}}, 
+    gc::Union{GaussianCopulaVCObs{T, D}, GaussianCopulaLMMObs{T, D}}, 
     β::Vector{T}
     ) where {T <: BlasReal, D}
     gc.μ .= GLM.linkinv.(canonicallink(gc.d), gc.X * β)
@@ -62,7 +62,7 @@ function update_res2!(
 end
 
 function update_res2!(
-    gcm::Union{GaussianCopulaVCModel{T, D}, GaussianCopulaLMMModel{T}}
+    gcm::Union{GaussianCopulaVCModel{T, D}, GaussianCopulaLMMModel{T, D}}
     ) where {T <: BlasReal, D}
     for i in eachindex(gcm.data)
         update_res2!(gcm.data[i], gcm.β)
@@ -72,14 +72,14 @@ end
 
 
 function standardize_res!(
-    gc::Union{GaussianCopulaVCObs{T, D}, GaussianCopulaLMMObs{T}}, 
+    gc::Union{GaussianCopulaVCObs{T, D}, GaussianCopulaLMMObs{T, D}}, 
     σinv::T
     ) where {T <: BlasReal, D}
     gc.res .*= σinv
 end
 
 function standardize_res!(
-    gcm::Union{GaussianCopulaVCModel{T, D}, GaussianCopulaLMMModel{T}}
+    gcm::Union{GaussianCopulaVCModel{T, D}, GaussianCopulaLMMModel{T, D}}
     ) where {T <: BlasReal, D}
     σinv = sqrt(gcm.τ[1])
     # standardize residual
@@ -126,6 +126,20 @@ function update_τ(
     end
     τ
 end
+
+"""
+The deviance of a GLM can be evaluated as the sum of the squared deviance residuals. Calculation
+of sqared deviance residuals is accomplished by `devresid` which is implemented in GLM.jl. 
+This is useful for calculating the dispersion parameter
+"""
+function deviance(gc::Union{GaussianCopulaVCObs{T, D}, GaussianCopulaLMMObs{T, D}}) where {T <: BlasReal, D}
+    dev = 0.0
+    @inbounds for j in eachindex(gc.y)
+        dev += GLM.devresid(gc.d, gc.y[j], gc.μ[j])
+    end
+    return dev
+end
+
 
 # from GLM package
 
@@ -351,17 +365,6 @@ end
 #     At_mul_B!(v.df, v.df2, x, z, v.r, v.r)
 # end
 
-"""
-The deviance of a GLM can be evaluated as the sum of the squared deviance residuals. Calculation
-of sqared deviance residuals is accomplished by `devresid` which is implemented in GLM.jl
-"""
-function deviance(gc::GaussianCopulaVCObs{T, D}) where {T <: BlasReal, D}
-    dev = 0.0
-    @inbounds for j in eachindex(gc.y)
-        dev += GLM.devresid(gc.d, gc.y[j], gc.μ[j])
-    end
-    return dev
-end
 
 """
     loglikelihood2!(gc::GaussianCopulaVCObs{T, D})
@@ -424,7 +427,7 @@ function loglikelihood2!(
 end
 
 function loglikelihood2!(
-    gcm::Union{GaussianCopulaVCModel{T, D}, GaussianCopulaLMMModel{T}},
+    gcm::Union{GaussianCopulaVCModel{T, D}, GaussianCopulaLMMModel{T, D}},
     needgrad::Bool = false,
     needhess::Bool = false
     ) where {T <: BlasReal, D}
@@ -485,7 +488,7 @@ end
 MathProgBase.features_available(gcm::GaussianCopulaVCModel) = [:Grad]
 
 function MathProgBase.eval_f(
-    gcm::GaussianCopulaVCModel, 
+    gcm::GaussianCopulaVCModel,
     par::Vector)
     copy_par!(gcm, par)
     # maximize σ2 and τ at current β using MM
@@ -495,7 +498,7 @@ function MathProgBase.eval_f(
 end
 
 function MathProgBase.eval_grad_f(
-    gcm::GaussianCopulaVCModel, 
+    gcm::GaussianCopulaVCModel,
     grad::Vector, 
     par::Vector)
     copy_par!(gcm, par)

@@ -7,9 +7,9 @@ using LinearAlgebra: BlasReal, copytri!
 @reexport using Ipopt
 @reexport using NLopt
 
-export GaussianCopulaVCObs, GaussianCopulaVCModel, update_Σ_jensenHUA!
+export GaussianCopulaVCObs, GaussianCopulaVCModel, deviance
 export fit!, fitted, init_β!, loglikelihood!, standardize_res!
-export update_res2!, update_Σ!, loglikelihood2!
+export update_res2!, update_Σ!, loglikelihood2!, loglikelihoodLMM!
 
 export GaussianCopulaLMMObs, GaussianCopulaLMMModel
 
@@ -131,7 +131,7 @@ GaussianCopulaLMMObs(y, X, Z)
 
 A realization of Gaussian copula linear mixed model data instance.
 """
-struct GaussianCopulaLMMObs{T <: LinearAlgebra.BlasReal}
+struct GaussianCopulaLMMObs{T <: BlasReal, D}
     # data
     y::Vector{T}
     X::Matrix{T}
@@ -149,13 +149,16 @@ struct GaussianCopulaLMMObs{T <: LinearAlgebra.BlasReal}
     xtz::Matrix{T}  # Xi'Zi (p-by-q)
     storage_q1::Vector{T}
     storage_q2::Vector{T}
+    d::D
+    μ::Vector{T}
 end
 
 function GaussianCopulaLMMObs(
     y::Vector{T},
     X::Matrix{T},
-    Z::Matrix{T}
-    ) where T <: BlasReal
+    Z::Matrix{T},
+    d::D
+    ) where {T <: BlasReal, D}
     n, p, q = size(X, 1), size(X, 2), size(Z, 2)
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
@@ -171,11 +174,12 @@ function GaussianCopulaLMMObs(
     xtz = transpose(X) * Z
     storage_q1 = Vector{T}(undef, q)
     storage_q2 = Vector{T}(undef, q)
+    μ = Vector{T}(undef, n)
     # constructor
-    GaussianCopulaLMMObs{T}(y, X, Z, 
+    GaussianCopulaLMMObs{T, D}(y, X, Z, 
         ∇β, ∇τ, ∇Σ, Hβ, Hτ, HΣ,
         res, xtx, ztz, xtz,
-        storage_q1, storage_q2)
+        storage_q1, storage_q2, d, μ)
 end
 
 """
@@ -185,9 +189,9 @@ GaussianCopulaLMMModel(gcs)
 Gaussian copula linear mixed model, which contains a vector of 
 `GaussianCopulaLMMObs` as data, model parameters, and working arrays.
 """
-struct GaussianCopulaLMMModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
+struct GaussianCopulaLMMModel{T <: BlasReal, D} <: MathProgBase.AbstractNLPEvaluator
     # data
-    data::Vector{GaussianCopulaLMMObs{T}}
+    data::Vector{GaussianCopulaLMMObs{T, D}}
     ntotal::Int     # total number of singleton observations
     p::Int          # number of mean parameters in linear regression
     q::Int          # number of random effects
@@ -206,9 +210,10 @@ struct GaussianCopulaLMMModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluato
     XtX::Matrix{T}      # X'X = sum_i Xi'Xi
     storage_qq::Matrix{T}
     storage_nq::Matrix{T}
+    d::D
 end
 
-function GaussianCopulaLMMModel(gcs::Vector{GaussianCopulaLMMObs{T}}) where T <: BlasReal
+function GaussianCopulaLMMModel(gcs::Vector{GaussianCopulaLMMObs{T, D}}) where {T <: BlasReal, D}
     n, p, q = length(gcs), size(gcs[1].X, 2), size(gcs[1].Z, 2)
     npar = p + 1 + (q * (q + 1)) >> 1
     β   = Vector{T}(undef, p)
@@ -229,10 +234,10 @@ function GaussianCopulaLMMModel(gcs::Vector{GaussianCopulaLMMObs{T}}) where T <:
     end
     storage_qq = Matrix{T}(undef, q, q)
     storage_nq = Matrix{T}(undef, n, q)
-    GaussianCopulaLMMModel{T}(gcs, ntotal, p, q, 
+    GaussianCopulaLMMModel{T, D}(gcs, ntotal, p, q, 
         β, τ, Σ, ΣL,
         ∇β, ∇τ, ∇Σ, Hβ, Hτ, HΣ, 
-        XtX, storage_qq, storage_nq)
+        XtX, storage_qq, storage_nq, gcs[1].d)
 end
 
 include("gaussian_vc.jl")
