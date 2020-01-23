@@ -28,16 +28,19 @@ struct GaussianCopulaVCObs{T <: BlasReal, D}
     ∇β::Vector{T}   # gradient wrt β
     ∇τ::Vector{T}   # gradient wrt τ
     ∇Σ::Vector{T}   # gradient wrt σ2
-    Hβ::Matrix{T}   # Hessian wrt β 
+    Hβ::Matrix{T}   # Hessian wrt β
     Hτ::Matrix{T}   # Hessian wrt τ
     res::Vector{T}  # residual vector res_i
     xtx::Matrix{T}  # Xi'Xi
+    xtw2x::Matrix{T}# Xi'W2iXi
     t::Vector{T}    # t[k] = tr(V_i[k]) / 2
     q::Vector{T}    # q[k] = res_i' * V_i[k] * res_i / 2
     storage_n::Vector{T}
     storage_p::Vector{T}
     d::D
     μ::Vector{T}
+    w1::Vector{T}
+    w2::Vector{T}
 end
 
 function GaussianCopulaVCObs(
@@ -56,21 +59,24 @@ function GaussianCopulaVCObs(
     Hτ  = Matrix{T}(undef, 1, 1)
     res = Vector{T}(undef, n)
     xtx = transpose(X) * X
-    t   = [tr(V[k])/2 for k in 1:m] 
+    xtw2x = copy(xtx)
+    t   = [tr(V[k])/2 for k in 1:m]
     q   = Vector{T}(undef, m)
     storage_n = Vector{T}(undef, n)
     storage_p = Vector{T}(undef, p)
     μ = Vector{T}(undef, n)
+    w1 = Vector{T}(undef, n)
+    w2 = Vector{T}(undef, n)
     # constructor
-    GaussianCopulaVCObs{T, D}(y, X, V, ∇β, ∇τ, ∇Σ, Hβ, 
-        Hτ, res, xtx, t, q, storage_n, storage_p, d, μ)
+    GaussianCopulaVCObs{T, D}(y, X, V, ∇β, ∇τ, ∇Σ, Hβ,
+        Hτ, res, xtx, xtw2x, t, q, storage_n, storage_p, d, μ, w1, w2)
 end
 
 """
 GaussianCopulaVCModel
 GaussianCopulaVCModel(gcs)
 
-Gaussian copula variance component model, which contains a vector of 
+Gaussian copula variance component model, which contains a vector of
 `GaussianCopulaVCObs` as data, model parameters, and working arrays.
 """
 struct GaussianCopulaVCModel{T <: BlasReal, D} <: MathProgBase.AbstractNLPEvaluator
@@ -90,6 +96,7 @@ struct GaussianCopulaVCModel{T <: BlasReal, D} <: MathProgBase.AbstractNLPEvalua
     Hβ::Matrix{T}    # Hessian from all observations
     Hτ::Matrix{T}
     XtX::Matrix{T}  # X'X = sum_i Xi'Xi
+    XtW2X::Matrix{T} # X'W2X = sum_i Xi'W2iXi
     TR::Matrix{T}   # n-by-m matrix with tik = tr(Vi[k]) / 2
     QF::Matrix{T}   # n-by-m matrix with qik = res_i' Vi[k] res_i
     storage_n::Vector{T}
@@ -109,6 +116,7 @@ function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVCObs{T, D}}) where {T 
     Hβ  = Matrix{T}(undef, p, p)
     Hτ  = Matrix{T}(undef, 1, 1)
     XtX = zeros(T, p, p) # sum_i xi'xi
+    XtW2X = zeros(T, p, p)
     TR  = Matrix{T}(undef, n, m) # collect trace terms
     ntotal = 0
     for i in eachindex(gcs)
@@ -120,8 +128,8 @@ function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVCObs{T, D}}) where {T 
     storage_n = Vector{T}(undef, n)
     storage_m = Vector{T}(undef, m)
     storage_Σ = Vector{T}(undef, m)
-    GaussianCopulaVCModel{T, D}(gcs, ntotal, p, m, β, τ, Σ, 
-        ∇β, ∇τ, ∇Σ, Hβ, Hτ, XtX, TR, QF,
+    GaussianCopulaVCModel{T, D}(gcs, ntotal, p, m, β, τ, Σ,
+        ∇β, ∇τ, ∇Σ, Hβ, Hτ, XtX, XtW2X, TR, QF,
         storage_n, storage_m, storage_Σ, gcs[1].d)
 end
 
@@ -139,7 +147,7 @@ struct GaussianCopulaLMMObs{T <: BlasReal, D}
     # working arrays
     ∇β::Vector{T}   # gradient wrt β
     ∇τ::Vector{T}   # gradient wrt τ
-    ∇Σ::Matrix{T}   # gradient wrt Σ 
+    ∇Σ::Matrix{T}   # gradient wrt Σ
     Hβ::Matrix{T}   # Hessian wrt β
     Hτ::Matrix{T}   # Hessian wrt τ
     HΣ::Matrix{T}   # Hessian wrt Σ
@@ -151,6 +159,8 @@ struct GaussianCopulaLMMObs{T <: BlasReal, D}
     storage_q2::Vector{T}
     d::D
     μ::Vector{T}
+    w1::Vector{T}
+    w2::Vector{T}
 end
 
 function GaussianCopulaLMMObs(
@@ -175,18 +185,20 @@ function GaussianCopulaLMMObs(
     storage_q1 = Vector{T}(undef, q)
     storage_q2 = Vector{T}(undef, q)
     μ = Vector{T}(undef, n)
+    w1 = Vector{T}(undef, n)
+    w2 = Vector{T}(undef, n)
     # constructor
-    GaussianCopulaLMMObs{T, D}(y, X, Z, 
+    GaussianCopulaLMMObs{T, D}(y, X, Z,
         ∇β, ∇τ, ∇Σ, Hβ, Hτ, HΣ,
         res, xtx, ztz, xtz,
-        storage_q1, storage_q2, d, μ)
+        storage_q1, storage_q2, d, μ, w1, w2)
 end
 
 """
 GaussianCopulaLMMModel
 GaussianCopulaLMMModel(gcs)
 
-Gaussian copula linear mixed model, which contains a vector of 
+Gaussian copula linear mixed model, which contains a vector of
 `GaussianCopulaLMMObs` as data, model parameters, and working arrays.
 """
 struct GaussianCopulaLMMModel{T <: BlasReal, D} <: MathProgBase.AbstractNLPEvaluator
@@ -234,9 +246,9 @@ function GaussianCopulaLMMModel(gcs::Vector{GaussianCopulaLMMObs{T, D}}) where {
     end
     storage_qq = Matrix{T}(undef, q, q)
     storage_nq = Matrix{T}(undef, n, q)
-    GaussianCopulaLMMModel{T, D}(gcs, ntotal, p, q, 
+    GaussianCopulaLMMModel{T, D}(gcs, ntotal, p, q,
         β, τ, Σ, ΣL,
-        ∇β, ∇τ, ∇Σ, Hβ, Hτ, HΣ, 
+        ∇β, ∇τ, ∇Σ, Hβ, Hτ, HΣ,
         XtX, storage_qq, storage_nq, gcs[1].d)
 end
 
