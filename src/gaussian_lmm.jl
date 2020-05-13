@@ -1,11 +1,24 @@
-function loglikelihood2!(
-    gc::GaussianCopulaLMMObs{T, D},
+"""
+update_res!(gc, β)
+Update the residual vector according to `β` for Linear Mixed Model.
+"""
+function update_res!(
+    gc::GaussianCopulaLMMObs{T},
+    β::Vector{T}
+    ) where T <: BlasReal
+    copyto!(gc.res, gc.y)
+    BLAS.gemv!('N', -one(T), gc.X, β, one(T), gc.res)
+    gc.res
+end
+
+function loglikelihood!(
+    gc::GaussianCopulaLMMObs{T},
     β::Vector{T},
     τ::T, # inverse of linear regression variance
     Σ::Matrix{T},
     needgrad::Bool = false,
     needhess::Bool = false
-    ) where {T <: BlasReal, D}
+    ) where T <: BlasReal
     n, p, q = size(gc.X, 1), size(gc.X, 2), size(gc.Z, 2)
     if needgrad
         fill!(gc.∇β, 0)
@@ -19,18 +32,14 @@ function loglikelihood2!(
     end
     # evaluate copula loglikelihood
     sqrtτ = sqrt(τ)
-    update_res2!(gc, β)
+    update_res!(gc, β)
     standardize_res!(gc, sqrtτ)
     rss = abs2(norm(gc.res)) # RSS of standardized residual
     tr = (1//2)dot(gc.ztz, Σ)
     mul!(gc.storage_q1, transpose(gc.Z), gc.res) # storage_q1 = Z' * std residual
     mul!(gc.storage_q2, Σ, gc.storage_q1)        # storage_q2 = Σ * Z' * std residual
     qf = (1//2)dot(gc.storage_q1, gc.storage_q2)
-    logl = - log(1 + tr) + log(1 + qf)
-    ϕ = GLMCopula.deviance(gc) / n
-    @inbounds for j in eachindex(gc.y)
-        logl += GLM.loglik_obs(gc.d, gc.y[j], gc.μ[j], 1, ϕ)
-    end
+    logl = - (n * log(2π) -  n * log(τ) + rss) / 2 - log(1 + tr) + log(1 + qf)
     # gradient
     if needgrad
         # wrt β
@@ -50,10 +59,41 @@ function loglikelihood2!(
     logl
 end
 
+function loglikelihood!(
+    gcm::GaussianCopulaLMMModel{T},
+    needgrad::Bool = false,
+    needhess::Bool = false
+    ) where T <: BlasReal
+    logl = zero(T)
+    if needgrad
+        fill!(gcm.∇β, 0)
+        fill!(gcm.∇τ, 0)
+        fill!(gcm.∇Σ, 0)
+    end
+    if needhess
+        gcm.Hβ .= - gcm.XtX
+        gcm.Hτ .= - gcm.ntotal / 2abs2(gcm.τ[1])
+    end
+    for i in eachindex(gcm.data)
+        logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.Σ, needgrad, needhess)
+        if needgrad
+            gcm.∇β .+= gcm.data[i].∇β
+            gcm.∇τ .+= gcm.data[i].∇τ
+            gcm.∇Σ .+= gcm.data[i].∇Σ
+        end
+        if needhess
+            gcm.Hβ .+= gcm.data[i].Hβ
+            gcm.Hτ .+= gcm.data[i].Hτ
+        end
+    end
+    needhess && (gcm.Hβ .*= gcm.τ[1])
+    logl
+end
+
 function fit!(
-    gcm::GaussianCopulaLMMModel{T, D},
+    gcm::GaussianCopulaLMMModel,
     solver=Ipopt.IpoptSolver(print_level=0)
-    ) where {T <: BlasReal, D}
+    )
     p, q = size(gcm.data[1].X, 2), size(gcm.data[1].Z, 2)
     npar = p + 1 + (q * (q + 1)) >> 1
     optm = MathProgBase.NonlinearModel(solver)
@@ -70,17 +110,16 @@ function fit!(
     optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
     # refresh gradient and Hessian
     optimpar_to_modelpar!(gcm, MathProgBase.getsolution(optm))
-    loglikelihood2!(gcm, true, true)
+    loglikelihood!(gcm, true, true)
     gcm
 end
 
 """
     optimpar_to_modelpar!(gcm, par)
-
 Translate optimization variables in `par` to the model parameters in `gcm`.
 """
 function optimpar_to_modelpar!(
-    gcm::GaussianCopulaLMMModel, 
+    gcm::GaussianCopulaLMMModel,
     par::Vector)
     p, q = size(gcm.data[1].X, 2), size(gcm.data[1].Z, 2)
     copyto!(gcm.β, 1, par, 1, p)
@@ -101,7 +140,6 @@ end
 
 """
     modelpar_to_optimpar!(gcm, par)
-
 Translate model parameters in `gcm` to optimization variables in `par`.
 """
 function modelpar_to_optimpar!(
@@ -126,7 +164,7 @@ function modelpar_to_optimpar!(
 end
 
 function MathProgBase.initialize(
-    gcm::GaussianCopulaLMMModel, 
+    gcm::GaussianCopulaLMMModel,
     requested_features::Vector{Symbol})
     for feat in requested_features
         if !(feat in [:Grad])
@@ -138,19 +176,19 @@ end
 MathProgBase.features_available(gcm::GaussianCopulaLMMModel) = [:Grad]
 
 function MathProgBase.eval_f(
-    gcm::GaussianCopulaLMMModel{T, D}, 
-    par::Vector) where {T <: BlasReal, D}
+    gcm::GaussianCopulaLMMModel,
+    par::Vector)
     optimpar_to_modelpar!(gcm, par)
-    loglikelihood2!(gcm, false, false)
+    loglikelihood!(gcm, false, false)
 end
 
 function MathProgBase.eval_grad_f(
-    gcm::GaussianCopulaLMMModel{T, D}, 
-    grad::Vector, 
-    par::Vector) where {T <: BlasReal, D}
+    gcm::GaussianCopulaLMMModel,
+    grad::Vector,
+    par::Vector)
     p, q = size(gcm.data[1].X, 2), size(gcm.data[1].Z, 2)
     optimpar_to_modelpar!(gcm, par)
-    loglikelihood2!(gcm, true, false)
+    loglikelihood!(gcm, true, false)
     # gradient wrt β
     copyto!(grad, gcm.∇β)
     # gradient wrt log(τ)

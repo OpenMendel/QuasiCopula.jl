@@ -32,7 +32,7 @@ struct GaussianCopulaVCObs{T <: BlasReal, D}
     Hτ::Matrix{T}   # Hessian wrt τ
     res::Vector{T}  # residual vector res_i
     xtx::Matrix{T}  # Xi'Xi
-    xtw2x::Matrix{T}# Xi'W2iXi
+    xtw2x::Matrix{T}# Xi'W2iXi where W2i = Diagonal(mueta(link, Xi*B))
     t::Vector{T}    # t[k] = tr(V_i[k]) / 2
     q::Vector{T}    # q[k] = res_i' * V_i[k] * res_i / 2
     storage_n::Vector{T}
@@ -59,7 +59,7 @@ function GaussianCopulaVCObs(
     Hτ  = Matrix{T}(undef, 1, 1)
     res = Vector{T}(undef, n)
     xtx = transpose(X) * X
-    xtw2x = copy(xtx)
+    xtw2x = Matrix{T}(undef, p, n)
     t   = [tr(V[k])/2 for k in 1:m]
     q   = Vector{T}(undef, m)
     storage_n = Vector{T}(undef, n)
@@ -136,10 +136,9 @@ end
 """
 GaussianCopulaLMMObs
 GaussianCopulaLMMObs(y, X, Z)
-
 A realization of Gaussian copula linear mixed model data instance.
 """
-struct GaussianCopulaLMMObs{T <: BlasReal, D}
+struct GaussianCopulaLMMObs{T <: LinearAlgebra.BlasReal}
     # data
     y::Vector{T}
     X::Matrix{T}
@@ -157,18 +156,13 @@ struct GaussianCopulaLMMObs{T <: BlasReal, D}
     xtz::Matrix{T}  # Xi'Zi (p-by-q)
     storage_q1::Vector{T}
     storage_q2::Vector{T}
-    d::D
-    μ::Vector{T}
-    w1::Vector{T}
-    w2::Vector{T}
 end
 
 function GaussianCopulaLMMObs(
     y::Vector{T},
     X::Matrix{T},
-    Z::Matrix{T},
-    d::D
-    ) where {T <: BlasReal, D}
+    Z::Matrix{T}
+    ) where T <: BlasReal
     n, p, q = size(X, 1), size(X, 2), size(Z, 2)
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
@@ -184,26 +178,22 @@ function GaussianCopulaLMMObs(
     xtz = transpose(X) * Z
     storage_q1 = Vector{T}(undef, q)
     storage_q2 = Vector{T}(undef, q)
-    μ = Vector{T}(undef, n)
-    w1 = Vector{T}(undef, n)
-    w2 = Vector{T}(undef, n)
     # constructor
-    GaussianCopulaLMMObs{T, D}(y, X, Z,
+    GaussianCopulaLMMObs{T}(y, X, Z,
         ∇β, ∇τ, ∇Σ, Hβ, Hτ, HΣ,
         res, xtx, ztz, xtz,
-        storage_q1, storage_q2, d, μ, w1, w2)
+        storage_q1, storage_q2)
 end
 
 """
 GaussianCopulaLMMModel
 GaussianCopulaLMMModel(gcs)
-
 Gaussian copula linear mixed model, which contains a vector of
 `GaussianCopulaLMMObs` as data, model parameters, and working arrays.
 """
-struct GaussianCopulaLMMModel{T <: BlasReal, D} <: MathProgBase.AbstractNLPEvaluator
+struct GaussianCopulaLMMModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     # data
-    data::Vector{GaussianCopulaLMMObs{T, D}}
+    data::Vector{GaussianCopulaLMMObs{T}}
     ntotal::Int     # total number of singleton observations
     p::Int          # number of mean parameters in linear regression
     q::Int          # number of random effects
@@ -222,10 +212,9 @@ struct GaussianCopulaLMMModel{T <: BlasReal, D} <: MathProgBase.AbstractNLPEvalu
     XtX::Matrix{T}      # X'X = sum_i Xi'Xi
     storage_qq::Matrix{T}
     storage_nq::Matrix{T}
-    d::D
 end
 
-function GaussianCopulaLMMModel(gcs::Vector{GaussianCopulaLMMObs{T, D}}) where {T <: BlasReal, D}
+function GaussianCopulaLMMModel(gcs::Vector{GaussianCopulaLMMObs{T}}) where T <: BlasReal
     n, p, q = length(gcs), size(gcs[1].X, 2), size(gcs[1].Z, 2)
     npar = p + 1 + (q * (q + 1)) >> 1
     β   = Vector{T}(undef, p)
@@ -246,10 +235,10 @@ function GaussianCopulaLMMModel(gcs::Vector{GaussianCopulaLMMObs{T, D}}) where {
     end
     storage_qq = Matrix{T}(undef, q, q)
     storage_nq = Matrix{T}(undef, n, q)
-    GaussianCopulaLMMModel{T, D}(gcs, ntotal, p, q,
+    GaussianCopulaLMMModel{T}(gcs, ntotal, p, q,
         β, τ, Σ, ΣL,
         ∇β, ∇τ, ∇Σ, Hβ, Hτ, HΣ,
-        XtX, storage_qq, storage_nq, gcs[1].d)
+        XtX, storage_qq, storage_nq)
 end
 
 include("gaussian_vc.jl")
