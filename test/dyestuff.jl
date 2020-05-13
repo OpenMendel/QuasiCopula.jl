@@ -3,20 +3,22 @@ module DyestuffTest
 println()
 @info "Dyestuff example"
 
-using GLMCopula, RDatasets, Test, Gurobi
+using GLMCopula, RDatasets, Test, GLM
 
 # Dataframe with columns: Batch (Categorical), Yield (Int32)
 dyestuff = dataset("lme4", "Dyestuff")
 groups = unique(dyestuff[!, :Batch])
 n, p, m = length(groups), 1, 1
-gcs = Vector{GaussianCopulaVCObs{Float64}}(undef, n)
+d = Normal()
+D = typeof(d)
+gcs = Vector{GaussianCopulaVCObs{Float64, D}}(undef, n)
 for (i, grp) in enumerate(groups)
     gidx = dyestuff[!, :Batch] .== grp
     ni = count(gidx)
     y = Float64.(dyestuff[gidx, :Yield])
     X = ones(ni, 1)
     V = [ones(ni, ni)]
-    gcs[i] = GaussianCopulaVCObs(y, X, V)
+    gcs[i] = GaussianCopulaVCObs(y, X, V, d)
 end
 gcm = GaussianCopulaVCModel(gcs);
 
@@ -30,7 +32,7 @@ fill!(gcm.Σ, 1)
 update_Σ!(gcm)
 @show gcm.τ
 @show gcm.Σ;
-@test loglikelihood!(gcm, true, false) ≈ -164.00082379
+@test loglikelihood!(gcm, true, false) ≈ -160.88911777
 @show gcm.∇β
 @show gcm.∇τ
 @show gcm.∇Σ
@@ -41,7 +43,7 @@ update_Σ!(gcm)
 @show gcm.β
 @show gcm.τ
 @show gcm.Σ
-@test loglikelihood!(gcm, true, false) ≈ -163.35545251
+@test loglikelihood!(gcm, true, false) ≈ -160.88911777
 @show gcm.∇β
 @show gcm.∇τ
 @show gcm.∇Σ

@@ -1,7 +1,7 @@
 module GaussianVCBenchmark
 
 using InteractiveUtils, LinearAlgebra, Profile, Random
-using BenchmarkTools, GLMCopula
+using BenchmarkTools, GLMCopula, GLM
 
 Random.seed!(123)
 
@@ -9,7 +9,9 @@ n = 100  # number of observations
 ns = rand(100:300, n) # ni in each observation
 p = 3   # number of mean parameters
 m = 2   # number of variance components
-gcs = Vector{GaussianCopulaVCObs{Float64}}(undef, n)
+d = Normal()
+D = typeof(d)
+gcs = Vector{GaussianCopulaVCObs{Float64, D}}(undef, n)
 # true parameter values
 βtruth = ones(p)
 σ2truth = collect(1.:m)
@@ -29,7 +31,7 @@ for i in 1:n
     # generate responses
     y = X * βtruth + Ωchol.L * randn(ni)
     # add to data
-    gcs[i] = GaussianCopulaVCObs(y, X, [V1, V2])
+    gcs[i] = GaussianCopulaVCObs(y, X, [V1, V2], d)
 end
 
 gcm = GaussianCopulaVCModel(gcs)
@@ -70,11 +72,11 @@ update_Σ!(gcm)
 
 @info "MLE:"
 solver = Ipopt.IpoptSolver(print_level=0)
-@time fit!(gcm, solver)
+@time GLMCopula.fit!(gcm, solver)
 @show [gcm.β; gcm.τ; gcm.Σ]
 @show [gcm.∇β; gcm.∇τ; gcm.∇Σ]
 @show loglikelihood!(gcm)
-# @btime fit!(gcm, solver) setup=(init_β!(gcm); 
+# @btime fit!(gcm, solver) setup=(init_β!(gcm);
 #     standardize_res!(gcm); update_quadform!(gcm, true); fill!(gcm.Σ, 1);
 #     update_Σ!(gcm))
 
@@ -101,9 +103,9 @@ for solver in [
     init_β!(gcm)
     fill!(gcm.Σ, 1)
     update_Σ!(gcm)
-    # fit 
-    fit!(gcm, solver)
-    @time fit!(gcm, solver)
+    # fit
+    GLMCopula.fit!(gcm, solver)
+    @time GLMCopula.fit!(gcm, solver)
     @show loglikelihood!(gcm)
     @show [gcm.β; gcm.τ; gcm.Σ]
     @show [gcm.∇β; gcm.∇τ; gcm.∇Σ]
