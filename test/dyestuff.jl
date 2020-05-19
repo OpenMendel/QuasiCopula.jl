@@ -32,7 +32,7 @@ fill!(gcm.Σ, 1)
 update_Σ!(gcm)
 @show gcm.τ
 @show gcm.Σ;
-@test loglikelihood!(gcm, true, false) ≈ -160.88911777
+@test loglikelihood!(gcm, true, false) ≈ -164.00082379
 @show gcm.∇β
 @show gcm.∇τ
 @show gcm.∇Σ
@@ -43,7 +43,7 @@ update_Σ!(gcm)
 @show gcm.β
 @show gcm.τ
 @show gcm.Σ
-@test loglikelihood!(gcm, true, false) ≈ -160.88911777
+@test loglikelihood!(gcm, true, false) ≈ -164.00082379  #-163.35545251
 @show gcm.∇β
 @show gcm.∇τ
 @show gcm.∇Σ

@@ -32,7 +32,7 @@ fill!(gcm.Σ, 1)
 update_Σ!(gcm)
 @show gcm.τ
 @show gcm.Σ;
-@test round(loglikelihood!(gcm, true, false), digits = 4) ≈ -79.3976
+@test loglikelihood!(gcm, true, false) ≈ -81.43652408245762
 @show gcm.∇β
 @show gcm.∇τ
 @show gcm.∇Σ
@@ -43,7 +43,7 @@ update_Σ!(gcm)
 @show gcm.β
 @show gcm.τ
 @show gcm.Σ
-@test round(loglikelihood!(gcm, true, false), digits = 4) ≈ -79.3976
+@test loglikelihood!(gcm, true, false) ≈ -81.43651913862904
 @show gcm.∇β
 @show gcm.∇τ
 @show gcm.∇Σ
