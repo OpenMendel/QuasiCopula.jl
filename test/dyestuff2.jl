@@ -43,7 +43,7 @@ update_Σ!(gcm)
 @show gcm.β
 @show gcm.τ
 @show gcm.Σ
-@test loglikelihood!(gcm, true, false) ≈ -81.43651913862904
+@test loglikelihood!(gcm, true, false) ≈ -81.43651913862902
 @show gcm.∇β
 @show gcm.∇τ
 @show gcm.∇Σ

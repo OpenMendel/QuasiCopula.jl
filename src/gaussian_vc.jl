@@ -292,12 +292,10 @@ function loglikelihood!(
     n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
     needgrad = needgrad || needhess
     if needgrad
+        res∇β = transpose(gc.X) * Diagonal(gc.w1)
         fill!(gc.∇β, 0)
         fill!(gc.∇τ, 0)
         fill!(gc.∇Σ, 0)
-        fill!(gc.w1, 0)
-        fill!(gc.w2, 0)
-        res∇β = transpose(gc.X) * Diagonal(gc.w1)
     end
     needhess && fill!(gc.Hβ, 0)
     # evaluate copula loglikelihood
