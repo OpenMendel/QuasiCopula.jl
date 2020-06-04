@@ -34,7 +34,7 @@ update_Σ!(gcm)
 @show gcm.Σ;
 @test loglikelihood!(gcm, true, false) ≈ -164.00082379
 @show gcm.∇β
-@show gcm.∇τ
+# @show gcm.∇τ
 @show gcm.∇Σ
 
 # fit model using NLP on profiled loglikelihood

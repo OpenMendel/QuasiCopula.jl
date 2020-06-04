@@ -45,9 +45,9 @@ update_Σ!(gcm)
 @show gcm.Σ
 # @btime update_Σ!(gcm) setup=(fill!(gcm.Σ, 1))
 
-@show loglikelihood!(gcm.data[1], gcm.β, gcm.τ[1], gcm.Σ, true, false)
+@show loglikelihood!(gcm.data[1], gcm.β, inv(gcm.τ[1]), gcm.Σ, true, false)
 # @code_warntype loglikelihood!(gcm.data[1], gcm.β, gcm.τ[1], gcm.Σ, true, false)
-@btime loglikelihood!(gcm.data[1], gcm.β, gcm.τ[1], gcm.Σ, true, false)
+@btime loglikelihood!(gcm.data[1], gcm.β, inv(gcm.τ[1]), gcm.Σ, true, false)
 
 @show loglikelihood!(gcm, true, false)
 @show [gcm.∇β; gcm.∇τ; gcm.∇Σ]

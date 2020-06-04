@@ -121,7 +121,7 @@ function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVCObs{T, D}}) where {T 
     ntotal = 0
     for i in eachindex(gcs)
         ntotal  += length(gcs[i].y)
-        XtX    .+= gcs[i].xtx
+        BLAS.axpy!(one(T), gcs[i].xtx, XtX)
         TR[i, :] = gcs[i].t
     end
     QF        = Matrix{T}(undef, n, m)
@@ -231,7 +231,7 @@ function GaussianCopulaLMMModel(gcs::Vector{GaussianCopulaLMMObs{T}}) where T <:
     ntotal = 0
     for i in eachindex(gcs)
         ntotal  += length(gcs[i].y)
-        XtX    .+= gcs[i].xtx
+        BLAS.axpy!(one(T), gcs[i].xtx, XtX)
     end
     storage_qq = Matrix{T}(undef, q, q)
     storage_nq = Matrix{T}(undef, n, q)

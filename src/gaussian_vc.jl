@@ -59,9 +59,8 @@ end
 function standardize_res!(
     gcm::Union{GaussianCopulaVCModel{T, D}, GaussianCopulaLMMModel{T}}
     ) where {T <: BlasReal, D}
-    # σinv = sqrt(gcm.τ[1])
+    σinv = sqrt(gcm.τ[1])
     # standardize residual
-    σinv = inv.(gc.w2)
     for i in eachindex(gcm.data)
         standardize_res!(gcm.data[i], σinv)
     end
@@ -236,37 +235,53 @@ Update `τ` and variance components `Σ` according to the current value of
 un-standardized residuals.
 """
 update_Σ! = update_Σ_jensen!
+#
+# function fitted(
+#     gc::GaussianCopulaVCObs{T, D},
+#     β::Vector{T},
+#     τ::T,
+#     Σ::Vector{T}) where {T <: BlasReal, D}
+#     n, m = length(gc.y), length(gc.V)
+#     μ̂ = gc.μ
+#     Ω = Matrix{T}(undef, n, n)
+#     for k in 1:m
+#         Ω .+= Σ[k] .* gc.V[k]
+#     end
+#     σ02 = inv(τ)
+#     c = inv(1 + dot(Σ, gc.t)) # normalizing constant
+#     V̂ = Matrix{T}(undef, n, n)
+#     for j in 1:n
+#         for i in 1:j-1
+#             V̂[i, j] = c * σ02 * Ω[i, j]
+#         end
+#         V̂[j, j] = c * σ02 * (1 + Ω[j, j] + tr(Ω) / 2)
+#     end
+#     LinearAlgebra.copytri!(V̂, 'U')
+#     μ̂, V̂
+# end
+# """
+# The deviance of a GLM can be evaluated as the sum of the squared deviance residuals. Calculation
+# of sqared deviance residuals is accomplished by `devresid` which is implemented in GLM.jl.
+# This is useful for calculating the dispersion parameter
+# """
+# function deviance(gc::GaussianCopulaVCObs{T, D}) where {T <: BlasReal, D}
+#     dev_i = 0.0
+#     @inbounds for j in eachindex(gc.y)
+#         dev_i += GLM.devresid(gc.d, gc.y[j], gc.μ[j])
+#     end
+#     return dev_i
+# end
+#
+# function deviance(gcm::GaussianCopulaVCModel{T, D}) where {T <: BlasReal, D}
+#     dev = 0.0
+#     @inbounds for i in eachindex(gcm.data)
+#         dev += GLMCopula.deviance(gcm.data[i])
+#     end
+#     return dev
+# end
 
-function fitted(
-    gc::GaussianCopulaVCObs{T, D},
-    β::Vector{T},
-    τ::T,
-    Σ::Vector{T}) where {T <: BlasReal, D}
-    n, m = length(gc.y), length(gc.V)
-    μ̂ = gc.μ
-    Ω = Matrix{T}(undef, n, n)
-    for k in 1:m
-        Ω .+= Σ[k] .* gc.V[k]
-    end
-    σ02 = inv(τ)
-    c = inv(1 + dot(Σ, gc.t)) # normalizing constant
-    V̂ = Matrix{T}(undef, n, n)
-    for j in 1:n
-        for i in 1:j-1
-            V̂[i, j] = c * σ02 * Ω[i, j]
-        end
-        V̂[j, j] = c * σ02 * (1 + Ω[j, j] + tr(Ω) / 2)
-    end
-    LinearAlgebra.copytri!(V̂, 'U')
-    μ̂, V̂
-end
 
-function component_loglikelihood(gc::GaussianCopulaVCObs{T, D}, τ::T, logl::T) where {T <: BlasReal, D}
-    ϕ = 1.0
-    if GLM.dispersion_parameter(gc.d)
-        ϕ = 1/τ
-    end
-    ϕ *= GLM.glmvar.(gc.d, gc.μ[1])
+function component_loglikelihood(gc::GaussianCopulaVCObs{T, D}, ϕ, logl::T) where {T <: BlasReal, D}
     @inbounds for j in eachindex(gc.y)
         logl += GLM.loglik_obs(gc.d, gc.y[j], gc.μ[j], 1, ϕ)
     end
@@ -284,7 +299,7 @@ For each logpdf from Normal, Gamma, and InverseGaussian, we scale by dispersion.
 function loglikelihood!(
     gc::GaussianCopulaVCObs{T, D},
     β::Vector{T},
-    τ::T, # inverse of linear regression variance
+    ϕ::T, # linear regression variance
     Σ::Vector{T},
     needgrad::Bool = false,
     needhess::Bool = false
@@ -299,7 +314,7 @@ function loglikelihood!(
     end
     needhess && fill!(gc.Hβ, 0)
     # evaluate copula loglikelihood
-    sqrtτ = sqrt(τ)
+    sqrtτ = sqrt(1/ϕ)
     GLMCopula.update_res!(gc, β)
     standardize_res!(gc, sqrtτ)
     rss = abs2(norm(gc.res))
@@ -320,15 +335,15 @@ function loglikelihood!(
         if needhess
             gc.xtw2x = transpose(gc.X) * Diagonal(gc.w2) * gc.X
             BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, one(T), gc.Hβ) # only lower triangular
-            gc.Hτ[1, 1] = - abs2(qsum * inv1pq / τ)
+            gc.Hτ[1, 1] = - abs2(qsum * inv1pq * ϕ)
         end
         BLAS.gemv!('N', 1.0, res∇β, gc.res, -inv1pq, gc.∇β)
         gc.∇β .*= sqrtτ
-        gc.∇τ  .= (n - rss + 2qsum * inv1pq) / 2τ
+        gc.∇τ  .= (n - rss + 2qsum * inv1pq) * ϕ / 2
         gc.∇Σ  .= inv1pq .* gc.q .- inv(1 + tsum) .* gc.t
     end
     # output
-    logl += GLMCopula.component_loglikelihood(gc, τ, 0.0)
+    logl += GLMCopula.component_loglikelihood(gc, ϕ, 0.0)
     logl
 end
 
@@ -350,8 +365,12 @@ function loglikelihood!(
         gcm.Hβ .= - gcm.XtW2X
         gcm.Hτ .= - gcm.ntotal / 2abs2(gcm.τ[1])
     end
+    ϕ = 1.0
+    if GLM.dispersion_parameter(gcm.d)
+        ϕ = 1/gcm.τ[1]
+    end
     for i in eachindex(gcm.data)
-        logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.Σ, needgrad, needhess)
+        logl += loglikelihood!(gcm.data[i], gcm.β, ϕ, gcm.Σ, needgrad, needhess)
         #println(logl)
         if needgrad
             gcm.∇β .+= gcm.data[i].∇β

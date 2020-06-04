@@ -1,4 +1,30 @@
 """
+init_β(gcm)
+Initialize the linear regression parameters `β` and `τ=σ0^{-2}` by the least
+squares solution.
+"""
+function init_β!(
+    gcm::GaussianCopulaLMMModel{T}
+    ) where T <: BlasReal
+    # accumulate sufficient statistics X'y
+    xty = zeros(T, gcm.p)
+    for i in eachindex(gcm.data)
+        BLAS.gemv!('T', one(T), gcm.data[i].X, gcm.data[i].y, one(T), xty)
+    end
+    # least square solution for β
+    ldiv!(gcm.β, cholesky(Symmetric(gcm.XtX)), xty)
+    # accumulate residual sum of squares
+    rss = zero(T)
+    for i in eachindex(gcm.data)
+        update_res!(gcm.data[i], gcm.β)
+        rss += abs2(norm(gcm.data[i].res))
+    end
+    gcm.τ[1] = gcm.ntotal / rss
+    gcm.β
+end
+
+
+"""
 update_res!(gc, β)
 Update the residual vector according to `β` for Linear Mixed Model.
 """
