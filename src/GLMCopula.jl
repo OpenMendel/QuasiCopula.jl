@@ -9,9 +9,12 @@ using LinearAlgebra: BlasReal, copytri!
 
 export GaussianCopulaVCObs, GaussianCopulaVCModel, deviance
 export fit!, fitted, init_β!, loglikelihood!, standardize_res!
-export update_res2!, update_Σ!, loglikelihood2!, loglikelihoodLMM!
+export update_res!, update_Σ!, loglikelihoodLMM!
 
 export GaussianCopulaLMMObs, GaussianCopulaLMMModel
+export glm_regress_jl, glm_regress_model
+export glm_VCobs,  glm_VCModel
+
 
 """
 GaussianCopulaVCObs
@@ -243,5 +246,7 @@ end
 
 include("gaussian_vc.jl")
 include("gaussian_lmm.jl")
+include("poisson_copulaframe.jl")
+include("poisson_vc.jl")
 
 end#module
