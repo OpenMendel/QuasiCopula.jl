@@ -8,17 +8,17 @@ using LinearAlgebra: BlasReal, copytri!
 @reexport using NLopt
 
 export GaussianCopulaVCObs, GaussianCopulaVCModel, deviance
-export fit!, fitted, init_β!, loglikelihood!, standardize_res!
-export update_res!, update_Σ!, loglikelihoodLMM!
+export fit!, fitted, init_β!, initialize_model!, loglikelihood!, standardize_res!
+export update_res!, update_Σ!, loglik_obs, component_loglikelihood
 
 export GaussianCopulaLMMObs, GaussianCopulaLMMModel
-export glm_regress_jl, glm_regress_model
-export glm_VCobs,  glm_VCModel
+export glm_regress_jl, glm_regress_model, glm_score_statistic
+export GLMCopulaVCObs,  GLMCopulaVCModel, std_res_differential
 
 
 """
 GaussianCopulaVCObs
-GaussianCopulaVCObs(y, X, V)
+GaussianCopulaVCObs(ys, X, V)
 
 A realization of Gaussian copula variance component data.
 """
@@ -29,6 +29,7 @@ struct GaussianCopulaVCObs{T <: BlasReal, D}
     V::Vector{Matrix{T}}
     # working arrays
     ∇β::Vector{T}   # gradient wrt β
+    ∇resβ::Matrix{T}# residual gradient matrix d/dβ_p res_ij (each observation has a gradient of residual is px1)
     ∇τ::Vector{T}   # gradient wrt τ
     ∇Σ::Vector{T}   # gradient wrt σ2
     Hβ::Matrix{T}   # Hessian wrt β
@@ -40,10 +41,13 @@ struct GaussianCopulaVCObs{T <: BlasReal, D}
     q::Vector{T}    # q[k] = res_i' * V_i[k] * res_i / 2
     storage_n::Vector{T}
     storage_p::Vector{T}
-    d::D
-    μ::Vector{T}
-    w1::Vector{T}
-    w2::Vector{T}
+    η::Vector{T}    # η = Xβ systematic component
+    μ::Vector{T}    # μ(β) = ginv(Xβ) # inverse link of the systematic component
+    varμ::Vector{T} # v(μ_i) # variance as a function of the mean
+    dμ::Vector{T}   # derivative of μ
+    d::D            # distribution()
+    w1::Vector{T}   # working weights in the gradient = dμ/v(μ)
+    w2::Vector{T}   # working weights in the information matrix = dμ^2/v(μ)
 end
 
 function GaussianCopulaVCObs(
@@ -56,6 +60,7 @@ function GaussianCopulaVCObs(
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
     ∇β  = Vector{T}(undef, p)
+    ∇resβ  = Matrix{T}(undef, n, p)
     ∇τ  = Vector{T}(undef, 1)
     ∇Σ  = Vector{T}(undef, m)
     Hβ  = Matrix{T}(undef, p, p)
@@ -67,12 +72,15 @@ function GaussianCopulaVCObs(
     q   = Vector{T}(undef, m)
     storage_n = Vector{T}(undef, n)
     storage_p = Vector{T}(undef, p)
+    η = Vector{T}(undef, n)
     μ = Vector{T}(undef, n)
+    varμ = Vector{T}(undef, n)
+    dμ = Vector{T}(undef, n)
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
-    GaussianCopulaVCObs{T, D}(y, X, V, ∇β, ∇τ, ∇Σ, Hβ,
-        Hτ, res, xtx, xtw2x, t, q, storage_n, storage_p, d, μ, w1, w2)
+    GaussianCopulaVCObs{T, D}(y, X, V, ∇β, ∇resβ, ∇τ, ∇Σ, Hβ,
+        Hτ, res, xtx, xtw2x, t, q, storage_n, storage_p, η, μ, varμ, dμ, d, w1, w2)
 end
 
 """
@@ -85,6 +93,7 @@ Gaussian copula variance component model, which contains a vector of
 struct GaussianCopulaVCModel{T <: BlasReal, D} <: MathProgBase.AbstractNLPEvaluator
     # data
     data::Vector{GaussianCopulaVCObs{T, D}}
+    Ytotal::T
     ntotal::Int     # total number of singleton observations
     p::Int          # number of mean parameters in linear regression
     m::Int          # number of variance components
@@ -121,9 +130,11 @@ function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVCObs{T, D}}) where {T 
     XtX = zeros(T, p, p) # sum_i xi'xi
     XtW2X = zeros(T, p, p)
     TR  = Matrix{T}(undef, n, m) # collect trace terms
+    Ytotal = 0
     ntotal = 0
     for i in eachindex(gcs)
         ntotal  += length(gcs[i].y)
+        Ytotal  += sum(gcs[i].y)
         BLAS.axpy!(one(T), gcs[i].xtx, XtX)
         TR[i, :] = gcs[i].t
     end
@@ -131,7 +142,7 @@ function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVCObs{T, D}}) where {T 
     storage_n = Vector{T}(undef, n)
     storage_m = Vector{T}(undef, m)
     storage_Σ = Vector{T}(undef, m)
-    GaussianCopulaVCModel{T, D}(gcs, ntotal, p, m, β, τ, Σ,
+    GaussianCopulaVCModel{T, D}(gcs, Ytotal, ntotal, p, m, β, τ, Σ,
         ∇β, ∇τ, ∇Σ, Hβ, Hτ, XtX, XtW2X, TR, QF,
         storage_n, storage_m, storage_Σ, gcs[1].d)
 end
@@ -244,9 +255,10 @@ function GaussianCopulaLMMModel(gcs::Vector{GaussianCopulaLMMObs{T}}) where T <:
         XtX, storage_qq, storage_nq)
 end
 
+include("glm_framework.jl")
+include("initialize_model.jl")
 include("gaussian_vc.jl")
+include("glm_vc.jl")
 include("gaussian_lmm.jl")
-include("poisson_copulaframe.jl")
-include("poisson_vc.jl")
-
+#include("loglikelihood_in_progress.jl")
 end#module

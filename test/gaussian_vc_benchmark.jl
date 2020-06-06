@@ -37,9 +37,8 @@ end
 gcm = GaussianCopulaVCModel(gcs)
 
 @info "Initial point:"
-init_β!(gcm)
+initialize_model!(gcm)
 @show gcm.β
-fill!(gcm.Σ, 1)
 update_Σ!(gcm)
 @show gcm.τ
 @show gcm.Σ
@@ -100,8 +99,7 @@ for solver in [
     println()
     @show solver
     # re-set starting point
-    init_β!(gcm)
-    fill!(gcm.Σ, 1)
+    initialize_model!(gcm)
     update_Σ!(gcm)
     # fit
     GLMCopula.fit!(gcm, solver)

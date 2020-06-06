@@ -5,7 +5,7 @@ println()
 
 using Statistics, Distributions, LinearAlgebra, GLM, Test, GLMCopula
 #  get score from one obs
-function glm_score_statistic(gc::glm_VCobs{T, D}, β::Vector) where {T <: Real, D}
+function glm_score_statistic(gc::GLMCopulaVCObs{T, D}, β::Vector) where {T <: Real, D}
   (n, p) = size(gc.X)
   x = zeros(p)
   @assert n == length(gc.y)
@@ -26,7 +26,7 @@ function glm_score_statistic(gc::glm_VCobs{T, D}, β::Vector) where {T <: Real, 
 end # function glm_score_statistic
 
 #  get score from the full model
-function glm_score_statistic(gcm::glm_VCModel{T, D}, beta) where {T <: Real, D}
+function glm_score_statistic(gcm::GLMCopulaVCModel{T, D}, beta) where {T <: Real, D}
   fill!(gcm.∇β, 0.0)
   fill!(gcm.Hβ, 0.0)
     for i in 1:length(gcm.data)
@@ -51,14 +51,8 @@ function loglik_obs(::Poisson, y, μ, wt, ϕ)
     y * log(μ) - μ
 end
 
-# function loglik_obs(::Poisson, y, μ, wt, ϕ)
-#     p = pdf(Poisson(μ), y)
-#     p = map(y -> y == 0.0 ? 6.2101364865661445e-176 : y, p)
-#     wt*log(p)
-# end
-
 #  glm_regress on one obs
-function glm_regress_jl(gc::glm_VCobs{T, D}) where {T<: Real, D}
+function glm_regress_jl(gc::GLMCopulaVCObs{T, D}) where {T<: Real, D}
   (n, p) = size(gc.X)
    @assert n == length(gc.y)
    beta = zeros(p)
@@ -111,7 +105,7 @@ end # function glm_regress_jl
 #  now for two observations, the same as the above but 2 copies shoule have
 # the same beta, and twice the objective
 #
-function glm_regress_model(gcm::glm_VCModel{T, D}) where {T <: Real, D}
+function glm_regress_model(gcm::GLMCopulaVCModel{T, D}) where {T <: Real, D}
   (n, p) = gcm.ntotal,  gcm.p
    beta = zeros(p)
    ybar = gcm.Ytotal / n
@@ -171,7 +165,7 @@ end # function glm_regress
 function create_gcm_logistic(n_groups, dist)
            n, p, m = n_groups, 1, 1
            D = typeof(dist)
-           gcs = Vector{glm_VCobs{Float64, D}}(undef, n)
+           gcs = Vector{GLMCopulaVCObs{Float64, D}}(undef, n)
            #quantity = zeros(n)
            for i in 1:n_groups
              X = [0.50, 0.75, 1.00, 1.25, 1.50, 1.75, 1.75, 2.00, 2.25, 2.50, 2.75,
@@ -180,9 +174,9 @@ function create_gcm_logistic(n_groups, dist)
              X = [ones(size(X,1)) X];
              ni = length(y)
              V = [ones(ni, ni)]
-             gcs[i] = glm_VCobs(y, X, V, dist)
+             gcs[i] = GLMCopulaVCObs(y, X, V, dist)
            end
-           gcms = glm_VCModel(Vector(gcs))
+           gcms = GLMCopulaVCModel(Vector(gcs))
            return gcms
        end
 
@@ -202,7 +196,7 @@ logistic2_β, logistic2_logl = glm_regress_model(logistic_model)
 function create_gcm_poisson(n_groups, dist)
            n, p, m = n_groups, 1, 1
            D = typeof(dist)
-           gcs = Vector{glm_VCobs{Float64, D}}(undef, n)
+           gcs = Vector{GLMCopulaVCObs{Float64, D}}(undef, n)
            #quantity = zeros(n)
            for i in 1:n_groups
              X = [1.0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14];
@@ -210,9 +204,9 @@ function create_gcm_poisson(n_groups, dist)
              y = [0., 1 ,2 ,3, 1, 4, 9, 18, 23, 31, 20, 25, 37, 45];
              ni = length(y)
              V = [ones(ni, ni)]
-             gcs[i] = glm_VCobs(y, X, V, dist)
+             gcs[i] = GLMCopulaVCObs(y, X, V, dist)
            end
-           gcms = glm_VCModel(Vector(gcs))
+           gcms = GLMCopulaVCModel(Vector(gcs))
            return gcms
        end
 
