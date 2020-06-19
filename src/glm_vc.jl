@@ -30,7 +30,7 @@ function loglikelihood!(
     logl = - log(1 + tsum)
     for k in 1:m
         mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
-        if needgrad # component_score stores ∇resβ*Γ*res (standardized residual)
+        if needgrad # component_score stores transpose(∇resβ)*Γ*res (standardized residual)
             BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, component_score)
         end
         gc.q[k] = dot(gc.res, gc.storage_n) / 2
@@ -64,12 +64,25 @@ function loglikelihood!(
 end
 #
 
-function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D}
+function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:Poisson{T}}
+    ∇μβ = zeros(size(gc.X))
     for j in 1:length(gc.y)
-        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j]))*gc.dμ[j].*transpose(gc.X[j, :]) - (1/2gc.dμ[j])*gc.res[j] * gc.dμ[j].*transpose(gc.X[j, :])
+        ∇μβ[j, :] = gc.dμ[j] .* transpose(gc.X[j, :])
+        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])).* ∇μβ[j, :] - (1/2gc.varμ[j])*gc.res[j] .* ∇μβ[j, :]
     end
     gc
 end
+
+function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:Bernoulli{T}}
+∇σ2β = zeros(size(gc.X))
+    for j in 1:length(gc.y)
+        ∇σ2β[j, :] = (1 - 2*gc.μ[j]) * gc.dμ[j] .* transpose(gc.X[j, :])
+        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j]))*gc.dμ[j].*transpose(gc.X[j, :]) - (1/2gc.varμ[j])*gc.res[j] .* transpose(∇σ2β[j, :])
+    end
+    gc
+end
+
+#20 :  -0.0612945  -0.33712
 
 function loglikelihood!(
     gcm::GLMCopulaVCModel{T, D},

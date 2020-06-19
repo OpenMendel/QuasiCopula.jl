@@ -4,33 +4,82 @@ println()
 @info "Comparing to GLM regress output"
 
 using Statistics, Distributions, LinearAlgebra, GLM, Test, GLMCopula
+using LinearAlgebra: BlasReal, copytri!
 #  get score from one obs
-function glm_score_statistic(gc::GLMCopulaVCObs{T, D}, β::Vector) where {T <: Real, D}
+# function glm_score_statistic_component(gc::GLMCopulaVCObs{T, D}, β::Vector) where {T <: Real, D}
+#   (n, p) = size(gc.X)
+#   x = zeros(p)
+#   @assert n == length(gc.y)
+#   @assert p == length(β)
+#   fill!(gc.∇β, 0.0)
+#   fill!(gc.Hβ, 0.0)
+#   mul!(gc.η, gc.X, β) # z = X * beta
+#   update_res!(gc, β)
+#   for i = 1:n
+#     c = gc.res[i] * gc.w1[i]
+#     copyto!(x, gc.X[i, :])
+#     BLAS.axpy!(c, x, gc.∇β) # gc.∇β = gc.∇β + r_ij(β) * mueta* x
+#     BLAS.ger!(gc.w2[i], x, x, gc.Hβ) # gc.Hβ = gc.Hβ + r_ij(β) * x * x'
+#   end
+# # increment = gc.Hβ \ gc.∇β
+# # score_statistic = dot(gc.∇β, increment)
+#   return gc
+# end # function glm_score_statistic
+#
+# #  get score from the full model
+# function glm_score_statistic_component(gcm::GLMCopulaVCModel{T, D}, beta) where {T <: Real, D}
+#   fill!(gcm.∇β, 0.0)
+#   fill!(gcm.Hβ, 0.0)
+#     for i in 1:length(gcm.data)
+#         gcm.data[i] = glm_score_statistic(gcm.data[i], beta)
+#         gcm.∇β .+= gcm.data[i].∇β
+#         gcm.Hβ .+= gcm.data[i].Hβ
+#     end
+#   return gcm
+# end # function glm_score_statistic
+
+function glm_score_statistic(gc::Union{GLMCopulaVCObs{T, D}, GaussianCopulaVCObs{T, D}},
+   β::Vector{T}, Σ::Vector{T}) where {T<: BlasReal, D}
   (n, p) = size(gc.X)
-  x = zeros(p)
+  m = length(gc.V)
+  component_score = zeros(p)
   @assert n == length(gc.y)
   @assert p == length(β)
   fill!(gc.∇β, 0.0)
   fill!(gc.Hβ, 0.0)
   mul!(gc.η, gc.X, β) # z = X * beta
   update_res!(gc, β)
-  for i = 1:n
-    c = gc.res[i] * gc.w1[i]
-    copyto!(x, gc.X[i, :])
-    BLAS.axpy!(c, x, gc.∇β) # gc.∇β = gc.∇β + r_ij(β) * mueta* x
-    BLAS.ger!(gc.w2[i], x, x, gc.Hβ) # gc.Hβ = gc.Hβ + r_ij(β) * x * x'
-  end
+  GLMCopula.std_res_differential!(gc)
+  for k in 1:m
+        mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
+        # component_score stores ∇resβ*Γ*res (standardized residual)
+        BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, component_score)
+        gc.q[k] = dot(gc.res, gc.storage_n) / 2
+    end
+    qsum  = dot(Σ, gc.q)
+    x = zeros(p)
+    c = 0.0
+    inv1pq = inv(1 + qsum)
+    BLAS.syrk!('L', 'N', -abs2(inv1pq), component_score, 1.0, gc.Hβ) # only lower triangular
+    for j in 1:length(gc.y)
+          c = gc.res[j] #* gc.w1[j]
+          copyto!(x, gc.X[j, :])
+          BLAS.axpy!(c, x, gc.∇β) # gc.∇β = gc.∇β + r_ij(β) * mueta* x
+          BLAS.axpy!(-inv1pq, component_score, gc.∇β) # first term for each glm score
+          BLAS.ger!(gc.w2[j], x, x, gc.Hβ) # gc.Hβ = gc.Hβ + r_ij(β) * x * x'
+    end
 # increment = gc.Hβ \ gc.∇β
 # score_statistic = dot(gc.∇β, increment)
   return gc
 end # function glm_score_statistic
 
 #  get score from the full model
-function glm_score_statistic(gcm::GLMCopulaVCModel{T, D}, beta) where {T <: Real, D}
+function glm_score_statistic(gcm::Union{GaussianCopulaVCModel{T, D}, GLMCopulaVCModel{T, D}},
+   β::Vector) where {T <: BlasReal, D}
   fill!(gcm.∇β, 0.0)
   fill!(gcm.Hβ, 0.0)
     for i in 1:length(gcm.data)
-        gcm.data[i] = glm_score_statistic(gcm.data[i], beta)
+        gcm.data[i] = glm_score_statistic(gcm.data[i], β, gcm.Σ)
         gcm.∇β .+= gcm.data[i].∇β
         gcm.Hβ .+= gcm.data[i].Hβ
     end
@@ -52,7 +101,7 @@ function loglik_obs(::Poisson, y, μ, wt, ϕ)
 end
 
 #  glm_regress on one obs
-function glm_regress_jl(gc::GLMCopulaVCObs{T, D}) where {T<: Real, D}
+function glm_regress_jl(gc::GLMCopulaVCObs{T, D}, Σ) where {T<: Real, D}
   (n, p) = size(gc.X)
    @assert n == length(gc.y)
    beta = zeros(p)
@@ -70,7 +119,7 @@ function glm_regress_jl(gc::GLMCopulaVCObs{T, D}) where {T<: Real, D}
    (obj, old_obj, c) = (0.0, 0.0, 0.0)
    epsilon = 1e-8
    for iteration = 1:100 # scoring algorithm
-     gc = glm_score_statistic(gc, beta)
+     gc = glm_score_statistic(gc, beta, Σ)
      increment = gc.Hβ \ gc.∇β
      beta = beta + increment
      steps = -1
@@ -80,7 +129,7 @@ function glm_regress_jl(gc::GLMCopulaVCObs{T, D}) where {T<: Real, D}
        mul!(gc.η, gc.X, beta) # z = X * beta
        update_res!(gc, beta)
        steps = steps + 1
-            gc = glm_score_statistic(gc, beta)
+            gc = glm_score_statistic(gc, beta, Σ)
        for j = 1:n
          obj = obj + loglik_obs(gc.d, gc.y[j], gc.μ[j], 1, 1)
        end
@@ -136,9 +185,9 @@ function glm_regress_model(gcm::GLMCopulaVCModel{T, D}) where {T <: Real, D}
                update_res!(gc, beta)
                steps = steps + 1
                    for j = 1:length(gcm.data[i].y)
-                     c = gc.res[j] * gc.w1[j]
-                     copyto!(x, gc.X[j, :])
-                     BLAS.axpy!(c, x, gcm.∇β) # score = score + c * x
+                     # c = gc.res[j] * gc.w1[j]
+                     # copyto!(x, gc.X[j, :])
+                     # BLAS.axpy!(c, x, gcm.∇β) # score = score + c * x
                      obj = obj + loglik_obs(gc.d, gc.y[j], gc.μ[j], 1, 1)
                     end
             end
@@ -182,10 +231,16 @@ function create_gcm_logistic(n_groups, dist)
 
 logistic_model = create_gcm_logistic(2, Bernoulli());
 
-logistic_β, logistic_logl = glm_regress_jl(logistic_model.data[1])
+logistic_β, logistic_logl = glm_regress_jl(logistic_model.data[1], logistic_model.Σ)
 @test logistic_β ≈ [ -4.077713431087562
                  1.5046454283733053]
 @test logistic_logl ≈ -8.029878464344675
+
+logistic_model.β .= logistic_β
+logistic_model = glm_score_statistic(logistic_model, logistic_model.β)
+score1a = logistic_model.∇β
+@test round(abs2(norm(score1a)), digits  = 15)  == 0
+
 
 logistic2_β, logistic2_logl = glm_regress_model(logistic_model)
 @test logistic2_β ≈ [ -4.077713431087562
@@ -212,13 +267,80 @@ function create_gcm_poisson(n_groups, dist)
 
 gcm = create_gcm_poisson(2, Poisson());
 
-poisson_β, poisson_logl = glm_regress_jl(gcm.data[1])
+poisson_β, poisson_logl = glm_regress_jl(gcm.data[1], gcm.Σ)
 @test poisson_β ≈ [0.28503887444394366]
 @test poisson_logl ≈ 471.19671943091146
+
+gcm.β .= poisson_β
+gcm = glm_score_statistic(gcm, gcm.β)
+score2a = gcm.∇β
+@test round(abs2(norm(score2a)), digits  = 15)  == 0
 
 poisson2_β, poisson2_logl = glm_regress_model(gcm)
 copyto!(gcm.β, poisson2_β)
 @test gcm.β ≈ [0.28503887444394366]
 @test poisson2_logl ≈ 471.19671943091146*2
+
+
+##### now what if we add the copula model parts to the score?
+
+function glm_score_statistic2(gc::Union{GLMCopulaVCObs{T, D}, GaussianCopulaVCObs{T, D}},
+   β::Vector{T}, Σ::Vector{T}) where {T<: BlasReal, D}
+  (n, p) = size(gc.X)
+  m = length(gc.V)
+  component_score = zeros(p)
+  @assert n == length(gc.y)
+  @assert p == length(β)
+  fill!(gc.∇β, 0.0)
+  fill!(gc.Hβ, 0.0)
+  mul!(gc.η, gc.X, β) # z = X * beta
+  update_res!(gc, β)
+  GLMCopula.std_res_differential!(gc)
+  for k in 1:m
+        mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
+        # component_score stores ∇resβ*Γ*res (standardized residual)
+        BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, component_score)
+        gc.q[k] = dot(gc.res, gc.storage_n) / 2
+    end
+    qsum  = dot(Σ, gc.q)
+    x = zeros(p)
+    c = 0.0
+    inv1pq = inv(1 + qsum)
+    BLAS.syrk!('L', 'N', -abs2(inv1pq), component_score, 1.0, gc.Hβ) # only lower triangular
+    for j in 1:length(gc.y)
+          c = gc.res[j] #* gc.w1[j]
+          copyto!(x, gc.X[j, :])
+          BLAS.axpy!(c, x, gc.∇β) # gc.∇β = gc.∇β + r_ij(β) * mueta* x
+          BLAS.axpy!(-inv1pq, component_score, gc.∇β) # first term for each glm score
+          BLAS.ger!(gc.w2[j], x, x, gc.Hβ) # gc.Hβ = gc.Hβ + r_ij(β) * x * x'
+    end
+# increment = gc.Hβ \ gc.∇β
+# score_statistic = dot(gc.∇β, increment)
+  return gc
+end # function glm_score_statistic
+
+#  get score from the full model
+function glm_score_statistic2(gcm::Union{GaussianCopulaVCModel{T, D}, GLMCopulaVCModel{T, D}},
+   β::Vector) where {T <: BlasReal, D}
+  fill!(gcm.∇β, 0.0)
+  fill!(gcm.Hβ, 0.0)
+    for i in 1:length(gcm.data)
+        gcm.data[i] = glm_score_statistic2(gcm.data[i], β, gcm.Σ)
+        gcm.∇β .+= gcm.data[i].∇β
+        gcm.Hβ .+= gcm.data[i].Hβ
+    end
+  return gcm
+end # function glm_score_statistic
+
+logistic2 = glm_score_statistic2(logistic_model, logistic_model.β)
+score1_b = logistic2.∇β
+@test round(abs2(norm(score1_b)), digits  = 15)  == 0
+
+
+gcm2 = glm_score_statistic2(gcm, gcm.β)
+score2_b = gcm2.∇β
+@test round(abs2(norm(score2_b)), digits  = 15)  == 0
+# abs2(norm(score1_b)) = 4.8039767909261363e-26
+# abs2(norm(score2_b)) = 1.6983859745046296e-23
 
 end

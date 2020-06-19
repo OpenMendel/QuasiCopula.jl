@@ -80,9 +80,6 @@ function glm_regress_model(gcm::Union{GaussianCopulaVCModel{T, D}, GLMCopulaVCMo
                update_res!(gc, beta)
                steps = steps + 1
                    for j = 1:length(gcm.data[i].y)
-                     c = gc.res[j] * gc.w1[j]
-                     copyto!(x, gc.X[j, :])
-                     BLAS.axpy!(c, x, gcm.∇β) # score = score + c * x
                      obj = obj + loglik_obs(gc.d, gc.y[j], gc.μ[j], 1, 1)
                     end
             end
@@ -90,7 +87,6 @@ function glm_regress_model(gcm::Union{GaussianCopulaVCModel{T, D}, GLMCopulaVCMo
          break
        else
          BLAS.axpy!(-1, increment, beta)
-         #gcm.β = gcm.β - increment
          increment = 0.5 * increment
        end
      end
@@ -105,21 +101,35 @@ function glm_regress_model(gcm::Union{GaussianCopulaVCModel{T, D}, GLMCopulaVCMo
 end # function glm_regress
 
 function glm_score_statistic(gc::Union{GLMCopulaVCObs{T, D}, GaussianCopulaVCObs{T, D}},
-   β::Vector{T}) where {T<: BlasReal, D}
+   β::Vector{T}, Σ::Vector{T}) where {T<: BlasReal, D}
   (n, p) = size(gc.X)
-  x = zeros(p)
+  m = length(gc.V)
+  component_score = zeros(p)
   @assert n == length(gc.y)
   @assert p == length(β)
   fill!(gc.∇β, 0.0)
   fill!(gc.Hβ, 0.0)
   mul!(gc.η, gc.X, β) # z = X * beta
   update_res!(gc, β)
-  for i = 1:n
-    c = gc.res[i] * gc.w1[i]
-    copyto!(x, gc.X[i, :])
-    BLAS.axpy!(c, x, gc.∇β) # gc.∇β = gc.∇β + r_ij(β) * mueta* x
-    BLAS.ger!(gc.w2[i], x, x, gc.Hβ) # gc.Hβ = gc.Hβ + r_ij(β) * x * x'
-  end
+  GLMCopula.std_res_differential!(gc)
+  for k in 1:m
+        mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
+        # component_score stores ∇resβ*Γ*res (standardized residual)
+        BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, component_score)
+        gc.q[k] = dot(gc.res, gc.storage_n) / 2
+    end
+    qsum  = dot(Σ, gc.q)
+    x = zeros(p)
+    c = 0.0
+    inv1pq = inv(1 + qsum)
+    BLAS.syrk!('L', 'N', -abs2(inv1pq), component_score, 1.0, gc.Hβ) # only lower triangular
+    for j in 1:length(gc.y)
+          c = gc.res[j] #* gc.w1[j]
+          copyto!(x, gc.X[j, :])
+          BLAS.axpy!(c, x, gc.∇β) # gc.∇β = gc.∇β + r_ij(β) * mueta* x
+          BLAS.axpy!(-inv1pq, component_score, gc.∇β) # first term for each glm score
+          BLAS.ger!(gc.w2[j], x, x, gc.Hβ) # gc.Hβ = gc.Hβ + r_ij(β) * x * x'
+    end
 # increment = gc.Hβ \ gc.∇β
 # score_statistic = dot(gc.∇β, increment)
   return gc
@@ -131,7 +141,7 @@ function glm_score_statistic(gcm::Union{GaussianCopulaVCModel{T, D}, GLMCopulaVC
   fill!(gcm.∇β, 0.0)
   fill!(gcm.Hβ, 0.0)
     for i in 1:length(gcm.data)
-        gcm.data[i] = glm_score_statistic(gcm.data[i], β)
+        gcm.data[i] = glm_score_statistic(gcm.data[i], β, gcm.Σ)
         gcm.∇β .+= gcm.data[i].∇β
         gcm.Hβ .+= gcm.data[i].Hβ
     end

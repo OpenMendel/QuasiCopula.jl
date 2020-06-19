@@ -128,7 +128,7 @@ Update variance components `Σ` according to the current value of
 `β` by an MM algorithm. `gcm.QF` now needs to hold qudratic forms calculated from standardized residuals.
 """
 function update_Σ!(gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCModel{T, D}}) where {T <: BlasReal, D}
-    distT = Base.typename(typeof(gcm.d)).wrapper
+    #distT = Base.typename(typeof(gcm.d)).wrapper
     update_Σ_jensen!(gcm)
 end
 
@@ -381,10 +381,6 @@ function loglikelihood!(
     # output
     logl
 end
-#
-
-
-#-102.95885585666409 + 8.646784118270125 = -94.31207173839397 for obs 14
 
 function loglikelihood!(
     gcm::GaussianCopulaVCModel{T, D},
