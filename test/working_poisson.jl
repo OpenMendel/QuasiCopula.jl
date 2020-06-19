@@ -26,7 +26,7 @@ function create_gcm_poisson(n_groups, dist)
 
 gcm = create_gcm_poisson(2, Poisson());
 
-initialize_model!(gcm)
+initialize_model!(gcm);
 @test gcm.β == [0.28503887444394366]
 # update σ2 from β using the MM algorithm
 fill!(gcm.Σ, 1)
@@ -34,7 +34,7 @@ update_Σ!(gcm)
 
 @test gcm.Σ == [1.2623029177859688e-7]
 #@show gcm.Σ;
-@test loglikelihood!(gcm, true, false) ≈ 471.19671943091146*2 #  942.3934374279268
+@test loglikelihood!(gcm, true, false) ≈ 471.19671943091146*2  # 942.3934374279268
 @show gcm.∇β
 @show gcm.∇Σ
 

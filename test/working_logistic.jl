@@ -1,5 +1,5 @@
 println()
-@info "Testing Logistic Regression: the independent case confirms independent but the verbAgg data is acting weird on a small subset"
+@info "Testing Logistic Regression: the independent case confirms independent"
 
 using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Statistics, GLMCopula, Test
 using LinearAlgebra: BlasReal, copytri!
@@ -48,75 +48,6 @@ mod_test = glm_score_statistic(logistic_model, logistic_model.β)
 @show loglikelihood!(logistic_model, true, false)
 @show logistic_model.∇β
 @show logistic_model.∇Σ
-
-
-##
-using MixedModels, RData
-datf = joinpath(dirname(pathof(MixedModels)), "..", "test", "dat.rda")
-const dat = Dict(Symbol(k) => v for (k, v) in load(datf));
-data = dat[:VerbAgg]
-using DataFrames
-
-out = map(x -> strip(String(x)) == "N" ? 0.0 : 1.0, data[!, :r2])
-d = Bernoulli()
-D = typeof(d)
-gidx1 = data[!, :item] .== "S1WantCurse"
-gidx2 = data[!, :item] .== "S1WantScold"
-n1 = count(gidx1)
-n2 = count(gidx2)
-y1 = Float64.(out[gidx1, 1])
-y2 = Float64.(out[gidx2, 1])
-intercept1 = ones(n1, 1)
-intercept2 = ones(n2, 1)
-Anger1 = Float64.(data[gidx1, :a])
-Anger2 = Float64.(data[gidx2, :a])
-X1 = ones(n1, 1)# Anger1]
-X2 = ones(n2, 1) ## Anger2]
-V1 = [ones(n1, n1)]
-V2 = [ones(n2, n2)]
-gcs2 = Vector{GLMCopulaVCObs{Float64, D}}(undef, 2)
-gcs2[1] = GLMCopulaVCObs(y1, X1, V1, d)
-gcs2[2] = GLMCopulaVCObs(y2, X2, V2, d)
-logistic_model_MM = GLMCopulaVCModel(gcs2);
-initialize_model!(logistic_model_MM); # this will also standardize the residuals
-fill!(logistic_model_MM.Σ, 1)
-update_Σ!(logistic_model_MM)
-@show logistic_model_MM.β
-@show logistic_model_MM.Σ
-copulogl = loglikelihood!(logistic_model_MM, true, false) # -403.6009612261338
-@show logistic_model_MM.∇β
-@show logistic_model_MM.∇Σ
-# fit model using NLP on profiled loglikelihood
-@info "MLE:"
-
-# Ipopt does not like this problem.
-#GLMCopula.fit!(logistic_model_MM, IpoptSolver(print_level=5))
-
-# gives closest estimate
-@time GLMCopula.fit!(logistic_model_MM, NLopt.NLoptSolver(algorithm = :LN_BOBYQA, maxeval = 4000))
-#@time GLMCopula.fit!(logistic_model_MM, NLopt.NLoptSolver(algorithm = :LD_MMA, maxeval = 4000))
-#@time GLMCopula.fit!(logistic_model_MM, NLopt.NLoptSolver(algorithm = :LD_LBFGS, maxeval = 4000))
-
-@show logistic_model_MM.β
-@show logistic_model_MM.Σ
-@show loglikelihood!(logistic_model_MM, true, false)
-@show logistic_model_MM.∇β
-@show logistic_model_MM.∇Σ
-
-# using mixedmodels
-y_full = vcat(y1, y2)
-X_full = vcat(X1, X2)
-group1 = data[gidx1, :item]
-group2 = data[gidx2, :item]
-group = vcat(group1, group2)
-Df = DataFrame(y = y_full, g = group)
-verbaggform = @formula(y ~ 1 + (1|g));
-
-gm2 = fit(GeneralizedLinearMixedModel, verbaggform, Df, Bernoulli())
-
-GLMMlogl = loglikelihood(gm2)
-
-@test copulogl >= GLMMlogl
 
 # j =  20 test case
 # ∇mu = (exp(gc.η[j])/(1 + exp(gc.η[j]))^2) .* transpose(gc.X[j, :])
