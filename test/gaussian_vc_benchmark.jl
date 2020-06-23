@@ -11,7 +11,7 @@ p = 3   # number of mean parameters
 m = 2   # number of variance components
 d = Normal()
 D = typeof(d)
-gcs = Vector{GaussianCopulaVCObs{Float64, D}}(undef, n)
+gcs = Vector{GLMCopulaVCObs{Float64, D}}(undef, n)
 # true parameter values
 βtruth = ones(p)
 σ2truth = collect(1.:m)
@@ -31,10 +31,10 @@ for i in 1:n
     # generate responses
     y = X * βtruth + Ωchol.L * randn(ni)
     # add to data
-    gcs[i] = GaussianCopulaVCObs(y, X, [V1, V2], d)
+    gcs[i] = GLMCopulaVCObs(y, X, [V1, V2], d)
 end
 
-gcm = GaussianCopulaVCModel(gcs)
+gcm = GLMCopulaVCModel(gcs)
 
 @info "Initial point:"
 initialize_model!(gcm)

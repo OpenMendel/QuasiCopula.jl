@@ -15,7 +15,7 @@ function create_gcm_logistic(n_groups, dist)
              X = [0.50, 0.75, 1.00, 1.25, 1.50, 1.75, 1.75, 2.00, 2.25, 2.50, 2.75,
                  3.00, 3.25, 3.50, 4.00, 4.25, 4.50, 4.75, 5.00, 5.50];
              y = [0.0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1];
-             X = [ones(size(X,1)) X];
+             X = [ones(size(X, 1)) X];
              ni = length(y)
              V = [ones(ni, ni)]
              gcs[i] = GLMCopulaVCObs(y, X, V, dist)
@@ -24,30 +24,40 @@ function create_gcm_logistic(n_groups, dist)
            return gcms
        end
 
-logistic_model = create_gcm_logistic(2, Bernoulli());
-initialize_model!(logistic_model)
+gcm = create_gcm_logistic(2, Bernoulli());
+initialize_model!(gcm)
 
-fill!(logistic_model.Σ, 1)
-update_Σ!(logistic_model)
-loglikelihood!(logistic_model, true, false)
+fill!(gcm.Σ, 1)
+update_Σ!(gcm)
+loglikelihood!(gcm, true, false)
 
-mod_test = glm_score_statistic(logistic_model, logistic_model.β)
+# making sure the loglikelihood values are the same
+gc = gcm.data[1]
+β = gcm.β
+τ = gcm.τ[1]
+Σ = gcm.Σ
+needgrad = true;  needhess = true
+
+
+mod_test = glm_score_statistic(gcm, gcm.β)
 
 # logistic_β = [ -4.077713431087562
 #                  1.5046454283733053]
 
-@test loglikelihood!(logistic_model, true, false) ≈  -8.029878464344675*2
-@show logistic_model.∇β
-@show logistic_model.∇Σ
+@test loglikelihood!(gcm, true, false) ≈  -8.029878464344675*2
+@show gcm.∇β
+@show gcm.∇Σ
 
 # fit model using NLP on profiled loglikelihood
 @info "MLE:"
-@time GLMCopula.fit!(logistic_model, IpoptSolver(print_level=5))
-@show logistic_model.β
-@show logistic_model.Σ
-@show loglikelihood!(logistic_model, true, false)
-@show logistic_model.∇β
-@show logistic_model.∇Σ
+@time GLMCopula.fit!(gcm, NLopt.NLoptSolver(algorithm = :LN_BOBYQA, maxeval = 4000))
+@show gcm.β
+@show gcm.Σ
+@show loglikelihood!(gcm, true, false)
+@show gcm.∇β
+@show gcm.∇Σ
+
+
 
 # j =  20 test case
 # ∇mu = (exp(gc.η[j])/(1 + exp(gc.η[j]))^2) .* transpose(gc.X[j, :])

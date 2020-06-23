@@ -38,7 +38,7 @@ using LinearAlgebra: BlasReal, copytri!
 #   return gcm
 # end # function glm_score_statistic
 
-function glm_score_statistic(gc::Union{GLMCopulaVCObs{T, D}, GaussianCopulaVCObs{T, D}},
+function glm_score_statistic(gc::GLMCopulaVCObs{T, D},
    β::Vector{T}, Σ::Vector{T}) where {T<: BlasReal, D}
   (n, p) = size(gc.X)
   m = length(gc.V)
@@ -74,7 +74,7 @@ function glm_score_statistic(gc::Union{GLMCopulaVCObs{T, D}, GaussianCopulaVCObs
 end # function glm_score_statistic
 
 #  get score from the full model
-function glm_score_statistic(gcm::Union{GaussianCopulaVCModel{T, D}, GLMCopulaVCModel{T, D}},
+function glm_score_statistic(gcm::GLMCopulaVCModel{T, D},
    β::Vector) where {T <: BlasReal, D}
   fill!(gcm.∇β, 0.0)
   fill!(gcm.Hβ, 0.0)
@@ -284,7 +284,7 @@ copyto!(gcm.β, poisson2_β)
 
 ##### now what if we add the copula model parts to the score?
 
-function glm_score_statistic2(gc::Union{GLMCopulaVCObs{T, D}, GaussianCopulaVCObs{T, D}},
+function glm_score_statistic2(gc::Union{GLMCopulaVCObs{T, D}, GLMCopulaVCObs{T, D}},
    β::Vector{T}, Σ::Vector{T}) where {T<: BlasReal, D}
   (n, p) = size(gc.X)
   m = length(gc.V)
@@ -320,7 +320,7 @@ function glm_score_statistic2(gc::Union{GLMCopulaVCObs{T, D}, GaussianCopulaVCOb
 end # function glm_score_statistic
 
 #  get score from the full model
-function glm_score_statistic2(gcm::Union{GaussianCopulaVCModel{T, D}, GLMCopulaVCModel{T, D}},
+function glm_score_statistic2(gcm::Union{GLMCopulaVCModel{T, D}, GLMCopulaVCModel{T, D}},
    β::Vector) where {T <: BlasReal, D}
   fill!(gcm.∇β, 0.0)
   fill!(gcm.Hβ, 0.0)

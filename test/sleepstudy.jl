@@ -52,7 +52,6 @@ gcm.Σ .= diagm(ones(2))
 @show gcm.τ
 @show gcm.Σ
 @show loglikelihood!(gcm, true, false)
-# @test loglikelihood!(gcm, true, false) ≈ -163.35545251
 @show gcm.∇β
 @show gcm.∇τ
 @show gcm.∇Σ

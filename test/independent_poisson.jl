@@ -33,17 +33,33 @@ fill!(gcm.Σ, 1)
 update_Σ!(gcm)
 
 @test gcm.Σ == [1.2623029177859688e-7]
+
+
+
+# making sure the loglikelihood values are the same
+gc = gcm.data[1]
+β = gcm.β
+τ = gcm.τ[1]
+Σ = gcm.Σ
+needgrad = true;  needhess = true
+# ∇σ2β[j, :] = (1 - 2*gc.μ[j]) * gc.dμ[j] .* transpose(gc.X[j, :])  # 1.3298137228856906
+# gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * ∇μβ[j, :] - (1/2gc.varμ[j])*gc.res[j] * ∇μβ[j, :]  (0.5765877476338035) #  #-1.153175495267607 --0.5765877476338035
 #@show gcm.Σ;
 @test loglikelihood!(gcm, true, false) ≈ 471.19671943091146*2  # 942.3934374279268
 @show gcm.∇β
 @show gcm.∇Σ
 
+#-102.95885585666409 + 8.646784118270125 = -94.31207173839397 for obs 14
+
+@test gcm.data[1].∇resβ[14] == -94.31207173839397
+
+
 # fit model using NLP on profiled loglikelihood
 @info "MLE:"
-@time GLMCopula.fit!(gcm, IpoptSolver(print_level=5))
+# @time GLMCopula.fit!(gcm, IpoptSolver(print_level=5))
+@time GLMCopula.fit!(gcm, NLopt.NLoptSolver(algorithm = :LN_BOBYQA, maxeval = 4000))
 @show gcm.β
 @show gcm.Σ
 @show loglikelihood!(gcm, true, false)
 @show gcm.∇β
 @show gcm.∇Σ
-#-102.95885585666409 + 8.646784118270125 = -94.31207173839397 for obs 14

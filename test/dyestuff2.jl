@@ -12,16 +12,16 @@ groups = unique(dyestuff2[!, :Batch])
 n, p, m = length(groups), 1, 1
 d = Normal()
 D = typeof(d)
-gcs = Vector{GaussianCopulaVCObs{Float64, D}}(undef, n)
+gcs = Vector{GLMCopulaVCObs{Float64, D}}(undef, n)
 for (i, grp) in enumerate(groups)
     gidx = dyestuff2[!, :Batch] .== grp
     ni = count(gidx)
     y = Float64.(dyestuff2[gidx, :Yield])
     X = ones(ni, 1)
     V = [ones(ni, ni)]
-    gcs[i] = GaussianCopulaVCObs(y, X, V, d)
+    gcs[i] = GLMCopulaVCObs(y, X, V, d)
 end
-gcm = GaussianCopulaVCModel(gcs);
+gcm = GLMCopulaVCModel(gcs);
 
 # initialize β and τ from least square solution
 @info "Initial point:"

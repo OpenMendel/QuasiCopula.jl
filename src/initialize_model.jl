@@ -1,4 +1,3 @@
-
 """
 initialize!(gcm, Normal)
 
@@ -6,7 +5,7 @@ Initialize the linear regression parameters `β` and `τ=σ0^{-2}` by the least
 squares solution.
 """
 function initialize_model!(
-    gcm::Union{GaussianCopulaVCModel{T, D}, GaussianCopulaLMMModel{T}}) where {T <: BlasReal, D}
+    gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaLMMModel{T}}) where {T <: BlasReal, D<:Normal}
     # accumulate sufficient statistics X'y
     xty = zeros(T, gcm.p)
     for i in eachindex(gcm.data)
@@ -49,7 +48,7 @@ function loglik_obs(::Poisson, y, μ, wt, ϕ)
 end
 #to initialize beta for glm
 
-function glm_regress_model(gcm::Union{GaussianCopulaVCModel{T, D}, GLMCopulaVCModel{T, D}}) where {T <:BlasReal, D}
+function glm_regress_model(gcm::GLMCopulaVCModel{T, D}) where {T <:BlasReal, D}
   (n, p) = gcm.ntotal,  gcm.p
    beta = zeros(p)
    ybar = gcm.Ytotal / n
@@ -80,7 +79,7 @@ function glm_regress_model(gcm::Union{GaussianCopulaVCModel{T, D}, GLMCopulaVCMo
                update_res!(gc, beta)
                steps = steps + 1
                    for j = 1:length(gcm.data[i].y)
-                     obj = obj + loglik_obs(gc.d, gc.y[j], gc.μ[j], 1, 1)
+                     obj += GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], 1.0, 1.0)
                     end
             end
        if obj > old_obj
@@ -100,7 +99,7 @@ function glm_regress_model(gcm::Union{GaussianCopulaVCModel{T, D}, GLMCopulaVCMo
     return beta
 end # function glm_regress
 
-function glm_score_statistic(gc::Union{GLMCopulaVCObs{T, D}, GaussianCopulaVCObs{T, D}},
+function glm_score_statistic(gc::GLMCopulaVCObs{T, D},
    β::Vector{T}, Σ::Vector{T}) where {T<: BlasReal, D}
   (n, p) = size(gc.X)
   m = length(gc.V)
@@ -136,7 +135,7 @@ function glm_score_statistic(gc::Union{GLMCopulaVCObs{T, D}, GaussianCopulaVCObs
 end # function glm_score_statistic
 
 #  get score from the full model
-function glm_score_statistic(gcm::Union{GaussianCopulaVCModel{T, D}, GLMCopulaVCModel{T, D}},
+function glm_score_statistic(gcm::GLMCopulaVCModel{T, D},
    β::Vector) where {T <: BlasReal, D}
   fill!(gcm.∇β, 0.0)
   fill!(gcm.Hβ, 0.0)

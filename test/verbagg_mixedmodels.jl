@@ -2,14 +2,14 @@ println()
 @info "Testing Logistic Regression on VerbAgg dataset in  MixedModels.jl"
 
 using MixedModels, DataFrames
-using GLM, RData, GLMCopula
+using GLM, RData, GLMCopula, Test
 
 datf = joinpath(dirname(pathof(MixedModels)),"..","test","dat.rda")
 const dat = Dict(Symbol(k)=>v for (k,v) in load(datf));
 data = dat[:VerbAgg]
 
-groups = unique(data[!, :item])[1:5]
-out = map(x -> strip(x) == "N" ? 0.0 : 1.0, data[!, :r2])
+groups = unique(data[!, :item])
+out = map(x -> strip(String(x)) == "N" ? 0.0 : 1.0, data[!, :r2])
 n = length(groups)
 d = Bernoulli()
 D = typeof(d)
@@ -25,11 +25,12 @@ gcs = Vector{GLMCopulaVCObs{Float64, D}}(undef, n)
     gcs[i] = GLMCopulaVCObs(y, X, V, d)
 end
 gcm_all = GLMCopulaVCModel(gcs);
+
 initialize_model!(gcm_all)
 # update σ2 and τ from β using the MM algorithm
-fill!(gcm_all.Σ, 1)
+fill!(gcm_all.Σ, 1.0)
 update_Σ!(gcm_all)
-loglikelihood!(gcm_all, true, true) # -5153.9040599608525
+@test loglikelihood!(gcm_all, true, true) ==  -5153.904059960854
 # @time GLMCopula.fit!(gcm_all, IpoptSolver(print_level=5))
 @time GLMCopula.fit!(gcm_all, NLopt.NLoptSolver(algorithm = :LN_BOBYQA, maxeval = 4000))
 @show gcm_all.β
@@ -38,7 +39,9 @@ loglikelihood!(gcm_all, true, true) # -5153.9040599608525
 @show gcm_all.∇β
 @show gcm_all.∇Σ
 
-out = map(x -> strip(x) == "N" ? 0.0 : 1.0, data[!, :r2])
+
+# Ok now what if I just have the first 2 groups?
+out = map(x -> strip(String(x)) == "N" ? 0.0 : 1.0, data[!, :r2])
 n = length(groups)
 d = Bernoulli()
 D = typeof(d)
@@ -71,7 +74,16 @@ Df = DataFrame(y = y_full, int = X_full[:, 1], a = X_full[:, 2], g = group)
 verbaggform = @formula(y ~ 1 + a + (1|g));
 
 gm2 = fit(GeneralizedLinearMixedModel, verbaggform, Df, Bernoulli())
-mixedmodelslogl = loglikelihood(gm2)
+mixedmodelslogl2 = loglikelihood(gm2)
+
+
+n = length(out)
+anger_full = Float64.(data[!, :a])
+df = DataFrame(y = out, int = ones(n), a = anger_full, g = data[!, :item])
+
+gmfull = fit(GeneralizedLinearMixedModel, verbaggform, df, Bernoulli())
+mixedmodels_logl = loglikelihood(gmfull)
+
 
 fill!(gcm2.Σ, 1)
 # update_Σ!(gcm, 500, 1e-6, GurobiSolver(OutputFlag=0), true)
@@ -81,9 +93,8 @@ update_Σ!(gcm2)
 loglikelihood!(gcm2, true, false)
 
 #GLMCopula.fit!(gcm, NLopt.NLoptSolver(algorithm = :LN_BOBYQA, maxeval = 4000))
-GLMCopula.fit!(gcm, NLopt.NLoptSolver(algorithm = :LD_MMA, maxeval = 4000))
-GLMCopula.fit!(gcm, NLopt.NLoptSolver(algorithm = :LD_LBFGS, maxeval = 4000))
+GLMCopula.fit!(gcm2, NLopt.NLoptSolver(algorithm = :LD_MMA, maxeval = 4000))
 
-copulalogl = loglikelihood!(gcm, true, false)
-@test mixedmodelslogl <= copulalogl
+copulalogl2 = loglikelihood!(gcm2, true, false)
+@test mixedmodelslogl2 <= copulalogl2
 # the gradient with respect to beta seems off
