@@ -56,10 +56,10 @@ needgrad = true;  needhess = true
 
 # fit model using NLP on profiled loglikelihood
 @info "MLE:"
-# @time GLMCopula.fit!(gcm, IpoptSolver(print_level=5))
-@time GLMCopula.fit!(gcm, NLopt.NLoptSolver(algorithm = :LN_BOBYQA, maxeval = 4000))
+@time GLMCopula.fit!(gcm, IpoptSolver(print_level=5))
+#@time GLMCopula.fit!(gcm, NLopt.NLoptSolver(algorithm = :LN_BOBYQA, maxeval = 4000))
 @show gcm.β
 @show gcm.Σ
-@show loglikelihood!(gcm, true, false)
+@show loglikelihood!(gcm, true, false) #941.7384027770352
 @show gcm.∇β
 @show gcm.∇Σ

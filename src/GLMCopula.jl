@@ -7,12 +7,12 @@ using LinearAlgebra: BlasReal, copytri!
 @reexport using Ipopt
 @reexport using NLopt
 
-export fit!, fitted, init_β!, initialize_model!, loglikelihood!, standardize_res!
+export fit!, fit2!, init_β!, initialize_model!, loglikelihood!, standardize_res!
 export update_res!, update_Σ!, loglik_obs, component_loglikelihood
 
 export GaussianCopulaLMMObs, GaussianCopulaLMMModel
 export glm_regress_jl, glm_regress_model, glm_score_statistic
-export GLMCopulaVCObs,  GLMCopulaVCModel, std_res_differential
+export GLMCopulaVCObs,  GLMCopulaVCModel, std_res_differential, beta_gradient_hessian, copula_loglikelihood
 
 export GLMCopulaVCObs, GLMCopulaVCModel
 
@@ -120,8 +120,8 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D}}) where {T <: BlasRea
     Hβ  = Matrix{T}(undef, p, p)
     Hτ  = Matrix{T}(undef, 1, 1)
     TR  = Matrix{T}(undef, n, m) # collect trace terms
-    Ytotal = 0
-    ntotal = 0
+    Ytotal = 0.0
+    ntotal = 0.0
     for i in eachindex(gcs)
         ntotal  += length(gcs[i].y)
         Ytotal  += sum(gcs[i].y)
@@ -249,5 +249,8 @@ end
 include("initialize_model.jl")
 include("glm_vc.jl")
 include("gaussian_lmm.jl")
-#include("loglikelihood_in_progress.jl")
+include("splitting_loglikelihood.jl")
+include("splitting_gradient.jl")
+include("splitting_gradient.jl")
+include("loglikelihood_in_progress.jl")
 end#module
