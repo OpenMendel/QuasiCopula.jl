@@ -35,7 +35,7 @@ function beta_gradient_hessian(
     β::Vector{T},
     τ::T,
     Σ::Vector{T}
-    ) where {T <: BlasReal, D}
+    ) where {T <: BlasReal, D<:Normal{T}}
     n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
     component_score = zeros(n)
     update_res!(gc, β)
@@ -77,21 +77,60 @@ function beta_gradient_hessian(
         gc.∇β, gc.Hβ
 end
 
-function beta_gradient_hessian(
-    gcm::GLMCopulaVCModel{T, D}
-    ) where {T <: BlasReal, D}
-    logl = zero(T)
-        fill!(gcm.∇β, 0.0)
-        fill!(gcm.∇Σ, 0.0)
-        fill!(gcm.∇τ, 0.0)
-        fill!(gcm.Hβ, 0.0)
-    for i in 1:length(gcm.data)
-        score, hess = beta_gradient_hessian(gcm.data[i], gcm.β, gcm.τ[1], gcm.Σ)
-        @show score
-        @show hess
-        gcm.∇β .+= score
-        gcm.Hβ .+= hess
+
+"""
+beta_gradient_hessian(gc)
+compute the gradient and hessian with respect to beta
+"""
+function beta_gradient_hessian_term2(
+    gc::GLMCopulaVCObs{T, D},
+    β::Vector{T},
+    τ::T,
+    Σ::Vector{T}
+    ) where {T <: BlasReal, D<:Normal{T}}
+    n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
+    component_score = zeros(p)
+    update_res!(gc, β)
+    if gc.d  ==  Normal()
+        sqrtτ = sqrt.(τ[1]) #sqrtτ = 0.018211123993574548
+        standardize_res!(gc, sqrtτ)
+    else
+        sqrtτ = 1.0
+        standardize_res!(gc)
     end
-    gcm.Hβ .*= gcm.τ[1]
-    gcm.∇β, gcm.Hβ
+    rss = abs2(norm(gc.res)) # RSS of standardized residual
+    fill!(gc.∇resβ, 0.0) # fill gradient of residual vector with 0
+    GLMCopula.std_res_differential!(gc) # this will compute ∇resβ
+    # evaluate copula loglikelihood
+    tsum = dot(Σ, gc.t)
+    for k in 1:m
+        mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
+        BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, component_score) # stores ∇resβ*Γ*res (standardized residual)
+        gc.q[k] = dot(gc.res, gc.storage_n) / 2 # gc.q = 5.858419861984103
+    end
+    @show component_score
+    #gc.∇β = -8.84666153343209
+    qsum  = dot(Σ, gc.q) # 1.8124610637883112
+    # gradient
+        x = zeros(p)
+        denom = 1 .+ qsum
+        @show denom
+        inv1pq = inv(denom)
+        # component_score = W1i(Yi -μi)
+        secondterm = component_score .* inv1pq
+        secondterm
 end
+
+# i want to split up gradient in 2 terms
+#  i = 1 this is my sanity check it does match above.
+function hardcoded(gc)
+    standardize_res!(gc)
+    qsum = gcm.Σ*transpose(gc.res)*gc.V[1]*gc.res
+    denom = 1 .+ qsum ./2
+    numerator = gcm.Σ*transpose(gc.∇resβ)*gc.V[1]*gc.res
+    secondterm = numerator./denom
+    secondterm
+end
+
+
+#### TO DO: NOW go to sleep and make the first part of the gradient tomorrow!
