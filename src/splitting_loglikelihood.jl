@@ -42,14 +42,14 @@ Calculates the loglikelihood of observing `y` given mean `μ` and some distribut
 function component_loglikelihood(gc::GLMCopulaVCObs{T, D}, τ::T, logl::T) where {T <: BlasReal, D<:Normal{T}}
     ϕ = inv(τ)
     @inbounds for j in eachindex(gc.y)
-        logl += GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], 1.0, ϕ)
+        logl += GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], one(T), ϕ)
     end
     logl
 end
 
 function component_loglikelihood(gc::GLMCopulaVCObs{T, D}, τ::T, logl::T) where {T <: BlasReal, D<:Union{Bernoulli{T}, Poisson{T}}}
     @inbounds for j in eachindex(gc.y)
-        logl += GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], τ, 1)
+        logl += GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], τ, one(T))
     end
     logl
 end
@@ -59,10 +59,10 @@ function component_loglikelihood(gcm::GLMCopulaVCModel{T, D}) where {T <: BlasRe
   if GLM.dispersion_parameter(gcm.d)
     τ = gcm.τ[1]
   else
-    τ = 1.0
+    τ = one(T)
   end
     for i in 1:length(gcm.data)
-        logl += component_loglikelihood(gcm.data[i], τ, 0.0)
+        logl += component_loglikelihood(gcm.data[i], τ, zero(T))
     end
     logl
 end

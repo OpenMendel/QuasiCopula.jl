@@ -10,7 +10,7 @@ function update_res!(
     ) where {T <: BlasReal, D<:Normal{T}}
     mul!(gc.η, gc.X, β)
     copyto!(gc.μ, gc.η)
-    fill!(gc.dμ, 0.0)
+    fill!(gc.dμ, 1.0)
     fill!(gc.w1, 1.0)
     fill!(gc.w2, 1.0)
     fill!(gc.varμ, 1.0)
