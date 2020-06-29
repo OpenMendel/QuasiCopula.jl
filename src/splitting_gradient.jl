@@ -68,7 +68,7 @@ function beta_gradient_hessians(
         for j in 1:length(gc.y)
             # the first term in the score, where res is standardized!
              component_score[j] = gc.res[j] * sqrt(gc.varμ[j]) # note for normal the last 2 terms go away so its just the residual
-             BLAS.ger!(-1.0, gc.X[j, :], gc.X[j, :], gc.Hβ) # gc.Hβ = gc.Hβ + r_ij(β) * x * x'
+             BLAS.ger!(-1.0, gc.X[j, :], gc.X[j, :], gc.Hβ) # gc.Hβ = gc.Hβ - xtx # part from glm_regress
          end
         # component_score = W1i(Yi -μi)
         BLAS.gemv!('T', 1.0, gc.X, component_score, -inv1pq, gc.∇β) # gc.∇β = 1.0967717536346686 subtract the second term from the component score
@@ -92,12 +92,13 @@ function beta_gradient_hessians(
         gcm.∇β .+= score
         gcm.Hβ .+= hess
     end
+    @show gcm.Hβ
     gcm.Hβ .*= gcm.τ[1]
     gcm.∇β, gcm.Hβ
 end
 
 """
-beta_gradient_hessian(gc)
+beta_gradient_term2(gc)
 compute the gradient and hessian with respect to beta
 """
 function beta_gradient_term2(
@@ -158,11 +159,13 @@ function hardcode_term1(gc::GLMCopulaVCObs{T, D}, τ::T) where {T,  D<:Normal{T}
     fill!(gc.varμ, inv(τ))
     gc.∇β .+= transpose(gc.X)*(gc.y - gc.μ)
     gc.∇β .*= τ
+    gc.∇β
 end
 
 function hardcode_term1(gc::GLMCopulaVCObs{T, D}, τ::T) where {T,  D<:Union{Poisson{T}, Bernoulli{T}}}
     fill!(gc.∇β, 0.0)
     gc.∇β .+= transpose(gc.X)*(gc.y - gc.μ)
+    gc.∇β
     #gc.∇β .+= transpose(gc.X)*Diagonal(gc.dμ ./ sqrt.(gc.varμ))*gc.res
 end
 ## poisson test data
@@ -173,14 +176,14 @@ end
 # julia> hardcode_term1(gc, gcm.τ[1])
 # 1-element Array{Float64,1}:
 #  2.087476023952942e-27
-function hardcode_term1(gcm::GLMCopulaVCModel{T, D}) where {T,  D}
-    fill!(gcm.∇β, 0.0)
-    for i in 1:length(gcm.data)
-        hardcode_term1(gcm.data[i], gcm.τ[1])
-        gcm.∇β .+= gcm.data[i].∇β
-    end
-    gcm.∇β
-end
+# function hardcode_term1(gcm::GLMCopulaVCModel{T, D}) where {T,  D}
+#     fill!(gcm.∇β, 0.0)
+#     for i in 1:length(gcm.data)
+#         gcm.data[i].∇β .= hardcode_term1(gcm.data[i], gcm.τ[1])
+#         gcm.∇β .+= gcm.data[i].∇β
+#     end
+#     gcm.∇β
+# end
 
 
 # we checked if the gradient of each part of the normal is good and it is
@@ -193,8 +196,9 @@ Calculates the full loglikelihood for our copula model
 function copula_gradient(gcm::GLMCopulaVCModel{T, D}) where {T<: BlasReal, D}
   fill!(gcm.∇β, 0.0)
   # first get the loglikelihood from the component density with glm.jl
-  gcm.∇β .+= hardcode_term1(gcm)
-  # second we add the parts of the loglikelihood from the copula density
-  gcm.∇β .+= copula_loglikelihood_addendum(gcm)
-  logl
+  for i in 1:length(gcm.data)
+      gcm.data[i].∇β = hardcode_term1(gcm.data[i], gcm.τ[1])
+
+      gcm.data[i].∇β .+= beta_gradient_term2(gcm.data[i], gcm.β, gcm.τ[1], gcm.Σ)
+  end
 end
