@@ -211,20 +211,31 @@ function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<
     gc
 end
 
-function fit2!(
+function fit!(
     gcm::GLMCopulaVCModel,
-    solver=Ipopt.IpoptSolver(print_level=0),
+    solver=NLopt.NLoptSolver(algorithm = :LN_BOBYQA, maxeval = 4000)
     )
     optm = MathProgBase.NonlinearModel(solver)
     lb = fill(-Inf, gcm.p)
-    ub = fill(Inf, gcm.p)
+    ub = fill( Inf, gcm.p)
     MathProgBase.loadproblem!(optm, gcm.p, 0, lb, ub, Float64[], Float64[], :Max, gcm)
     MathProgBase.setwarmstart!(optm, gcm.β)
     MathProgBase.optimize!(optm)
     optstat = MathProgBase.status(optm)
     optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
     GLMCopula.copy_par!(gcm, MathProgBase.getsolution(optm))
-    copula_loglikelihood(gcm)
+    loglikelihood!(gcm)
+    gcm
+end
+
+function MathProgBase.initialize(
+    gcm::GLMCopulaVCModel,
+    requested_features::Vector{Symbol})
+    for feat in requested_features
+        if !(feat in [:Grad])
+            error("Unsupported feature $feat")
+        end
+    end
 end
 
 MathProgBase.features_available(gcm::GLMCopulaVCModel) = [:Grad]
@@ -236,32 +247,53 @@ function MathProgBase.eval_f(
     # maximize σ2 and τ at current β using MM
     GLMCopula.update_Σ!(gcm)
     # evaluate loglikelihood
-    copula_loglikelihood(gcm)[1]
+    loglikelihood!(gcm, false, false)
 end
 
 function MathProgBase.eval_grad_f(
-    gcm::GLMCopulaVCModel{T, D},
+    gcm::Union{GLMCopulaVCModel,GLMCopulaVCModel},
     grad::Vector,
-    par::Vector) where {T<:BlasReal, D<:Normal{T}}
+    par::Vector)
     GLMCopula.copy_par!(gcm, par)
     # maximize σ2 and τ at current β using MM
     GLMCopula.update_Σ!(gcm)
     # evaluate gradient
-    gcm.∇β .= beta_gradient_hessian(gcm)[1]
+    logl = loglikelihood!(gcm, true, false)
     copyto!(grad, gcm.∇β)
     nothing
+end
+
+function copy_par!(
+    gcm::Union{GLMCopulaVCModel,GLMCopulaVCModel},
+    par::Vector)
+    copyto!(gcm.β, par)
+    par
+end
+
+function MathProgBase.hesslag_structure(gcm::Union{GLMCopulaVCModel,GLMCopulaVCModel})
+    Iidx = Vector{Int}(undef, (gcm.p * (gcm.p + 1)) >> 1)
+    Jidx = similar(Iidx)
+    ct = 1
+    for j in 1:gcm.p
+        for i in j:gcm.p
+            Iidx[ct] = i
+            Jidx[ct] = j
+            ct += 1
+        end
+    end
+    Iidx, Jidx
 end
 
 function MathProgBase.eval_hesslag(
     gcm::GLMCopulaVCModel{T, D},
     H::Vector{T},
     par::Vector{T},
-    σ::T) where {T <: BlasReal, D<:Normal{T}}
+    σ::T) where {T <: BlasReal, D}
     GLMCopula.copy_par!(gcm, par)
     # maximize σ2 and τ at current β using MM
     GLMCopula.update_Σ!(gcm)
     # evaluate Hessian
-    gcm.Hβ .= beta_gradient_hessian(gcm)[2]
+    loglikelihood!(gcm, true, true)
     # copy Hessian elements into H
     ct = 1
     for j in 1:gcm.p

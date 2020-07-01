@@ -91,13 +91,17 @@ logl += component_loglikelihood(gc, τ, 0.0)
 @test logl ≈ -27.795829678091447
 
 @test copula_loglikelihood(gcm) ≈ -164.00082379
+@test copula_gradient(gcm)[1] ≈ 0.06561148856048625
+@test beta_hessians(gcm)[1] ≈ -0.019644354979826334
 score, hess = beta_gradient_hessian(gcm)
 @test score == [0.06561148856048625]
 @test hess[1] == -0.019644354979826334
 
+# now we need to check if the solver using fit2 is doing it correctly
+loglikelihood!(gcm, true, false)
 # fit model using NLP on profiled loglikelihood
 @info "MLE:"
-@time GLMCopula.fit2!(gcm, IpoptSolver(print_level=5))
+@time GLMCopula.fit!(gcm, IpoptSolver(print_level=5))
 @show gcm.β
 @show gcm.τ
 @show gcm.Σ

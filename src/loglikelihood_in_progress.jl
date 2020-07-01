@@ -36,7 +36,7 @@ function loglikelihood!(
     end
     needhess && fill!(gc.Hβ, 0)
     # evaluate copula loglikelihood
-    tsum = dot(Σ, gc.t)
+    tsum = dot(Σ, gc.t) # 4.332948841735151 gcm_all
     logl = - log(1 + tsum)#  -1.150267324540463
     for k in 1:m
         mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
@@ -46,13 +46,13 @@ function loglikelihood!(
         gc.q[k] = dot(gc.res, gc.storage_n) / 2 # gc.q = 5.858419861984103
     end
     #gc.∇β = -8.84666153343209
-    qsum  = dot(Σ, gc.q) # 1.8124610637883112
+    qsum  = dot(Σ, gc.q) # 1.8124610637883112 < normal , 4.25375319607831 < gcm_all logistic
     logl += log(1 + qsum) # -0.11620740109213168
     logl += GLMCopula.component_loglikelihood(gc, τ, 0.0)
     # gradient
     if needgrad
         x = zeros(p)
-        inv1pq = inv(1 + qsum)
+        inv1pq = inv(1 + qsum) # 0.1903401173748426
         if needhess
             BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 1.0, gc.Hβ) # only lower triangular =  -9.894316220056414
         end
@@ -170,32 +170,53 @@ function loglikelihood!(
     logl
 end
 
-function loglikelihood!(
+# function loglikelihood!(
+#     gcm::GLMCopulaVCModel{T, D},
+#     needgrad::Bool = false,
+#     needhess::Bool = false
+#     ) where {T <: BlasReal, D<:Union{Poisson{T}, Bernoulli{T}}}
+#     logl = zero(T)
+#     if needgrad
+#         fill!(gcm.∇β, 0)
+#         fill!(gcm.∇Σ, 0)
+#     end
+#     for i in eachindex(gcm.data)
+#         logl += loglikelihood!(gcm.data[i], gcm.β, gcm.Σ, needgrad, needhess)
+#         #println(logl)
+#         if needgrad
+#             gcm.∇β .+= gcm.data[i].∇β
+#             gcm.∇Σ .+= gcm.data[i].∇Σ
+#         end
+#         if needhess
+#             gcm.Hβ .+= gcm.data[i].Hβ
+#         end
+#     end
+#     needhess && (gcm.Hβ)
+#     logl
+# end
+
+function loglikelihood2!(
     gcm::GLMCopulaVCModel{T, D},
     needgrad::Bool = false,
     needhess::Bool = false
     ) where {T <: BlasReal, D<:Union{Poisson{T}, Bernoulli{T}}}
     logl = zero(T)
     if needgrad
-        fill!(gcm.∇β, 0)
-        fill!(gcm.∇Σ, 0)
+        fill!(gcm.∇β, 0.0)
+        fill!(gcm.∇Σ, 0.0)
     end
-    for i in eachindex(gcm.data)
-        logl += loglikelihood!(gcm.data[i], gcm.β, gcm.Σ, needgrad, needhess)
-        #println(logl)
-        if needgrad
-            gcm.∇β .+= gcm.data[i].∇β
-            gcm.∇Σ .+= gcm.data[i].∇Σ
-        end
-        if needhess
-            gcm.Hβ .+= gcm.data[i].Hβ
-        end
+    logl += copula_loglikelihood(gcm)
+    if needgrad
+        gcm.∇β .= copula_gradient(gcm)
+        # gcm.∇Σ .+= gcm.data[i].∇Σ
     end
-    needhess && (gcm.Hβ)
+    if needhess
+        gcm.Hβ .= beta_hessians(gcm)
+    end
     logl
 end
 
-function fit!(
+function fit2!(
     gcm::GLMCopulaVCModel,
     solver=Ipopt.IpoptSolver(print_level=0),
     )
@@ -208,7 +229,7 @@ function fit!(
     optstat = MathProgBase.status(optm)
     optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
     GLMCopula.copy_par!(gcm, MathProgBase.getsolution(optm))
-    loglikelihood!(gcm)
+    loglikelihood2!(gcm)
     gcm
 end
 
@@ -229,9 +250,9 @@ function MathProgBase.eval_f(
     par::Vector)
     GLMCopula.copy_par!(gcm, par)
     # maximize σ2 and τ at current β using MM
-    GLMCopula.update_Σ!(gcm)
+    # GLMCopula.update_Σ!(gcm)
     # evaluate loglikelihood
-    loglikelihood!(gcm, false, false)
+    loglikelihood2!(gcm, false, false)
 end
 
 function MathProgBase.eval_grad_f(
@@ -240,9 +261,9 @@ function MathProgBase.eval_grad_f(
     par::Vector)
     GLMCopula.copy_par!(gcm, par)
     # maximize σ2 and τ at current β using MM
-    GLMCopula.update_Σ!(gcm)
+    # GLMCopula.update_Σ!(gcm)
     # evaluate gradient
-    logl = loglikelihood!(gcm, true, false)
+    logl = loglikelihood2!(gcm, true, false)
     copyto!(grad, gcm.∇β)
     #gcm = glm_score_statistic(gcm, gcm.β)
     #copyto!(grad, gcm.∇β)
@@ -277,9 +298,9 @@ function MathProgBase.eval_hesslag(
     σ::T) where {T <: BlasReal, D}
     GLMCopula.copy_par!(gcm, par)
     # maximize σ2 and τ at current β using MM
-    GLMCopula.update_Σ!(gcm)
+    #GLMCopula.update_Σ!(gcm)
     # evaluate Hessian
-    loglikelihood!(gcm, true, true)
+    loglikelihood2!(gcm, true, true)
     # copy Hessian elements into H
     ct = 1
     for j in 1:gcm.p

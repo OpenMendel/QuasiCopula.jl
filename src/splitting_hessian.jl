@@ -41,21 +41,32 @@ function beta_hessian_term1(
 end
 
 function beta_hessian_term2(
-    gc::GLMCopulaVCObs{T, D}
-    ) where {T <: BlasReal, D}
+    gc::GLMCopulaVCObs{T, D},
+    β) where {T <: BlasReal, D}
     score = zeros(size(gc.∇β))
     inform = zeros(size(gc.∇β, 1), size(gc.∇β, 1))
+    update_res!(gc, β)
         for j in 1:length(gc.y)
-                f = meanf(gc.η[j])
-                v = varf(f[1])
-                c = ((gc.y[j] - f[1]) / v) * f[2]
-                BLAS.axpy!(c, gc.X[j, :], score) # score = score + c * x
-                c = f[2]^2 / v
-                BLAS.ger!(-c, gc.X[j, :], gc.X[j, :], inform) # inform = inform + c * x * x'
+              c = gc.dμ[j]^2 / gc.varμ[j]
+              BLAS.ger!(-c, gc.X[j, :], gc.X[j, :], inform) # inform = inform + c * x * x'
         end
    inform
 end
 
+function beta_hessian_term2(
+    gcm::GLMCopulaVCModel{T, D}
+    ) where {T <: BlasReal, D}
+        fill!(gcm.Hβ, 0.0)
+        if GLM.dispersion_parameter(gcm.d) == false
+                fill!(gcm.τ, 1.0)
+        end
+    for i in 1:length(gcm.data)
+        gcm.data[i].Hβ .= beta_hessian_term2(gcm.data[i], gcm.β)
+        gcm.Hβ .+= gcm.data[i].Hβ
+    end
+    gcm.Hβ .*= gcm.τ[1]
+    gcm.Hβ
+end
 
 function beta_hessians(
     gcm::GLMCopulaVCModel{T, D}
@@ -66,7 +77,7 @@ function beta_hessians(
         end
     for i in 1:length(gcm.data)
         gcm.data[i].Hβ .= beta_hessian_term1(gcm.data[i], gcm.β, gcm.τ[1], gcm.Σ)
-        gcm.data[i].Hβ .+= beta_hessian_term2(gcm.data[i])
+        gcm.data[i].Hβ .+= beta_hessian_term2(gcm.data[i], gcm.β)
         gcm.Hβ .+= gcm.data[i].Hβ
     end
     gcm.Hβ .*= gcm.τ[1]
