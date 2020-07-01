@@ -134,6 +134,70 @@ function update_Σ!(gcm::GLMCopulaVCModel{T, D}) where {T <: BlasReal, D}
     update_Σ_jensen!(gcm)
 end
 
+## trying to re-write the update for sigma ! 
+function update_Σ3!(
+    gcm::GLMCopulaVCModel{T, D},
+    maxiter::Integer=50000,
+    reltol::Number=1e-6,
+    verbose::Bool=false) where {T <: BlasReal, D}
+    rsstotal = zero(T)
+    for i in eachindex(gcm.data)
+        update_res!(gcm.data[i], gcm.β)
+        standardize_res!(gcm.data[i])
+        fill!(gcm.τ, 1.0)
+        GLMCopula.update_quadform!(gcm.data[i])
+        gcm.QF[i, :] = gcm.data[i].q
+        end
+    # MM iteration
+    for iter in 1:maxiter
+        # store previous iterate
+        copyto!(gcm.storage_Σ, gcm.Σ)
+        # the second term
+        tsum_r = dot(gcm.storage_Σ, gc.t)
+        # the first term
+        for i in eachindex(gcm.data)
+            for k in 1:m
+                mul!(gcm.data[i].storage_n, gcm.data[i].V[k], gcm.data[i].res) # storage_n = V[k] * res
+                gcm.data[i].q[k] = dot(gcm.data[i].res, gcm.data[i].storage_n) / 2
+            end
+        qsum_r  = dot(gcm.storage_Σ, gcm.data[i].q)
+        end
+        numerator_denom = 1 + qsum_r
+        denominator_denom = 1 + tsum_r
+        numer_numer = sum(gcm.QF)
+        #
+        # numerator in the multiplicative update
+        numerator = numer_numer / numerator_denom
+        # #mul!(gcm.storage_n, gcm.QF, gcm.Σ) # gcm.storage_n[i] = sum_k^m qi[k] sigmai_[k] # denom of numerator
+        # # gcm.storage_n .= inv.(1 .+ gcm.storage_n) # 1/ (1 + sum_k^m qi[k] sigmai_[k]) # denom of numerator
+        # gcm.storage_n .= inv.(1 .+ gcm.storage_n) # use newest τ to update Σ
+        # mul!(gcm.storage_m, transpose(gcm.QF), gcm.storage_n) # store numerator = b_i / (1 + a b_i)
+        # gcm.Σ .*= gcm.storage_m # multiply
+        # # denominator in the multiplicative update
+        denom_numer = sum(gcm.TR)
+        denom = denom_numer / denominator_denom
+        # mul!(gcm.storage_n, gcm.TR, gcm.storage_Σ)
+        # gcm.storage_n .= inv.(1 .+ gcm.storage_n)
+        # mul!(gcm.storage_m, transpose(gcm.TR), gcm.storage_n)
+        gcm.Σ .= gcm.storage_Σ .* (numerator / denom)
+
+        #gcm.Σ[k] .= gcm.storage_Σ[k]*gcm.data[i].q[k]
+
+        # monotonicity diagnosis
+        # verbose && println(sum(log, 1 .+ (gcm.QF * gcm.Σ)) -
+        #     sum(log, 1 .+ gcm.TR * gcm.Σ))
+        # convergence check
+        #gcm.storage_m .= gcm.Σ .- gcm.storage_Σ
+        # norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1) && break
+        # if norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1)
+        #     verbose && println("iters=$iter")
+        #     break
+        # end
+        # verbose && iter == maxiter && @warn "maximum iterations $maxiter reached"
+    end
+    gcm.Σ
+end
+
 function update_Σ_jensen!(
     gcm::GLMCopulaVCModel{T, D},
     maxiter::Integer=50000,
