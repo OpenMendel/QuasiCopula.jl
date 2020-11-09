@@ -3,8 +3,8 @@ module DyestuffTest
 println()
 @info "Dyestuff example"
 
-using RDatasets, Test, GLM, GLMCopula, LinearAlgebra
-
+using RDatasets, Test, GLM, LinearAlgebra, GLMCopula
+using LinearAlgebra: BlasReal, copytri!
 # Dataframe with columns: Batch (Categorical), Yield (Int32)
 dyestuff = dataset("lme4", "Dyestuff")
 groups = unique(dyestuff[!, :Batch])
@@ -24,7 +24,8 @@ gcm = GLMCopulaVCModel(gcs);
 
 # initialize β and τ from least square solution
 @info "Initial point:"
-initialize_model!(gcm)
+initialize_model!(gcm);
+#gcm.β .= [1527.4999999999998]
 @show gcm.β
 # update σ2 and τ from β using the MM algorithm
 fill!(gcm.Σ, 1)
@@ -33,79 +34,24 @@ update_Σ!(gcm)
 @show gcm.τ
 @show gcm.Σ;
 
-# making sure the loglikelihood values are the same
-gc = gcm.data[1]
-β = gcm.β
-τ = gcm.τ[1]
-Σ = gcm.Σ
-needgrad = true;  needhess = true
-n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
-needgrad = needgrad || needhess
-update_res!(gc, β)
-if gc.d  ==  Normal()
-    sqrtτ = sqrt(τ)
-    standardize_res!(gc, sqrtτ)
-else
-    sqrtτ = 1.0
-    standardize_res!(gc)
-end
+# gc = gcm.data[1]
+@test copula_gradient(gcm) ≈ [0.06561148856048]
+@test copula_hessian(gcm) ≈ [-0.01964435497982633]
 
-@test sqrtτ == 0.018211123993574548
-
-@test gc.res[1] == 0.31869466988755873
-
-if needgrad
-        fill!(gc.∇β, 0)
-        fill!(gc.∇Σ, 0)
-        fill!(gc.∇resβ, 0.0)
-        GLMCopula.std_res_differential!(gc)
-        fill!(gc.∇τ, 0)
-    end
-
-needhess && fill!(gc.Hβ, 0)
-@show gc.res
-# evaluate copula loglikelihood
-tsum = dot(Σ, gc.t)
-#@show tsum
-logl = - log(1 + tsum)
-@test logl ≈  -1.1502673245404629
-@test tsum ≈ 2.159037285014138
-
-for k in 1:m
-        mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
-        #gc.storage_n
-        if needgrad # ∇β stores X'*W*Γ*res (standardized residual)
-            BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β)
-            @show gc.∇β
-        end
-        gc.q[k] = dot(gc.res, gc.storage_n) / 2
-    end
-
-# @test gc.∇β ≈ [-8.846661533432094]
-qsum  = dot(Σ, gc.q)
-logl += log(1 + qsum)
-@test logl ≈ -0.11620740109213168
-
-logl += component_loglikelihood(gc, τ, 0.0)
-
-@test logl ≈ -27.795829678091447
-
-@test copula_loglikelihood(gcm) ≈ -164.00082379
-@test copula_gradient(gcm)[1] ≈ 0.06561148856048625
-@test beta_hessians(gcm)[1] ≈ -0.019644354979826334
-score, hess = beta_gradient_hessian(gcm)
-@test score == [0.06561148856048625]
-@test hess[1] == -0.019644354979826334
-
-# now we need to check if the solver using fit2 is doing it correctly
-loglikelihood!(gcm, true, false)
+@show loglikelihood!(gcm, true, true)
 # fit model using NLP on profiled loglikelihood
 @info "MLE:"
-@time GLMCopula.fit!(gcm, IpoptSolver(print_level=5))
+# @time GLMCopula.fit!(gcm, IpoptSolver(print_level=5))
+@time GLMCopula.fit2!(gcm, IpoptSolver(print_level = 5, derivative_test = "first-order"))
+
+@time fit2!(gcm, IpoptSolver(print_level = 5, max_iter = 100, hessian_approximation = "exact"))
+
 @show gcm.β
 @show gcm.τ
 @show gcm.Σ
-@test copula_loglikelihood(gcm)[1] ≈ -163.355454233
+@test copula_loglikelihood(gcm)[1] ≈ -163.35545423301846
+@show loglikelihood!(gcm, true, true)
+@test loglikelihood!(gcm, true, false) ≈ -163.35545423301846
 @show gcm.∇β
 @show gcm.∇τ
 @show gcm.∇Σ
