@@ -77,19 +77,7 @@ function joint_density_value(density, res)
     return joint_pdf
 end
 
-s = 1 # first we check for the marginal of r_1 and then we can use this general formula for the joint density of R_s
-################## break up into 3 terms according to recursive conditional density formula ####################################
-term1 = 1 + 0.5 * transpose(res[1:s-1]) * Γ[1:s-1, 1:s-1] * res[1:s-1] +  0.5 * tr(Γ[s:end, s:end])
-@test term1 == 1 + 0.5 * tr(Γ)
-
-marginal_r_s1 = inv(term1)[1] * joint_density_value(d, res[1:s]) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
-# 0.33323187592389564
-
-################################################################################################################################################################################################
-################################################################################################################################################################################################
-############################################################################## NOW USING Recursive Conditional Formula # check if recursive conditional formula will work as expected ##########################################################################################################################################################
-############################################################################################## in the normalizing constant of the conditional density ##############################################################################################################
-
+# this function will get ALL the cross terms including i = s; used in marginal density of i in S
 function crossterm_res(res, s)
     results = []
     if s == 1
@@ -104,11 +92,28 @@ function crossterm_res(res, s)
     end
 end
 
-term2 = sum(crossterm_res(res, s))
+s = 1 # first we check for the marginal of r_1 and then we can use this general formula for the joint density of R_s
+################## break up into 3 terms according to recursive conditional density formula ####################################
+term1 = 1 + 0.5 * transpose(res[1:s-1]) * Γ[1:s-1, 1:s-1] * res[1:s-1] +  0.5 * tr(Γ[s:end, s:end])
+@test term1 == 1 + 0.5 * tr(Γ)
+
+marginal_r_s1 = inv(term1)[1] * joint_density_value(d, res[1:s]) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
+# 0.33323187592389564
+
+@test [1 + 0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s) + 0.5 * sum(crossterm_res(res, s)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1] == (term1 + term2 + term3)[1] # using the marginal of R_S and conditional of R1| nothing, respectively
+@test marginal_r_s1 ≈ marginal_r1_hardcode
+# 0.33323187592389564
+
+################################################################################################################################################################################################
+################################################################################################################################################################################################
+############################################################################## NOW USING Recursive Conditional Formula # check if recursive conditional formula will work as expected ##########################################################################################################################################################
+############################################################################################## in the normalizing constant of the conditional density ##############################################################################################################
+
+term2 = sum(crossterm_res(res, s)) # only for s = 1 do we have no cross terms
 @test term2 == 0.0
 
 term3 = (0.5 * Γ[s, s] * (res[s]^2 - 1))
-# -0.45346568867865245
+# -0.4613819816401454
 
 d = Normal()
 conditionalr1 = inv(term1) * pdf(d, res[s]) * (term1 + term2 + term3)[1]
@@ -117,25 +122,21 @@ conditionalr1 = inv(term1) * pdf(d, res[s]) * (term1 + term2 + term3)[1]
 @test conditionalr1 ≈ marginal_r1_hardcode
 # 0.33323187592389564
 
-@test [1 + 0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s) + 0.5 * sum(crossterm_res(res, s)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1] == (term1 + term2 + term3)[1] # using the marginal of R_S and conditional of R1| nothing, respectively
-@test marginal_r_s1 ≈ marginal_r1_hardcode
-
 ################################################################################################################################################
 ############################################################### s = 2 ########################################################################################################
 ########################################### Joint Density of S = {1, 2} for f(R_1, R_2) ######################################################################################
 ############################################################################################################################################################################
 
 s = 2
-
 ################## hardcoded numerical check for f(R_1, R_2)
 marginal_densities_s = [(1/sqrt(2*pi)) * exp(-0.5 * res[i]^2) for i in 1:s]
 marginal_r1_r2_hardcode = inv(1 + 0.5 * tr(Γ)) * marginal_densities_s[1] * marginal_densities_s[2] * [1 + 0.5 * Γ[1, 1] * res[1]^2 + 0.5 * Γ[2, 2] * res[2]^2 + res[1] * res[2] * Γ[1, 2] + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
 # 0.10187907575145581
 
 @test inv(1 + 0.5 * tr(Γ)) * joint_density_value(d, res[1:s]) == inv(1 + 0.5 * tr(Γ)) * marginal_densities_s[1] * marginal_densities_s[2] 
-
 @test 1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s)) == 1 + (0.5 * (Γ[1, 1] * res[1]^2 + Γ[2, 2] * res[2]^2)) + res[1] * res[2] * Γ[1, 2]
 
+### using marginal R_s where s = 2 formula:
 marginal_r_s2 = inv(1 + 0.5 * tr(Γ)) * joint_density_value(d, res[1:s]) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
 # 0.10187907575145581
 
@@ -143,26 +144,24 @@ marginal_r_s2 = inv(1 + 0.5 * tr(Γ)) * joint_density_value(d, res[1:s]) * [1 + 
 
 #########################################################################################################################################################################################################################################################
 ########################################### Conditional Density f(R_2 | R_1) ###################################################################################################################
-##################################################################################################################################################################################################################
-####################################################################### using Bayes rule we have P(R_2 | R_1) = P(R_1, R_2) / P(R_1) ######################################################################
+######################################## using Bayes rule we have P(R_2 | R_1) = P(R_1, R_2) / P(R_1) ######################################################################
 conditional_r2_r1_Bayes = marginal_r_s2 / marginal_r_s1
 # 0.30573028306188577
 
 ########################################################################################################################################################################################################################
-### from S = {1, ..., s}
-
 ## for s = 2 check the conditional recursive formula ############################################################################################################################################
-term1 = 1 + 0.5 * transpose(res[1:s-1]) * Γ[1:s-1, 1:s-1] * res[1:s-1] +  0.5 * tr(Γ[s:end, s:end])
+
+term1_s2 = 1 + 0.5 * transpose(res[1:s-1]) * Γ[1:s-1, 1:s-1] * res[1:s-1] +  0.5 * tr(Γ[s:end, s:end])
 # @test 1 + 0.5 * (diagonal_terms2) + cross_terms2 + 0.5 * remainder_trace2 == term1
 # 3.0386180183598546
 
-term2 = sum(crossterm_res(res, s))
+term2_s2 = sum(crossterm_res(res, s)[s-1:end])
 # 0.19529686717517308
 
-term3 = (0.5 * Γ[s, s] * (res[s]^2 - 1))
+term3_s2 = (0.5 * Γ[s, s] * (res[s]^2 - 1))
 # -0.25308892099907326
 
-conditional_r2_r1 = inv(term1) * pdf(d, res[s]) * (term1 + term2 + term3)
+conditional_r2_r1 = inv(term1_s2) * pdf(d, res[s]) * (term1_s2 + term2_s2 + term3_s2)
 # 0.30573028306188565
 
 @test conditional_r2_r1 ≈ conditional_r2_r1_Bayes
@@ -173,21 +172,22 @@ conditional_r2_r1 = inv(term1) * pdf(d, res[s]) * (term1 + term2 + term3)
 
 ################################################################################ S = 3 ################################################################################################################################################################
 ##################################################################################### JOINT R_1, R_2, R_3 ########################################################################################################################
-s = 3
 
-term1 = 1 + 0.5 * transpose(res[1:s-1]) * Γ[1:s-1, 1:s-1] * res[1:s-1] +  0.5 * tr(Γ[s:end, s:end])
 
-term2 = sum(crossterm_res(res, s))
-# 0.466433209408343
+# term1_s3 = 1 + 0.5 * transpose(res[1:s-1]) * Γ[1:s-1, 1:s-1] * res[1:s-1] +  0.5 * tr(Γ[s:end, s:end])
 
-term3 = (0.5 * Γ[s, s] * (res[s]^2 - 1))
-# -0.4617767542199328
+# term2_s3 = sum(crossterm_res(res, s)) # keep all terms 
+# # 0.466433209408343
 
-conditional_r3_r21 = inv(term1) * pdf(d, res[s]) * (term1 + term2 + term3)
-# 0.38458099502086984
+# term3_s3 = (0.5 * Γ[s, s] * (res[s]^2 - 1))
+# # -0.4617767542199328
+
+# conditional_r3_r21 = inv(term1) * pdf(d, res[s]) * (term1 + term2 + term3)
+# # 0.38458099502086984
 
 #############################################################################################################################################
 # bayes rule for conditional distribution of R_3 given R_1 and R_2
+s = 3
 marginal_r_s3 = inv(1 + 0.5 * tr(Γ)) * joint_density_value(d, res[1:s]) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
 # 0.03661772700845761
 
@@ -201,27 +201,27 @@ remainder_trace = tr(Γ[s+1:end, s+1:end])
 @test diagonal_terms ≈ Γ[1, 1] * res[1]^2 + Γ[2, 2] * res[2]^2 + Γ[3, 3] * res[3]^2
 @test cross_terms == res[1] * res[2] * Γ[1, 2] + res[1] * res[3] * Γ[1, 3] + res[3] * res[2] * Γ[3, 2]
 
-# marginal_densities_s = [(1/sqrt(2*pi)) * exp(-0.5 * res[i]^2) for i in 1:s]
-# marginal_r1_r2_r3_hardcode = inv(1 + 0.5 * tr(Γ)) * marginal_densities_s[1] * marginal_densities_s[2] *  marginal_densities_s[3] * [1 + 0.5 * Γ[1, 1] * res[1]^2 + 0.5 * Γ[2, 2] * res[2]^2 + 0.5 * Γ[3, 3] * res[3]^2 + res[1] * res[2] * Γ[1, 2] + res[1] * res[3] * Γ[1, 3] + res[3] * res[2] * Γ[3, 2] + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
-# # 0.03661772700845762
+marginal_densities_s = [(1/sqrt(2*pi)) * exp(-0.5 * res[i]^2) for i in 1:s]
+marginal_r1_r2_r3_hardcode = inv(1 + 0.5 * tr(Γ)) * marginal_densities_s[1] * marginal_densities_s[2] *  marginal_densities_s[3] * [1 + 0.5 * Γ[1, 1] * res[1]^2 + 0.5 * Γ[2, 2] * res[2]^2 + 0.5 * Γ[3, 3] * res[3]^2 + res[1] * res[2] * Γ[1, 2] + res[1] * res[3] * Γ[1, 3] + res[3] * res[2] * Γ[3, 2] + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
+# 0.03661772700845762
 
-# marginal_r_s3 = inv(1 + 0.5 * tr(Γ)) * joint_density_value(d, res[1:s]) * [1 + (0.5 * diagonal_terms) + cross_terms + 0.5 * remainder_trace][1]
-# # 0.03661772700845761
+@test marginal_r_s3 ≈ marginal_r1_r2_r3_hardcode
 
 ########################################################################################################################################################################
-## for i = 3 check the conditional recursive formula ############################################################################################################################################
-term1 = 1 + 0.5 * transpose(res[1:s-1]) * Γ[1:s-1, 1:s-1] * res[1:s-1] +  0.5 * tr(Γ[s:end, s:end])
+## for s = 3 check the conditional recursive formula ############################################################################################################################################
+term1_s3 = 1 + 0.5 * transpose(res[1:s-1]) * Γ[1:s-1, 1:s-1] * res[1:s-1] +  0.5 * tr(Γ[s:end, s:end])
+
 t1 = 1 + 0.5 * (Γ[1, 1] * res[1]^2 + Γ[2, 2] * res[2]^2) + res[1] * res[2] * Γ[1, 2] + 0.5 * tr(Γ[s:end, s:end])
-@test term1 == t1
+@test term1_s3 == t1
 # 2.9808259645359545
 
-term2 = sum(crossterm_res(res, s)[end - 1:end])
+term2_s3 = sum(crossterm_res(res, s)[s - 1:end])
 # 0.27113634223316985
 
-term3 = (0.5 * Γ[s, s] * (res[s]^2 - 1))
+term3_s3 = (0.5 * Γ[s, s] * (res[s]^2 - 1))
 # -0.4617767542199328
 
-conditional_r3_r12 = inv(term1) * pdf(d, res[s]) * (term1 + term2 + term3)
+conditional_r3_r12 = inv(term1_s3) * pdf(d, res[s]) * (term1_s3 + term2_s3 + term3_s3)
 # 0.35942343153750456
 
 @test conditional_r3_r12 ≈ conditional_r3_r12_Bayes
