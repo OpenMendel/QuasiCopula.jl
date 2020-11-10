@@ -1,5 +1,5 @@
 using DataFrames, MixedModels, Random, GLMCopula, GLM
-using ForwardDiff, Test, LinearAlgebra
+using ForwardDiff, Test, LinearAlgebra, Distributions
 using LinearAlgebra: BlasReal, copytri!
 
 # If we are able to generate a residual vectorRfrom the (standardized) Gaussian copula model[1 +12tr(Γ)]−1(1√2π)ne−‖r‖222(1 +12rTΓr),2
@@ -18,17 +18,23 @@ using LinearAlgebra: BlasReal, copytri!
 ######## FIRST SIMULATE Y_1 ##############
 #### USER SPECIFIES:
 n_1 = 5 # 5 observations in the fist vector
-Γ = [ones(ni, ni)]
-σ_0 = 0.25 # lets use a small per subject level noise
+Γ = ones(n_1, n_1)
+σ_0 = 1.0 # per subject level noise
 # covariates
 p = 3
+Random.seed!(12345)
 y = rand(n_1)
+
+Random.seed!(12345)
 X = rand(n_1, 3)
 
 # initialize beta and mu as eta for the normal density
+Random.seed!(12345)
 β = rand(3)
 # link function is identity for the normal density
 μ = X*β
+
+res = y - μ 
 
 # create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities:
 mixing_probabilities = [(1 + 0.5 * tr(Γ[2:end, 2:end])) / (1 + 0.5 * tr(Γ)), (0.25 * Γ[1, 1])/(1 + 0.5 * tr(Γ)), (0.25 * Γ[1, 1])/(1 + 0.5*tr(Γ))]
@@ -45,40 +51,22 @@ Y_1 = σ_0 * R_1 + μ[1]
 
 # STEP 2-n: then generate remaining components sequentially
 # from the conditional distributions R_k|R_1,...,R_k−1 for k = 2,...,n.
-
-# using Bayes rule we have P(R_2 | R_1) = P(R_1, R_2) / P(R_1)
-
 # however since the resulting conditional density is not a mixture of known pdf's we will get the cdf:
-i = 1
-term1 = 1 + 0.5 * transpose(res[1:i-1]) * Γ[1:i-1, 1:i-1] * res[1:i-1] +  0.5 * tr(Γ)
 
-function crossterm_res(res, i)
-    if i == 1
-        return 0.0
-    elseif i > 1
-        return res[i] * sum(res[j] * Γ[i, j] for j in 1:i-1)
-    end
-end
+############################################################################################################################################################################
+#################################################################### MARGINAL OF R_1 ########################################################################
+############################################################################################################################################################################
+s = 1
+################## hardcoded numerical check
+marginal_r1_hardcode = inv(1 + 0.5 * tr(Γ)) * (1/sqrt(2*pi)) * exp(-0.5 * res[s]^2) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
+# 0.3332318759238957
 
-term2 = crossterm_res(res, i)
-term3 = (0.5 * Γ[i, i] * (res[i]^2 - 1))
-
-## step 1 marginal r1
+#####################################################################################################################################################################
+########################################################## using marginal formula of R_S where S = {1, 2, ..., s} ######################################################
+############################################################################################################################################################################
 d = Normal()
-i = 1
-marginalr1 = inv(term1) * pdf(d, res[i]) * (term1 + term2 + term3)
 
-# check if recursive conditional formula will work as hard copula_loglikelihood_addendum
-marginal_r1_hardcode = inv(1 + 0.5 * tr(Γ)) * (1/sqrt(2*pi)) * exp(-0.5 * res[i]^2) * [1 + 0.5 * Γ[1, 1] * res[i]^2 + 0.5 * tr(Γ[2:end, 2:end])]
-
-# general joint density using conditional density form
-joint_r1_r2 = inv(term1) * joint_density_value(d, res[1:i]) * (term1 + term2 + term3)
-
-conditional_r2_r1 = joint_r1_r2 / marginal_r1
-
-
-## next time finish off normal r2 given r1
-## then think of recursion
+# using our joint_density function
 
 function joint_density_value(density, res)
     pdf_vector = pdf(density, res)
@@ -89,12 +77,155 @@ function joint_density_value(density, res)
     return joint_pdf
 end
 
-term1 = 1 + 0.5 * tr(Γ)
-term2 = (0.5 * Γ[1, 1] * (r1^2 - 1))
+s = 1 # first we check for the marginal of r_1 and then we can use this general formula for the joint density of R_s
+################## break up into 3 terms according to recursive conditional density formula ####################################
+term1 = 1 + 0.5 * transpose(res[1:s-1]) * Γ[1:s-1, 1:s-1] * res[1:s-1] +  0.5 * tr(Γ[s:end, s:end])
+@test term1 == 1 + 0.5 * tr(Γ)
 
+marginal_r_s1 = inv(term1)[1] * joint_density_value(d, res[1:s]) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
+# 0.33323187592389564
 
-# s = 1
-# marginal_Rs = inv(term1) * joint_density_value(d, res) * (term1 + 0.5 * Γ[1:s, 1:s])
+################################################################################################################################################################################################
+################################################################################################################################################################################################
+############################################################################## NOW USING Recursive Conditional Formula # check if recursive conditional formula will work as expected ##########################################################################################################################################################
+############################################################################################## in the normalizing constant of the conditional density ##############################################################################################################
+
+function crossterm_res(res, s)
+    results = []
+    if s == 1
+        return 0.0
+    elseif s > 1
+        for i in 2:s
+            for j in 1:i - 1
+                push!(results, res[i] * sum(res[j] * Γ[i, j]))
+            end
+        end
+        return results
+    end
+end
+
+term2 = sum(crossterm_res(res, s))
+@test term2 == 0.0
+
+term3 = (0.5 * Γ[s, s] * (res[s]^2 - 1))
+# -0.45346568867865245
+
+d = Normal()
+conditionalr1 = inv(term1) * pdf(d, res[s]) * (term1 + term2 + term3)[1]
+# 0.33323187592389564
+
+@test conditionalr1 ≈ marginal_r1_hardcode
+# 0.33323187592389564
+
+@test [1 + 0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s) + 0.5 * sum(crossterm_res(res, s)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1] == (term1 + term2 + term3)[1] # using the marginal of R_S and conditional of R1| nothing, respectively
+@test marginal_r_s1 ≈ marginal_r1_hardcode
+
+################################################################################################################################################
+############################################################### s = 2 ########################################################################################################
+########################################### Joint Density of S = {1, 2} for f(R_1, R_2) ######################################################################################
+############################################################################################################################################################################
+
+s = 2
+
+################## hardcoded numerical check for f(R_1, R_2)
+marginal_densities_s = [(1/sqrt(2*pi)) * exp(-0.5 * res[i]^2) for i in 1:s]
+marginal_r1_r2_hardcode = inv(1 + 0.5 * tr(Γ)) * marginal_densities_s[1] * marginal_densities_s[2] * [1 + 0.5 * Γ[1, 1] * res[1]^2 + 0.5 * Γ[2, 2] * res[2]^2 + res[1] * res[2] * Γ[1, 2] + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
+# 0.10187907575145581
+
+@test inv(1 + 0.5 * tr(Γ)) * joint_density_value(d, res[1:s]) == inv(1 + 0.5 * tr(Γ)) * marginal_densities_s[1] * marginal_densities_s[2] 
+
+@test 1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s)) == 1 + (0.5 * (Γ[1, 1] * res[1]^2 + Γ[2, 2] * res[2]^2)) + res[1] * res[2] * Γ[1, 2]
+
+marginal_r_s2 = inv(1 + 0.5 * tr(Γ)) * joint_density_value(d, res[1:s]) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
+# 0.10187907575145581
+
+@test marginal_r_s2 ≈ marginal_r1_r2_hardcode # check marginal of R_1, R_2 fits in the marginal R_S formula
+
+#########################################################################################################################################################################################################################################################
+########################################### Conditional Density f(R_2 | R_1) ###################################################################################################################
+##################################################################################################################################################################################################################
+####################################################################### using Bayes rule we have P(R_2 | R_1) = P(R_1, R_2) / P(R_1) ######################################################################
+conditional_r2_r1_Bayes = marginal_r_s2 / marginal_r_s1
+# 0.30573028306188577
+
+########################################################################################################################################################################################################################
+### from S = {1, ..., s}
+
+## for s = 2 check the conditional recursive formula ############################################################################################################################################
+term1 = 1 + 0.5 * transpose(res[1:s-1]) * Γ[1:s-1, 1:s-1] * res[1:s-1] +  0.5 * tr(Γ[s:end, s:end])
+# @test 1 + 0.5 * (diagonal_terms2) + cross_terms2 + 0.5 * remainder_trace2 == term1
+# 3.0386180183598546
+
+term2 = sum(crossterm_res(res, s))
+# 0.19529686717517308
+
+term3 = (0.5 * Γ[s, s] * (res[s]^2 - 1))
+# -0.25308892099907326
+
+conditional_r2_r1 = inv(term1) * pdf(d, res[s]) * (term1 + term2 + term3)
+# 0.30573028306188565
+
+@test conditional_r2_r1 ≈ conditional_r2_r1_Bayes
+######################################################## everything works above here. ######################################################################################################################
+## summary: 
+# (1) I just got to marginal density of R_1 using both the recursive conditional density formula and the marginal density formula in the paper. 
+# (2) Then I checked the recursion formula using bayes rule.
+
+################################################################################ S = 3 ################################################################################################################################################################
+##################################################################################### JOINT R_1, R_2, R_3 ########################################################################################################################
+s = 3
+
+term1 = 1 + 0.5 * transpose(res[1:s-1]) * Γ[1:s-1, 1:s-1] * res[1:s-1] +  0.5 * tr(Γ[s:end, s:end])
+
+term2 = sum(crossterm_res(res, s))
+# 0.466433209408343
+
+term3 = (0.5 * Γ[s, s] * (res[s]^2 - 1))
+# -0.4617767542199328
+
+conditional_r3_r21 = inv(term1) * pdf(d, res[s]) * (term1 + term2 + term3)
+# 0.38458099502086984
+
+#############################################################################################################################################
+# bayes rule for conditional distribution of R_3 given R_1 and R_2
+marginal_r_s3 = inv(1 + 0.5 * tr(Γ)) * joint_density_value(d, res[1:s]) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
+# 0.03661772700845761
+
+conditional_r3_r12_Bayes = marginal_r_s3 / marginal_r_s2
+# 0.3594234315375045
+
+diagonal_terms = sum(Γ[i, i] * res[i]^2 for i in 1:s)
+cross_terms = sum(crossterm_res(res, s))
+remainder_trace = tr(Γ[s+1:end, s+1:end])
+
+@test diagonal_terms ≈ Γ[1, 1] * res[1]^2 + Γ[2, 2] * res[2]^2 + Γ[3, 3] * res[3]^2
+@test cross_terms == res[1] * res[2] * Γ[1, 2] + res[1] * res[3] * Γ[1, 3] + res[3] * res[2] * Γ[3, 2]
+
+# marginal_densities_s = [(1/sqrt(2*pi)) * exp(-0.5 * res[i]^2) for i in 1:s]
+# marginal_r1_r2_r3_hardcode = inv(1 + 0.5 * tr(Γ)) * marginal_densities_s[1] * marginal_densities_s[2] *  marginal_densities_s[3] * [1 + 0.5 * Γ[1, 1] * res[1]^2 + 0.5 * Γ[2, 2] * res[2]^2 + 0.5 * Γ[3, 3] * res[3]^2 + res[1] * res[2] * Γ[1, 2] + res[1] * res[3] * Γ[1, 3] + res[3] * res[2] * Γ[3, 2] + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
+# # 0.03661772700845762
+
+# marginal_r_s3 = inv(1 + 0.5 * tr(Γ)) * joint_density_value(d, res[1:s]) * [1 + (0.5 * diagonal_terms) + cross_terms + 0.5 * remainder_trace][1]
+# # 0.03661772700845761
+
+########################################################################################################################################################################
+## for i = 3 check the conditional recursive formula ############################################################################################################################################
+term1 = 1 + 0.5 * transpose(res[1:s-1]) * Γ[1:s-1, 1:s-1] * res[1:s-1] +  0.5 * tr(Γ[s:end, s:end])
+t1 = 1 + 0.5 * (Γ[1, 1] * res[1]^2 + Γ[2, 2] * res[2]^2) + res[1] * res[2] * Γ[1, 2] + 0.5 * tr(Γ[s:end, s:end])
+@test term1 == t1
+# 2.9808259645359545
+
+term2 = sum(crossterm_res(res, s)[end - 1:end])
+# 0.27113634223316985
+
+term3 = (0.5 * Γ[s, s] * (res[s]^2 - 1))
+# -0.4617767542199328
+
+conditional_r3_r12 = inv(term1) * pdf(d, res[s]) * (term1 + term2 + term3)
+# 0.35942343153750456
+
+@test conditional_r3_r12 ≈ conditional_r3_r12_Bayes
+############  Now we have checked that both the bayes rule and the conditional formula are numerically the same. 
 
 # now using the inverse CDF approach:
 # (1) Draw U1 ~ uniform(0, 1)
