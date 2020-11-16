@@ -1,7 +1,7 @@
 module GLMCopula
 
 
-using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Distributions
+using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Distributions, StatsFuns
 using LinearAlgebra: BlasReal, copytri!
 @reexport using Ipopt
 @reexport using NLopt
@@ -18,7 +18,7 @@ export hessian_glm, hessian_copula_addendum, copula_hessian
 export GLMCopulaVCObs, GLMCopulaVCModel
 export GaussianCopulaVCObs, GaussianCopulaVCModel
 
-export GVCVec, GenR1
+export GVCVec, genR1
 export generate_R1_mixture_Normal
 export joint_density_value, crossterm_res 
 

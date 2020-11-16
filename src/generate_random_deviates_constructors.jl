@@ -1,4 +1,4 @@
-using DataFrames, MixedModels, Random, GLMCopula, GLM
+using DataFrames, MixedModels, Random, GLMCopula, GLM, StatsFuns
 using ForwardDiff, Test, LinearAlgebra, Distributions
 using LinearAlgebra: BlasReal, copytri!
 
@@ -74,7 +74,7 @@ end
 # GenR1()
 # create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities, depending on the distribution.
 # """
-struct GenR1{T <: BlasReal, D <: Distributions.UnivariateDistribution} #<: MathProgBase.AbstractNLPEvaluator
+struct genR1{T <: BlasReal, D <: Distributions.UnivariateDistribution} #<: MathProgBase.AbstractNLPEvaluator
     # data
     gvc_vector::GVCVec{T, D} # we will update gvc_vector.res[1]
     # working arrays
@@ -85,11 +85,11 @@ end
 
 ### GAUSSIAN BASE ### 
 """
-GenR1
-GenR1()
+genR1
+genR1()
 Let R1~N(0, 1) and create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities. Given d = distribution of R1.
 """
-function GenR1(
+function genR1(
     gvc_vector::GVCVec{T, D},
     d::Distributions.Normal{T}
     ) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}  
@@ -102,17 +102,40 @@ function GenR1(
     Chi(3)], mixture_probabilities
     )
     gvc_vector.res[1] = generate_R1_mixture_Normal(mixture_model)
-    GenR1{T, D}(gvc_vector, term1, term2)
+    genR1{T, D}(gvc_vector, term1, term2)
 end
 
 """
-GenR1
-GenR1()
+genR1
+genR1()
 Let R1~N(0, 1) and create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities. Just given without distribution of R1
 """
-function GenR1(
+function genR1(
     gvc_vector::GVCVec{T, D}
     ) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}  
-    GenR1(gvc_vector, gvc_vector.vecd[1])
+    genR1(gvc_vector, gvc_vector.vecd[1])
 end
 
+#### Gamma Base ######
+"""
+genR1
+genR1()
+Let R1~ Gamma(α, θ) and create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities. Given d = distribution of R1.
+"""
+function genR1(
+    gvc_vector::GVCVec{T, D},
+    d::Distributions.Gamma{T}
+    ) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}  
+    term1 = 1 + 0.5 * gvc_vector.trΓ
+    term2 = 1 + 0.5 * tr(gvc_vector.Γ[2:end, 2:end])
+    α, θ = params(d) # shape and scale of gamma
+    # normalizing constant
+    c = (StatsFuns.gamma(α + 2)/ StatsFuns.gamma(α)) * θ^2
+    mixture_probabilities = [inv(term1) * term2, inv(term1) * (0.25 * c * gvc_vector.Γ[1, 1])]
+    mixture_model = MixtureModel(
+    [Gamma(α, θ), # Gamma(α, θ)
+    Gamma(α + 2, θ)], mixture_probabilities
+    )
+    gvc_vector.res[1] = rand(mixture_model)
+    genR1(gvc_vector, term1, term2)
+end
