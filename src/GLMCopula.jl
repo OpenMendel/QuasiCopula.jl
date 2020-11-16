@@ -1,7 +1,7 @@
 module GLMCopula
 
 
-using Convex, LinearAlgebra, MathProgBase, Reexport, GLM
+using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Distributions
 using LinearAlgebra: BlasReal, copytri!
 @reexport using Ipopt
 @reexport using NLopt
@@ -18,7 +18,8 @@ export hessian_glm, hessian_copula_addendum, copula_hessian
 export GLMCopulaVCObs, GLMCopulaVCModel
 export GaussianCopulaVCObs, GaussianCopulaVCModel
 
-export GVCVec
+export GVCVec, GenR1
+export generate_R1_mixture_Normal
 
 """
 GaussianCopulaVCObs
@@ -276,5 +277,6 @@ include("splitting_gradient.jl")
 include("splitting_hessian.jl")
 include("fit_new.jl")
 include("update_sigma_and_residuals.jl")
-include("generate_random_deviates.jl")
+include("generate_random_deviates_mixturemodel_R1.jl")
+include("generate_random_deviates_constructors.jl")
 end # module

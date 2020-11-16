@@ -67,80 +67,46 @@ function GVCVec(
     storage_n, storage_m, vecd)
 end   
 
-# ### sampling R_1 from the marginal density of R_1 ~ f(y_1 = R_1) where f in Normal(0, 1), Gamma(1.0, 1.0)
+### sampling R_1 from the marginal density of R_1 ~ f(y_1 = R_1) where f in Normal(0, 1), Gamma(1.0, 1.0)
 
-# """
-# GenR1
-# GenR1()
-# create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities, depending on the distribution.
-# """
-# struct GenR1{T <: BlasReal, D <: Distributions.UnivariateDistribution} #<: MathProgBase.AbstractNLPEvaluator
-#     # data
-#     R1::T
-#     Γ::Matrix{T}
-#     # normalizing constant
-#     trΓ::T
-#     # working arrays
-#     term1::T
-#     term23::T
-#     d::D
-# end
+"""
+GenR1
+GenR1()
+create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities, depending on the distribution.
+"""
+struct GenR1{T <: BlasReal, D <: Distributions.UnivariateDistribution} #<: MathProgBase.AbstractNLPEvaluator
+    # data
+    R1::T
+    Γ::Matrix{T}
+    # normalizing constant
+    trΓ::T
+    # working arrays
+    term1::T
+    term2::T
+    mixture_probabilities::Vector{T}
+    d::D
+end
 
-# function GenR1(
-#     Γ::Matrix{T},
-#     d::Normal{T},  # univariate density of R_1,
-#     R1::T) where {T <: BlasReal}    
-#     trΓ = tr(Γ)
-#     term1 = 1 + 0.5 * tr(Γ)
-#     term23 = 1 + 0.5 * (Γ[1, 1] *  R_1^2 + tr(Γ[2:end, 2:end]))
-#     GenR1{T, D}(R1, Γ, trΓ, term1, term23, d)
-# end
+"""
+GenR1
+GenR1()
+Let R1~N(0, 1) and create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities. 
+"""
+function GenR1(
+    Γ::Matrix{T},
+    d::D  # univariate density of R_1
+    ) where {T <: BlasReal, D <: Distributions.Normal{T}}  
+    trΓ = tr(Γ)
+    term1 = 1 + 0.5 * tr(Γ)
+    term2 = 1 + 0.5 * tr(Γ[2:end, 2:end])
+    mixture_probabilities = [inv(term1) * term2, inv(term1) * (0.25 * Γ[1, 1]), inv(term1) * (0.25 * Γ[1, 1])]
+    mixture_model = MixtureModel(
+    [Normal(0.0, 1.0),
+    Chi(3),
+    Chi(3)], mixture_probabilities
+    )
+    R1 = generate_R1_mixture_Normal(mixture_model)
+    GenR1{T, D}(R1, Γ, trΓ, term1, term2, mixture_probabilities, d)
+end
 
-# # create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities:
-
-# # create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities:
-# mixing_probabilities = [(1 + 0.5 * tr(Γ[2:end, 2:end])) / (1 + 0.5 * tr(Γ)), (0.25 * Γ[1, 1])/(1 + 0.5 * tr(Γ)), (0.25 * Γ[1, 1])/(1 + 0.5*tr(Γ))]
-
-# D_1 = MixtureModel(
-#    [Normal(0.0, 1.0),
-#    Chi(3),
-#    Chi(3)], mixing_probabilities
-#    )
-
-# function generate_R1_mixture(d::Distributions.Distribution)
-#     csamplers = map(sampler, d.components)
-#     psampler = sampler(d.prior)
-#     random_deviate = csamplers[rand(psampler)]
-    
-#     if typeof(random_deviate) == Normal{Float64}
-#         println("using standard normal")
-#         return rand(random_deviate)
-#     else
-#         println("if chi (3), one is positive and one is negative with equal probabilty")
-#         return rand([-1, 1]) * rand(random_deviate)
-#     end
-# end
-
-# R_1 = generate_R1_mixture(D_1)
-
-# # D_1 = MixtureModel(
-# #    [Normal(0.0, 1.0),
-# #    Chi(3),
-# #    Chi(3)], mixing_probabilities
-# #    )
-
-# # function generate_R1_mixture(d)
-# #     csamplers = map(sampler, d.components)
-# #     psampler = sampler(d.prior)
-# #     random_deviate = csamplers[rand(psampler)]
-    
-# #     if typeof(random_deviate) == Normal{Float64}
-# #         println("using standard normal")
-# #         return rand(random_deviate)
-# #     else
-# #         println("if chi (3), one is positive and one is negative with equal probabilty")
-# #         return rand([-1, 1]) * rand(random_deviate)
-# #     end
-# # end
-
-# # R_1 = generate_R1_mixture(D_1)
+# create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities:
