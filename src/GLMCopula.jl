@@ -18,6 +18,8 @@ export hessian_glm, hessian_copula_addendum, copula_hessian
 export GLMCopulaVCObs, GLMCopulaVCModel
 export GaussianCopulaVCObs, GaussianCopulaVCModel
 
+export GVCVec
+
 """
 GaussianCopulaVCObs
 GaussianCopulaVCObs(ys, X, V)
@@ -274,4 +276,5 @@ include("splitting_gradient.jl")
 include("splitting_hessian.jl")
 include("fit_new.jl")
 include("update_sigma_and_residuals.jl")
+include("generate_random_deviates.jl")
 end # module

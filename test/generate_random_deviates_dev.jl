@@ -45,7 +45,7 @@ D_1 = MixtureModel(
    Chi(3)], mixing_probabilities
    )
 
-function generate_R1_mixture(d)
+function generate_R1_mixture(d::Distributions.Distribution)
     csamplers = map(sampler, d.components)
     psampler = sampler(d.prior)
     random_deviate = csamplers[rand(psampler)]
