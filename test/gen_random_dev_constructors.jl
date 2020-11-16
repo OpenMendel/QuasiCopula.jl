@@ -36,4 +36,7 @@ gvc_vec2 = GVCVec(Γ_hardcoded, vector_distributions)
 # test our construction
 @test gvc_vec2.Γ == sum(gvc_vec2.Σ[k] * gvc_vec2.V[k] for k in 1:gvc_vec2.m)
 
-# GenR1(gvc_vec2.Γ, gvc_vec2.vecd[1], gvc_vec2.res[1])
+res1_obj = GenR1(gvc_vec2)
+
+@test res1_obj.gvc_vector.res[1] != 0.0
+

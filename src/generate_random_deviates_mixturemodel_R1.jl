@@ -1,4 +1,8 @@
-
+"""
+generate_R1_mixture_Normal
+generate_R1_mixture_Normal()
+Let R1~N(0, 1) and create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities.
+"""
 function generate_R1_mixture_Normal(d::Distributions.Distribution)
     csamplers = map(sampler, d.components)
     psampler = sampler(d.prior)

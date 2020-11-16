@@ -20,6 +20,7 @@ export GaussianCopulaVCObs, GaussianCopulaVCModel
 
 export GVCVec, GenR1
 export generate_R1_mixture_Normal
+export joint_density_value, crossterm_res 
 
 """
 GaussianCopulaVCObs
@@ -279,4 +280,5 @@ include("fit_new.jl")
 include("update_sigma_and_residuals.jl")
 include("generate_random_deviates_mixturemodel_R1.jl")
 include("generate_random_deviates_constructors.jl")
+include("gen_random_deviates_conditionaldensity.jl")
 end # module

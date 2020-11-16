@@ -68,45 +68,51 @@ function GVCVec(
 end   
 
 ### sampling R_1 from the marginal density of R_1 ~ f(y_1 = R_1) where f in Normal(0, 1), Gamma(1.0, 1.0)
-
-"""
-GenR1
-GenR1()
-create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities, depending on the distribution.
-"""
+# ####
+# """
+# GenR1
+# GenR1()
+# create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities, depending on the distribution.
+# """
 struct GenR1{T <: BlasReal, D <: Distributions.UnivariateDistribution} #<: MathProgBase.AbstractNLPEvaluator
     # data
-    R1::T
-    Γ::Matrix{T}
-    # normalizing constant
-    trΓ::T
+    gvc_vector::GVCVec{T, D} # we will update gvc_vector.res[1]
     # working arrays
     term1::T
     term2::T
-    mixture_probabilities::Vector{T}
-    d::D
 end
 
+
+### GAUSSIAN BASE ### 
 """
 GenR1
 GenR1()
-Let R1~N(0, 1) and create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities. 
+Let R1~N(0, 1) and create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities. Given d = distribution of R1.
 """
 function GenR1(
-    Γ::Matrix{T},
-    d::D  # univariate density of R_1
-    ) where {T <: BlasReal, D <: Distributions.Normal{T}}  
-    trΓ = tr(Γ)
-    term1 = 1 + 0.5 * tr(Γ)
-    term2 = 1 + 0.5 * tr(Γ[2:end, 2:end])
-    mixture_probabilities = [inv(term1) * term2, inv(term1) * (0.25 * Γ[1, 1]), inv(term1) * (0.25 * Γ[1, 1])]
+    gvc_vector::GVCVec{T, D},
+    d::Distributions.Normal{T}
+    ) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}  
+    term1 = 1 + 0.5 * gvc_vector.trΓ
+    term2 = 1 + 0.5 * tr(gvc_vector.Γ[2:end, 2:end])
+    mixture_probabilities = [inv(term1) * term2, inv(term1) * (0.25 * gvc_vector.Γ[1, 1]), inv(term1) * (0.25 * gvc_vector.Γ[1, 1])]
     mixture_model = MixtureModel(
     [Normal(0.0, 1.0),
     Chi(3),
     Chi(3)], mixture_probabilities
     )
-    R1 = generate_R1_mixture_Normal(mixture_model)
-    GenR1{T, D}(R1, Γ, trΓ, term1, term2, mixture_probabilities, d)
+    gvc_vector.res[1] = generate_R1_mixture_Normal(mixture_model)
+    GenR1{T, D}(gvc_vector, term1, term2)
 end
 
-# create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities:
+"""
+GenR1
+GenR1()
+Let R1~N(0, 1) and create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities. Just given without distribution of R1
+"""
+function GenR1(
+    gvc_vector::GVCVec{T, D}
+    ) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}  
+    GenR1(gvc_vector, gvc_vector.vecd[1])
+end
+
