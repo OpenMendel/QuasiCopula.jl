@@ -43,18 +43,18 @@ res1_obj = genR1(gvc_vec2)
 
 # create the vector object given just the total variance Γ, now let r_1 ~ gamma(1, 1)
 vector_distributions_gamma1 = [d2, d3, d4, d5, d1]
-gvc_vec3 = GVCVec(Γ_hardcoded, vector_distributions_gamma1)
+gvc_vec = GVCVec(Γ_hardcoded, vector_distributions_gamma1)
 
 # simulating the first residual using marginal distribution as a mixture model.
-genR1(gvc_vec3)
-@test gvc_vec3.res[1] != 0.0
+# genR1(gvc_vec)
+# @test gvc_vec.res[1] != 0.0
 
 ##### inverse cdf method using Roots.jl ###
 # using Roots
 
 # conditional_cdf(x) =  x^5 - x + 1/2
-# uniform_cdf(x)
-# F(x) = conditional_cdf(x) - uniform_cdf(x)
+# uniform = rand()
+# F(x) = conditional_cdf(x) - uniform
 # find_zero(F, (0, 1))
 
 ##### above we have checked that we write to res[1] the first residual value simulated from the mixture density.

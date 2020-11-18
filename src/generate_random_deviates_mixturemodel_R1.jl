@@ -52,28 +52,34 @@ function genR1!(
 end
 
 #### Gamma Base ######
-"""
-genR1
-genR1()
-Let R1~ Gamma(α, θ) and create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities. Given d = distribution of R1.
-"""
-function genR1!(
-    gvc_vector::GLMCopula.GVCVec{T, D},
-    d::Distributions.Gamma{T}
-    ) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}  
-    term1 = 1 + 0.5 * gvc_vector.trΓ
-    term2 = 1 + 0.5 * tr(gvc_vector.Γ[2:end, 2:end])
-    α, θ = params(d) # shape and scale of gamma
-    # normalizing constant
-    c = (StatsFuns.gamma(α + 2)/ StatsFuns.gamma(α)) * θ^2
-    mixture_probabilities = [inv(term1) * term2, inv(term1) * (0.25 * c * gvc_vector.Γ[1, 1])]
-    mixture_model = MixtureModel(
-    [Gamma(α, θ), # Gamma(α, θ)
-    Gamma(α + 2, θ)], mixture_probabilities
-    )
-    gvc_vector.res[1] = rand(mixture_model)
-end
+# """
+# genR1
+# genR1()
+# Let R1~ Gamma(α = 1.0, θ = 1.0) and create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities. Given d = distribution of R1.
+# """
+# function genR1!(
+#     gvc_vector::GLMCopula.GVCVec{T, D},
+#     d::Distributions.Gamma{T}
+#     ) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}  
+#     term1 = 1 + 0.5 * gvc_vector.trΓ
+#     term2 = 1 + 0.5 * tr(gvc_vector.Γ[2:end, 2:end])
+#     α, θ = params(d) # shape and scale of gamma
+#     # normalizing constant
+#     c1 =  (StatsFuns.gamma(α + 1)/ StatsFuns.gamma(α)) * θ
+#     c2 = (StatsFuns.gamma(α + 2)/ StatsFuns.gamma(α)) * θ^2
+#     # mixture probabilities
+#     b0 = (inv(term1) * term2) + (inv(term1) * (0.5 * gvc_vector.Γ[1, 1] * (mean(d)^2/ var(d))))
+#     b1 = -inv(term1) * gvc_vector.Γ[1, 1] * mean(d) * c1
+#     b2 = inv(term1) * gvc_vector.Γ[1, 1] * inv(var(d)) * c2
+#     mixture_probabilities = [b0, b1, b2]
+#     mixture_model = MixtureModel(
+#     [Gamma(α, θ), # Gamma(α, θ)
+#     Gamma(α + 2, θ)], mixture_probabilities
+#     )
+#     gvc_vector.res[1] = rand(mixture_model)
+# end
 
+### we may not want to use mixture distribution just use the inverse cdf method.
 """
 generate_R1_mixture_Normal
 generate_R1_mixture_Normal()

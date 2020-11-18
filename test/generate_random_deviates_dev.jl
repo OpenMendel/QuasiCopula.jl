@@ -36,67 +36,68 @@ Random.seed!(12345)
 
 res = y - μ 
 
-# create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities:
-mixing_probabilities = [(1 + 0.5 * tr(Γ[2:end, 2:end])) / (1 + 0.5 * tr(Γ)), (0.25 * Γ[1, 1])/(1 + 0.5 * tr(Γ)), (0.25 * Γ[1, 1])/(1 + 0.5*tr(Γ))]
+#### mixture distribution exploration ##
+# # create first vector of residuals R_1 as a mixture of 3 distributions with mixing probabilities:
+# mixing_probabilities = [(1 + 0.5 * tr(Γ[2:end, 2:end])) / (1 + 0.5 * tr(Γ)), (0.25 * Γ[1, 1])/(1 + 0.5 * tr(Γ)), (0.25 * Γ[1, 1])/(1 + 0.5*tr(Γ))]
 
-D_1 = MixtureModel(
-   [Normal(0.0, 1.0),
-   Chi(3),
-   Chi(3)], mixing_probabilities
-   )
+# D_1 = MixtureModel(
+#    [Normal(0.0, 1.0),
+#    Chi(3),
+#    Chi(3)], mixing_probabilities
+#    )
 
-function generate_R1_mixture(d::Distributions.Distribution)
-    csamplers = map(sampler, d.components)
-    psampler = sampler(d.prior)
-    random_deviate = csamplers[rand(psampler)]
+# function generate_R1_mixture(d::Distributions.Distribution)
+#     csamplers = map(sampler, d.components)
+#     psampler = sampler(d.prior)
+#     random_deviate = csamplers[rand(psampler)]
     
-    if typeof(random_deviate) == Normal{Float64}
-        println("using standard normal")
-        return rand(random_deviate)
-    else
-        println("if chi (3), one is positive and one is negative with equal probabilty")
-        return rand([-1, 1]) * rand(random_deviate)
-    end
-end
+#     if typeof(random_deviate) == Normal{Float64}
+#         println("using standard normal")
+#         return rand(random_deviate)
+#     else
+#         println("if chi (3), one is positive and one is negative with equal probabilty")
+#         return rand([-1, 1]) * rand(random_deviate)
+#     end
+# end
 
-R_1 = generate_R1_mixture(D_1)
+# R_1 = generate_R1_mixture(D_1)
 
-# Y_1 = σ_0 * R_1 + μ[1]
+# # Y_1 = σ_0 * R_1 + μ[1]
 
-# generalized conditional density
+# # generalized conditional density
 
 
-# using our joint_density function
+# # using our joint_density function
 
-function joint_density_value(density, res)
-   pdf_vector = pdf(density, res)
-   joint_pdf = 1.0
-   for i in 1:length(pdf_vector)
-       joint_pdf = pdf_vector[i] * joint_pdf
-   end
-   return joint_pdf
-end
+# function joint_density_value(density, res)
+#    pdf_vector = pdf(density, res)
+#    joint_pdf = 1.0
+#    for i in 1:length(pdf_vector)
+#        joint_pdf = pdf_vector[i] * joint_pdf
+#    end
+#    return joint_pdf
+# end
 
-# this function will get the cross terms for s, and all the cross terms up to s if all = true; used in marginal density of i in S
-function crossterm_res(res, s; all = false)
-   results = []
-   if s == 1
-       return 0.0
-   elseif s > 1
-       if all == true
-           for i in 2:s
-               for j in 1:i - 1
-                   push!(results, res[i] * sum(res[j] * Γ[i, j]))
-               end
-           end
-       else
-           for j in 1:s - 1
-               push!(results, res[s] * sum(res[j] * Γ[s, j]))
-           end
-       end
-   end
-   return results
-end
+# # this function will get the cross terms for s, and all the cross terms up to s if all = true; used in marginal density of i in S
+# function crossterm_res(res, s, Γ; all = false)
+#    results = []
+#    if s == 1
+#        return 0.0
+#    elseif s > 1
+#        if all == true
+#            for i in 2:s
+#                for j in 1:i - 1
+#                    push!(results, res[i] * sum(res[j] * Γ[i, j]))
+#                end
+#            end
+#        else
+#            for j in 1:s - 1
+#                push!(results, res[s] * sum(res[j] * Γ[s, j]))
+#            end
+#        end
+#    end
+#    return results
+# end
 
 
 # STEP 2-n: then generate remaining components sequentially
@@ -108,7 +109,7 @@ end
 ############################################################################################################################################################################
 s = 1
 ################## hardcoded numerical check
-marginal_r1_hardcode = inv(1 + 0.5 * tr(Γ)) * (1/sqrt(2*pi)) * exp(-0.5 * res[s]^2) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
+marginal_r1_hardcode = inv(1 + 0.5 * tr(Γ)) * (1/sqrt(2*pi)) * exp(-0.5 * res[s]^2) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s, Γ)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
 # 0.3332318759238957
 
 #####################################################################################################################################################################
@@ -122,7 +123,7 @@ s = 1 # first we check for the marginal of r_1 and then we can use this general 
 term1 = 1 + 0.5 * transpose(res[1:s-1]) * Γ[1:s-1, 1:s-1] * res[1:s-1] +  0.5 * tr(Γ[s:end, s:end])
 @test term1 == 1 + 0.5 * tr(Γ)
 
-marginal_r_s1 = inv(term1)[1] * joint_density_value(d, res[1:s]) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s; all = true)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
+marginal_r_s1 = inv(term1)[1] * joint_density_value(d, res[1:s]) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s, Γ; all = true)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
 # 0.33323187592389564
 
 ################################################################################################################################################################################################
@@ -130,13 +131,13 @@ marginal_r_s1 = inv(term1)[1] * joint_density_value(d, res[1:s]) * [1 + (0.5 * s
 ############################################################################## NOW USING Recursive Conditional Formula # check if recursive conditional formula will work as expected ##########################################################################################################################################################
 ############################################################################################## in the normalizing constant of the conditional density ##############################################################################################################
 
-term2 = sum(crossterm_res(res, s)) # only for s = 1 do we have no cross terms
+term2 = sum(crossterm_res(res, s, Γ)) # only for s = 1 do we have no cross terms
 @test term2 == 0.0
 
 term3 = (0.5 * Γ[s, s] * (res[s]^2 - 1))
 # -0.4613819816401454
 
-@test [1 + 0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s) + sum(crossterm_res(res, s; all = true)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1] == (term1 + term2 + term3)[1] # using the marginal of R_S and conditional of R1| nothing, respectively
+@test [1 + 0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s) + sum(crossterm_res(res, s, Γ; all = true)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1] == (term1 + term2 + term3)[1] # using the marginal of R_S and conditional of R1| nothing, respectively
 @test marginal_r_s1 ≈ marginal_r1_hardcode
 # 0.33323187592389564
 
@@ -159,10 +160,10 @@ marginal_r1_r2_hardcode = inv(1 + 0.5 * tr(Γ)) * marginal_densities_s[1] * marg
 # 0.10187907575145581
 
 @test inv(1 + 0.5 * tr(Γ)) * joint_density_value(d, res[1:s]) == inv(1 + 0.5 * tr(Γ)) * marginal_densities_s[1] * marginal_densities_s[2] 
-@test 1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s; all = true)) == 1 + (0.5 * (Γ[1, 1] * res[1]^2 + Γ[2, 2] * res[2]^2)) + res[1] * res[2] * Γ[1, 2]
+@test 1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s,  Γ; all = true)) == 1 + (0.5 * (Γ[1, 1] * res[1]^2 + Γ[2, 2] * res[2]^2)) + res[1] * res[2] * Γ[1, 2]
 
 ### using marginal R_s where s = 2 formula:
-marginal_r_s2 = inv(1 + 0.5 * tr(Γ)) * joint_density_value(d, res[1:s]) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s; all = true)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
+marginal_r_s2 = inv(1 + 0.5 * tr(Γ)) * joint_density_value(d, res[1:s]) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s,  Γ; all = true)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
 # 0.10187907575145581
 
 @test marginal_r_s2 ≈ marginal_r1_r2_hardcode # check marginal of R_1, R_2 fits in the marginal R_S formula
@@ -180,7 +181,7 @@ term1_s2 = 1 + 0.5 * transpose(res[1:s-1]) * Γ[1:s-1, 1:s-1] * res[1:s-1] +  0.
 # @test 1 + 0.5 * (diagonal_terms2) + cross_terms2 + 0.5 * remainder_trace2 == term1
 # 3.0386180183598546
 
-term2_s2 = sum(crossterm_res(res, s))
+term2_s2 = sum(crossterm_res(res, s,  Γ))
 # 0.19529686717517308
 
 term3_s2 = (0.5 * Γ[s, s] * (res[s]^2 - 1))
@@ -197,14 +198,14 @@ conditional_r2_r1 = inv(term1_s2) * pdf(d, res[s]) * (term1_s2 + term2_s2 + term
 #############################################################################################################################################
 # bayes rule for conditional distribution of R_3 given R_1 and R_2
 s = 3
-marginal_r_s3 = inv(1 + 0.5 * tr(Γ)) * joint_density_value(d, res[1:s]) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s; all = true)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
+marginal_r_s3 = inv(1 + 0.5 * tr(Γ)) * joint_density_value(d, res[1:s]) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s,  Γ; all = true)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
 # 0.03661772700845761
 
 conditional_r3_r12_Bayes = marginal_r_s3 / marginal_r_s2
 # 0.3594234315375045
 
 @test sum(Γ[i, i] * res[i]^2 for i in 1:s) ≈ Γ[1, 1] * res[1]^2 + Γ[2, 2] * res[2]^2 + Γ[3, 3] * res[3]^2
-@test sum(crossterm_res(res, s; all = true)) == res[1] * res[2] * Γ[1, 2] + res[1] * res[3] * Γ[1, 3] + res[3] * res[2] * Γ[3, 2]
+@test sum(crossterm_res(res, s,  Γ; all = true)) == res[1] * res[2] * Γ[1, 2] + res[1] * res[3] * Γ[1, 3] + res[3] * res[2] * Γ[3, 2]
 
 marginal_densities_s = [(1/sqrt(2*pi)) * exp(-0.5 * res[i]^2) for i in 1:s]
 marginal_r1_r2_r3_hardcode = inv(1 + 0.5 * tr(Γ)) * marginal_densities_s[1] * marginal_densities_s[2] *  marginal_densities_s[3] * [1 + 0.5 * Γ[1, 1] * res[1]^2 + 0.5 * Γ[2, 2] * res[2]^2 + 0.5 * Γ[3, 3] * res[3]^2 + res[1] * res[2] * Γ[1, 2] + res[1] * res[3] * Γ[1, 3] + res[3] * res[2] * Γ[3, 2] + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
@@ -220,7 +221,7 @@ t1 = 1 + 0.5 * (Γ[1, 1] * res[1]^2 + Γ[2, 2] * res[2]^2) + res[1] * res[2] * �
 @test term1_s3 == t1
 # 2.9808259645359545
 
-term2_s3 = sum(crossterm_res(res, s))
+term2_s3 = sum(crossterm_res(res, s,  Γ))
 # 0.27113634223316985
 
 term3_s3 = (0.5 * Γ[s, s] * (res[s]^2 - 1))
@@ -237,14 +238,14 @@ conditional_r3_r12 = inv(term1_s3) * pdf(d, res[s]) * (term1_s3 + term2_s3 + ter
 ############################################################################################################################################################################################################################################################################################################
 s = 4
 @test (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) == 0.5 * Γ[1, 1] * res[1]^2 + 0.5 * Γ[2, 2] * res[2]^2 + 0.5 * Γ[3, 3] * res[3]^2 + 0.5 * Γ[4, 4] * res[4]^2
-@test sum(crossterm_res(res, s; all = true)) == res[1] * res[2] * Γ[1, 2] + res[1] * res[3] * Γ[1, 3] + res[3] * res[2] * Γ[3, 2] + res[4] * res[1] * Γ[4, 1]  + res[4] * res[2] * Γ[4, 2] + res[4] * res[3] * Γ[4, 3] 
+@test sum(crossterm_res(res, s,  Γ; all = true)) == res[1] * res[2] * Γ[1, 2] + res[1] * res[3] * Γ[1, 3] + res[3] * res[2] * Γ[3, 2] + res[4] * res[1] * Γ[4, 1]  + res[4] * res[2] * Γ[4, 2] + res[4] * res[3] * Γ[4, 3] 
 
 marginal_densities_s = [(1/sqrt(2*pi)) * exp(-0.5 * res[i]^2) for i in 1:s]
 marginal_r1_r2_r3_r4_hardcode = inv(1 + 0.5 * tr(Γ)) * marginal_densities_s[1] * marginal_densities_s[2] *  marginal_densities_s[3] * marginal_densities_s[4] * [1 + 0.5 * Γ[1, 1] * res[1]^2 + 0.5 * Γ[2, 2] * res[2]^2 + 0.5 * Γ[3, 3] * res[3]^2 + 0.5 * Γ[4, 4] * res[4]^2 +
  res[1] * res[2] * Γ[1, 2] + res[1] * res[3] * Γ[1, 3] + res[3] * res[2] * Γ[3, 2] + res[4] * res[1] * Γ[4, 1]  + res[4] * res[2] * Γ[4, 2] + res[4] * res[3] * Γ[4, 3] + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
 # 0.014029880582104255
 
-marginal_r_s4 = inv(1 + 0.5 * tr(Γ)) * joint_density_value(d, res[1:s]) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s; all = true)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
+marginal_r_s4 = inv(1 + 0.5 * tr(Γ)) * joint_density_value(d, res[1:s]) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s,  Γ; all = true)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
 # 0.014029880582104253
 
 
@@ -262,7 +263,7 @@ t1 = 1 + 0.5 * (Γ[1, 1] * res[1]^2 + Γ[2, 2] * res[2]^2 + Γ[3, 3] * res[3]^2)
 @test term1_s4 == t1
 # 2.7901855525491914
 
-term2_s4 = sum(crossterm_res(res, s))
+term2_s4 = sum(crossterm_res(res, s,  Γ))
 # 0.8531432405546888
 
 term3_s4 = (0.5 * Γ[s, s] * (res[s]^2 - 1))
@@ -277,13 +278,13 @@ conditional_r4_r123 = inv(term1_s4) * pdf(d, res[s]) * (term1_s4 + term2_s4 + te
 ######
 s = 5
 @test (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) == 0.5 * Γ[1, 1] * res[1]^2 + 0.5 * Γ[2, 2] * res[2]^2 + 0.5 * Γ[3, 3] * res[3]^2 + 0.5 * Γ[4, 4] * res[4]^2 + 0.5 * Γ[5, 5] * res[5]^2
-@test sum(crossterm_res(res, s; all = true)) ≈  res[1] * res[2] * Γ[1, 2] + res[1] * res[3] * Γ[1, 3] + res[1] * res[5] * Γ[1, 5] + res[3] * res[2] * Γ[3, 2] + res[3] * res[5] * Γ[3, 5]  + res[4] * res[1] * Γ[4, 1]  + res[4] * res[2] * Γ[4, 2] + res[5] * res[2] * Γ[5, 2] + res[4] * res[3] * Γ[4, 3] + res[4] * res[5] * Γ[4, 5] 
+@test sum(crossterm_res(res, s, Γ; all = true)) ≈  res[1] * res[2] * Γ[1, 2] + res[1] * res[3] * Γ[1, 3] + res[1] * res[5] * Γ[1, 5] + res[3] * res[2] * Γ[3, 2] + res[3] * res[5] * Γ[3, 5]  + res[4] * res[1] * Γ[4, 1]  + res[4] * res[2] * Γ[4, 2] + res[5] * res[2] * Γ[5, 2] + res[4] * res[3] * Γ[4, 3] + res[4] * res[5] * Γ[4, 5] 
 
 marginal_densities_s = [(1/sqrt(2*pi)) * exp(-0.5 * res[i]^2) for i in 1:s]
 marginal_r1_r2_r3_r4_r5_hardcode = inv(1 + 0.5 * tr(Γ)) * marginal_densities_s[1] * marginal_densities_s[2] *  marginal_densities_s[3] * marginal_densities_s[4] * marginal_densities_s[5] * [1 + 0.5 * Γ[1, 1] * res[1]^2 + 0.5 * Γ[2, 2] * res[2]^2 + 0.5 * Γ[3, 3] * res[3]^2 + 0.5 * Γ[4, 4] * res[4]^2 + 0.5 * Γ[5, 5] * res[5]^2 + res[1] * res[2] * Γ[1, 2] + res[1] * res[3] * Γ[1, 3] + res[1] * res[5] * Γ[1, 5] + res[3] * res[2] * Γ[3, 2] + res[3] * res[5] * Γ[3, 5]  + res[4] * res[1] * Γ[4, 1]  + res[4] * res[2] * Γ[4, 2] + res[5] * res[2] * Γ[5, 2] + res[4] * res[3] * Γ[4, 3] + res[4] * res[5] * Γ[4, 5] + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
 # 0.005057446050339986
 
-marginal_r_s5 = inv(1 + 0.5 * tr(Γ)) * joint_density_value(d, res[1:s]) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s; all = true)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
+marginal_r_s5 = inv(1 + 0.5 * tr(Γ)) * joint_density_value(d, res[1:s]) * [1 + (0.5 * sum(Γ[i, i] * res[i]^2 for i in 1:s)) + sum(crossterm_res(res, s,  Γ; all = true)) + 0.5 * tr(Γ[s+1:end, s+1:end])][1]
 # 0.005057446050339985
 
 
@@ -302,7 +303,7 @@ t1_5 = 1 + 0.5 * (Γ[1, 1] * res[1]^2 + Γ[2, 2] * res[2]^2 + Γ[3, 3] * res[3]^
 @test term1_s5 == t1_5
 # 2.7901855525491914
 
-term2_s5 = sum(crossterm_res(res, s))
+term2_s5 = sum(crossterm_res(res, s, Γ))
 # 0.8531432405546888
 
 term3_s5 = (0.5 * Γ[s, s] * (res[s]^2 - 1))
@@ -327,7 +328,7 @@ function recursive_conditional_densities(res, d; s = length(res))
         term1 = 1 + 0.5 * tr(Γ)
         # @test term1 == 1 + 0.5 * tr(Γ)
         
-        term2 = sum(crossterm_res(res, s)) # only for s = 1 do we have no cross terms
+        term2 = sum(crossterm_res(res, s, Γ)) # only for s = 1 do we have no cross terms
         # @test term2 == 0.0
 
         term3 = (0.5 * Γ[s, s] * (R_s^2 - 1))
@@ -336,7 +337,7 @@ function recursive_conditional_densities(res, d; s = length(res))
     elseif s > 1
         term1 = 1 + 0.5 * transpose(res[1:s-1]) * Γ[1:s-1, 1:s-1] * res[1:s-1] +  0.5 * tr(Γ[s:end, s:end])
 
-        term2 = sum(crossterm_res(res, s))
+        term2 = sum(crossterm_res(res, s,  Γ))
 
         term3 = (0.5 * Γ[s, s] * (R_s^2 - 1))
 
@@ -354,15 +355,67 @@ end
 @test recursive_conditional_densities(res, d; s = 4)[4] == 0.3831444966221897
 @test recursive_conditional_densities(res, d; s = 5)[4] == 0.36047677104187104
 
-# function recursive_sampling(R_1)
-#     #####
-    
-# end
+
+
+### for the hard coded values of res we will test if the function and constructors work.
+# specify distributions of the residuals
+d = Normal()
+vector_distributions = [d, d, d, d, d]
+
+######## FIRST SIMULATE Y_1 ##############
+#### USER SPECIFIES:
+n_1 = 5 # 5 observations in the fist vector
+Γ = ones(n_1, n_1)
+σ_0 = 1.0 # per subject level noise
+# covariates
+p = 3
+Random.seed!(12345)
+y = rand(n_1)
+
+Random.seed!(12345)
+X = rand(n_1, 3)
+
+# initialize beta and mu as eta for the normal density
+Random.seed!(12345)
+β = rand(3)
+# link function is identity for the normal density
+μ = X*β
+
+res = y - μ 
+
+gvc_vec = GVCVec(Γ, vector_distributions)
+gvc_vec.res .= res
+
+conditional_terms!(gvc_vec)
+# pdf
+## check to see the implementation is the same at the evaluated res
+@test gvc_vec.conditional_pdf[1](res[1]) == 0.33323187592389564
+@test gvc_vec.conditional_pdf[2](res[2]) == 0.30573028306188565
+@test gvc_vec.conditional_pdf[3](res[3]) == 0.35942343153750456
+@test gvc_vec.conditional_pdf[4](res[4]) == 0.3831444966221897
+@test gvc_vec.conditional_pdf[5](res[5]) == 0.36047677104187104
+@test gvc_vec.conditional_pdf[4](res[4]) == inv(gvc_vec.term1[4]) * pdf(gvc_vec.vecd[4], gvc_vec.res[4]) * (gvc_vec.term1[4] + gvc_vec.term2[4] + gvc_vec.term3[4](res[4]))
+
+# cdf
+# @test gvc_vec.conditional_cdf[1](res[1])
+
+# function recursive_conditional_densities(gvc; s = length(res))
+#     term1, term2, term3 = (0.0, 0.0, 0.0)
+#     for i in 1:length(res)
+#         term1 = 1 + 0.5 * transpose(res[1:s-1]) * Γ[1:s-1, 1:s-1] * res[1:s-1] +  0.5 * tr(Γ[s:end, s:end])
+
+#         term2 = sum(crossterm_res(res, s, Γ))
+
+#         term3 = (0.5 * Γ[s, s] * (R_s^2 - 1))
+
+#         conditional_pdf = inv(term1) * pdf(d, R_s) * (term1 + term2 + term3)
+#     end
+
 
 # function f(x)
 #     term1 = 1 + 0.5 * transpose(res[1:s-1]) * Γ[1:s-1, 1:s-1] * res[1:s-1] +  0.5 * tr(Γ[s:end, s:end])
 
-#     term2 = sum(crossterm_res(res, s))
+#     term2 = sum(crossterm_res(res, s, Γ))
 
 #     term3 = (0.5 * Γ[s, s] * (x^2 - 1))
 
@@ -371,7 +424,7 @@ end
 # end
 
 # # this function will get the cross terms for s, and all the cross terms up to s if all = true; used in marginal density of i in S
-# function crossterm_res(res, s; all = false)
+# function crossterm_res(res, s, Γ; all = false)
 #     results = []
 #     if s == 1
 #         return 0.0
