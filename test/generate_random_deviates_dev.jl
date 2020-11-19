@@ -386,15 +386,29 @@ res = y - μ
 gvc_vec = GVCVec(Γ, vector_distributions)
 gvc_vec.res .= res
 
+# conditional_terms_ken!(gvc_vec)
+# # conditional pdf using the original version in kens notes
+# ## check to see the implementation is the same at the evaluated res
+# @test gvc_vec.conditional_pdf[1](res[1]) == 0.33323187592389564
+# @test gvc_vec.conditional_pdf[2](res[2]) == 0.30573028306188565
+# @test gvc_vec.conditional_pdf[3](res[3]) == 0.35942343153750456
+# @test gvc_vec.conditional_pdf[4](res[4]) == 0.3831444966221897
+# @test gvc_vec.conditional_pdf[5](res[5]) == 0.36047677104187104
+
+## using the simplified version in huas notes
+gvc_vec = GVCVec(Γ, vector_distributions)
+gvc_vec.res .= res
+
 conditional_terms!(gvc_vec)
+conditional_pdf_cdf!(gvc_vec)
 # pdf
 ## check to see the implementation is the same at the evaluated res
-@test gvc_vec.conditional_pdf[1](res[1]) == 0.33323187592389564
-@test gvc_vec.conditional_pdf[2](res[2]) == 0.30573028306188565
-@test gvc_vec.conditional_pdf[3](res[3]) == 0.35942343153750456
-@test gvc_vec.conditional_pdf[4](res[4]) == 0.3831444966221897
-@test gvc_vec.conditional_pdf[5](res[5]) == 0.36047677104187104
-@test gvc_vec.conditional_pdf[4](res[4]) == inv(gvc_vec.term1[4]) * pdf(gvc_vec.vecd[4], gvc_vec.res[4]) * (gvc_vec.term1[4] + gvc_vec.term2[4] + gvc_vec.term3[4](res[4]))
+# @test gvc_vec.conditional_pdf[1](res[1]) == 0.33323187592389564
+# @test gvc_vec.conditional_pdf[2](res[2]) == 0.30573028306188565
+# @test gvc_vec.conditional_pdf[3](res[3]) == 0.35942343153750456
+# @test gvc_vec.conditional_pdf[4](res[4]) == 0.3831444966221897
+# @test gvc_vec.conditional_pdf[5](res[5]) == 0.36047677104187104
+
 
 # cdf
 # @test gvc_vec.conditional_cdf[1](res[1])

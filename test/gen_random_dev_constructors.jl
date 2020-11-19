@@ -1,8 +1,6 @@
 using DataFrames, MixedModels, Random, GLMCopula, GLM, StatsFuns
 using ForwardDiff, Test, LinearAlgebra, Distributions
 using LinearAlgebra: BlasReal, copytri!
-
-
 m = 3
 n = 5
 
@@ -31,32 +29,23 @@ gvc_vec1 = GVCVec(V, Σ, vector_distributions)
 
 ####
 # create the vector object given just the total variance Γ
-gvc_vec2 = GVCVec(Γ_hardcoded, vector_distributions)
+gvc_vec = GVCVec(Γ_hardcoded, vector_distributions)
 
 # test our construction
-@test gvc_vec2.Γ == sum(gvc_vec2.Σ[k] * gvc_vec2.V[k] for k in 1:gvc_vec2.m)
+@test gvc_vec.Γ == sum(gvc_vec.Σ[k] * gvc_vec.V[k] for k in 1:gvc_vec.m)
 
-
+##### we may not do this for the first observation, maybe just cdf method. 
+#####
+#####   mixture distribution ###############
+#####
+#####
 # simulating the first residual using marginal distribution as a mixture model.
-res1_obj = genR1(gvc_vec2)
-@test gvc_vec2.res[1] != 0.0
-
+# genR1(gvc_vec)
+# @test gvc_vec.res[1] != 0.0
 # create the vector object given just the total variance Γ, now let r_1 ~ gamma(1, 1)
-vector_distributions_gamma1 = [d2, d3, d4, d5, d1]
-gvc_vec = GVCVec(Γ_hardcoded, vector_distributions_gamma1)
+# vector_distributions_gamma1 = [d2, d3, d4, d5, d1]
+# gvc_vec = GVCVec(Γ_hardcoded, vector_distributions_gamma1)
 
 # simulating the first residual using marginal distribution as a mixture model.
 # genR1(gvc_vec)
 # @test gvc_vec.res[1] != 0.0
-
-##### inverse cdf method using Roots.jl ###
-# using Roots
-
-# conditional_cdf(x) =  x^5 - x + 1/2
-# uniform = rand()
-# F(x) = conditional_cdf(x) - uniform
-# find_zero(F, (0, 1))
-
-##### above we have checked that we write to res[1] the first residual value simulated from the mixture density.
-# we have checked for normal and gamma.
-##### next we will start to simulate from the conditional density of R_2 | R_1

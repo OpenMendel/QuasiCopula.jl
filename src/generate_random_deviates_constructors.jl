@@ -27,6 +27,7 @@ struct GVCVec{T <: BlasReal, D <: Distributions.UnivariateDistribution} #<: Math
     term3::Vector{Any}
     conditional_pdf::Vector{Any}
     conditional_cdf::Vector{Any}
+    rsminus1_γis::Vector{T}
     storage_n::Vector{T}
     storage_m::Vector{T}
     vecd::Vector{D}
@@ -47,9 +48,10 @@ function GVCVec(
     term3 = Vector{Any}(undef, n)
     conditional_pdf = Vector{Any}(undef, n)
     conditional_cdf = Vector{Any}(undef, n)
+    rsminus1_γis = Vector{T}(undef, n)
     storage_n = Vector{T}(undef, n)
     storage_m = Vector{T}(undef, m)
-    GVCVec(n, m, res, Y, V, Σ, Γ, trΓ, term1, term2, term3, conditional_pdf, conditional_cdf,
+    GVCVec(n, m, res, Y, V, Σ, Γ, trΓ, term1, term2, term3, conditional_pdf, conditional_cdf, rsminus1_γis,
         storage_n, storage_m, vecd)
 end
 
@@ -69,27 +71,9 @@ function GVCVec(
     term3 = Vector{Any}(undef, n)
     conditional_pdf = Vector{Any}(undef, n)
     conditional_cdf = Vector{Any}(undef, n)
+    rsminus1_γis = Vector{T}(undef, n)
     storage_n = Vector{T}(undef, n)
     storage_m = Vector{T}(undef, m)
-    GVCVec(n, m, res, Y, V, Σ, Γ, trΓ, term1, term2, term3, conditional_pdf, conditional_cdf,
+    GVCVec(n, m, res, Y, V, Σ, Γ, trΓ, term1, term2, term3, conditional_pdf, conditional_cdf, rsminus1_γis,
     storage_n, storage_m, vecd)
 end   
-
-
-#######################################################################################################################################
-#######################################################################################################################################
-#######################################################################################################################################
-## currently for normal density it is using the residuals to simulate the vectors.
-
-function conditional_terms!(gvc_vec::GVCVec{T, D}) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}  
-    for i in 1:gvc_vec.n
-        gvc_vec.term1[i] = 1 + 0.5 * transpose( gvc_vec.res[1:i-1]) *  gvc_vec.Γ[1:i-1, 1:i-1] *  gvc_vec.res[1:i-1] +  0.5 * tr( gvc_vec.Γ[i:end, i:end])
-        gvc_vec.term2[i] = sum(crossterm_res( gvc_vec.res, i, gvc_vec.Γ))
-        fun(x) = (0.5 * gvc_vec.Γ[i, i] * (x^2 - 1))
-        gvc_vec.term3[i] = fun
-        fun2(x) = inv(gvc_vec.term1[i]) * pdf(gvc_vec.vecd[i], x) * (gvc_vec.term1[i] +  gvc_vec.term2[i] +  gvc_vec.term3[i](x))
-        gvc_vec.conditional_pdf[i] = fun2
-        # fun3(x) = inv(gvc_vec.term1[i]) * (gvc_vec.term1[i] - 0.5 * Γ[i, i]) * cdf(gvc_vec.vecd[i], x) - sum(gvc_vec.res[j] * gvc_vec.Γ[i, j] for j in 1:i-1) * gvc_vec.conditional_pdf[i](res[i]) + 0.5 * Γ[i, i] * (0.5 + 0.5 * sign(x) * cdf(Chisq(3), x^2))
-        # gvc_vec.conditional_cdf[i] = fun3
-    end
-end
