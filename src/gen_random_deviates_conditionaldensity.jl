@@ -72,13 +72,11 @@ function conditional_pdf_cdf!(gvc_vec::GVCVec{T, D}) where {T <: BlasReal, D <: 
     end
 end
 
-
 # This function is the user interface on object. Recursively fills up the residual vector.
-function generate_res_vec!(gvc_vec::GVCVec{T, D}; seed = 1234) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}
+function generate_res_vec!(gvc_vec::GVCVec{T, D}) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}
     for i in 1:gvc_vec.n
         conditional_terms!(gvc_vec) 
         conditional_pdf_cdf!(gvc_vec)
-        Random.seed!(seed)
         gvc_vec.storage_n[i] = rand(Uniform(0, 1)) # simulate uniform random variable U1~uni(0, 1)
         F_r(x) = gvc_vec.conditional_cdf[i](x)[1] - gvc_vec.storage_n[i] # make new function that subtracts the uniform value we simulated from conditonal cdf
         gvc_vec.res[i] = find_zero(F_r, (-50, 50), Roots.Bisection())

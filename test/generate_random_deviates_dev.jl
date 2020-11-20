@@ -403,7 +403,9 @@ conditional_terms!(gvc_vec)
 conditional_pdf_cdf!(gvc_vec)
 # pdf
 ## check to see the implementation is the same at the evaluated res
-# @test gvc_vec.conditional_pdf[1](res[1]) == 0.33323187592389564
+@test gvc_vec.conditional_pdf[1](res[1]) == 0.33323187592389564
+
+# check these 
 # @test gvc_vec.conditional_pdf[2](res[2]) == 0.30573028306188565
 # @test gvc_vec.conditional_pdf[3](res[3]) == 0.35942343153750456
 # @test gvc_vec.conditional_pdf[4](res[4]) == 0.3831444966221897
