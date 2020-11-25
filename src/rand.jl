@@ -1,6 +1,6 @@
 @reexport using Distributions
 import Distributions: mean, var, logpdf, pdf, cdf, maximum, minimum, insupport, quantile
-export ContinuousUnivariateCopula
+export ContinuousUnivariateCopula, marginal_pdf_constants
 
 """
     ContinuousUnivariateCopula(d, c0, c1, c2)
@@ -26,6 +26,28 @@ function ContinuousUnivariateCopula(
     c  = inv(c0 + c1 * mean(d) + c2 * (var(d) + abs2(mean(d))))
     Tc = typeof(c)
     ContinuousUnivariateCopula(d, Tc(c0), Tc(c1), Tc(c2), c)
+end
+
+# this function will fill out the appropriate constants to form the ContinuousUnivariateCopula structure. 
+function marginal_pdf_constants(Γ::Matrix{T}, dist::Union{Gamma{T}, Beta{T}, Exponential{T}}) where T <: Real
+    μ = mean(dist)
+    σ2 = var(dist)
+    c_0 = μ^2 * inv(σ2)
+    c_1 = -2μ * inv(σ2)
+    c_2 = inv(σ2)
+    c0 = 1 + 0.5 * tr(Γ[2:end, 2:end]) + 0.5 * Γ[1, 1] * c_0
+    c1 = 0.5 * Γ[1, 1] * c_1
+    c2 = 0.5 * Γ[1, 1] * c_2
+    ContinuousUnivariateCopula(dist, c0, c1, c2)
+end
+
+# this function will fill out the appropriate constants to form the ContinuousUnivariateCopula
+# structure when y ~ Normal. We will use the base distribution of the standardized residuals
+# (standard normal) here instead.
+function marginal_pdf_constants(Γ::Matrix{T}, dist::Normal{T}) where T <: Real
+    c0 = 1 + 0.5 * tr(Γ[2:end, 2:end])
+    c2 = 0.5 * Γ[1, 1]
+    ContinuousUnivariateCopula(dist, c0, 0.0, c2)
 end
 
 minimum(d::ContinuousUnivariateCopula) = minimum(d.d)
@@ -94,53 +116,44 @@ function cdf(d::ContinuousUnivariateCopula{Gamma{T},T}, x::Real) where T <: Real
     result *= d.c
 end
 
-# this function specialized to exponential base distribution
-# function cdf(d::ContinuousUnivariateCopula{Exponential{T},T}, x::Real) where T <: Real
-#     λ = params(d.d)
-#     # normalizing_c1 = 
-#     # normalizing_c2 = 
-#     result  = d.c0 * cdf(d.d, x)
-#     result += d.c1 * normalizing_c1 * cdf(Exponential(), x)
-#     result += d.c2 * normalizing_c2 * cdf(Exponential(), x)
-#     result *= d.c
-# end
+#this function specialized to exponential base distribution
+function cdf(d::ContinuousUnivariateCopula{Exponential{T},T}, x::Real) where T <: Real
+    θ = params(d.d)[1]
+    normalizing_c1 = θ * (StatsFuns.gamma(2)/ StatsFuns.gamma(1))
+    normalizing_c2 = θ^2 * (StatsFuns.gamma(3)/ StatsFuns.gamma(1))
+    result  = d.c0 * cdf(d.d, x)
+    result += d.c1 * normalizing_c1 * cdf(Gamma(2, θ), x)
+    result += d.c2 * normalizing_c2 * cdf(Gamma(3, θ), x)
+    result *= d.c
+end
 
 # this function specialized to beta base distribution
-# function cdf(d::ContinuousUnivariateCopula{Beta{T},T}, x::Real) where T <: Real
-#     α, β = params(d.d)
-#     # normalizing_c1 = 
-#     # normalizing_c2 = 
-#     result  = d.c0 * cdf(d.d, x)
-#     result += d.c1 * normalizing_c1 * cdf(Beta(), x)
-#     result += d.c2 * normalizing_c2 * cdf(Beta(), x)
-#     result *= d.c
-# end
+function cdf(d::ContinuousUnivariateCopula{Beta{T},T}, x::Real) where T <: Real
+    α, β = params(d.d)
+    normalizing_c1 = inv(StatsFuns.gamma(α) * StatsFuns.gamma(α + β + 1)) * (StatsFuns.gamma(α + β) * StatsFuns.gamma(α + 1))
+    normalizing_c2 = inv(StatsFuns.gamma(α) * StatsFuns.gamma(α + β + 2)) * (StatsFuns.gamma(α + β) * StatsFuns.gamma(α + 2))
+    result  = d.c0 * cdf(d.d, x)
+    result += d.c1 * normalizing_c1 * cdf(Beta(α + 1, β), x)
+    result += d.c2 * normalizing_c2 * cdf(Beta(α + 2, β), x)
+    result *= d.c
+end
 
+# alpha > 1
 function quantile(d::ContinuousUnivariateCopula{Gamma{T}, T}, p::T) where T <: Real
     α, θ = params(d.d)
-    if α > 1
-        Distributions.quantile_newton(d, p, (d.d.α - 1) * d.d.θ)
-    else
-        Distributions.quantile_newton(d, p, mean(d.d))
-    end
+    Distributions.quantile_newton(d, p, (d.d.α - 1) * d.d.θ)
 end
 
 function quantile(d::ContinuousUnivariateCopula{Normal{T}, T}, p::T) where T <: Real
     Distributions.quantile_newton(d, p, mean(d))
 end
 
-
 function quantile(d::ContinuousUnivariateCopula{Exponential{T}, T}, p::T) where T <: Real
     Distributions.quantile_newton(d, p, mode(d.d))
 end
 
+# since Beta density has finite extrema, we can use the bisection method to implement the inverse cdf sampling 
 function quantile(d::ContinuousUnivariateCopula{Beta{T}, T}, p::T) where T <: Real
-    α, β = params(d.d)
-    if α > 1 && β > 1
-        Distributions.quantile_newton(d, p, mode(d.d))
-    elseif α <= 1 && β > 1
-        Distributions.quantile_newton(d, p, 0.0)
-    elseif α > 1 && β <= 1 
-        Distributions.quantile_newton(d, p, 1.0)
-    end
+    min, max = extrema(d.d) 
+    Distributions.quantile_bisect(d, p, min, max, 1.0e-12)
 end

@@ -18,9 +18,9 @@ export hessian_glm, hessian_copula_addendum, copula_hessian
 export GLMCopulaVCObs, GLMCopulaVCModel
 export GaussianCopulaVCObs, GaussianCopulaVCModel
 
-export GVCVec, conditional_terms!, conditional_pdf_cdf!, generate_res_vec!
+# export GVCVec, conditional_terms!, conditional_pdf_cdf!, generate_res_vec!
 # export generate_R1_mixture_Normal, genR1
-export joint_density_value, crossterm_res 
+# export joint_density_value, crossterm_res 
 
 """
 GaussianCopulaVCObs
