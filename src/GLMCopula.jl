@@ -20,7 +20,7 @@ export GaussianCopulaVCObs, GaussianCopulaVCModel
 
 # export GVCVec, conditional_terms!, conditional_pdf_cdf!, generate_res_vec!
 # export generate_R1_mixture_Normal, genR1
-# export joint_density_value, crossterm_res 
+# export joint_density_value, crossterm_res
 
 """
 GaussianCopulaVCObs
@@ -278,7 +278,8 @@ include("splitting_gradient.jl")
 include("splitting_hessian.jl")
 include("fit_new.jl")
 include("update_sigma_and_residuals.jl")
-include("rand.jl")
+include("continuous_rand.jl")
+include("discrete_rand.jl")
 # include("generate_random_deviates_constructors.jl")
 # include("generate_random_deviates_mixturemodel_R1.jl")
 # include("gen_random_deviates_conditionaldensity.jl")

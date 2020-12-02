@@ -1,6 +1,6 @@
 @reexport using Distributions
 import Distributions: mean, var, logpdf, pdf, cdf, maximum, minimum, insupport, quantile
-export ContinuousUnivariateCopula, marginal_pdf_constants
+export ContinuousUnivariateCopula, marginal_pdf_constants, mvsk_to_absm
 
 """
     ContinuousUnivariateCopula(d, c0, c1, c2)
@@ -138,10 +138,14 @@ function cdf(d::ContinuousUnivariateCopula{Beta{T},T}, x::Real) where T <: Real
     result *= d.c
 end
 
-# alpha > 1
+# Gamma has no mode when shape < 1.
 function quantile(d::ContinuousUnivariateCopula{Gamma{T}, T}, p::T) where T <: Real
     α, θ = params(d.d)
-    Distributions.quantile_newton(d, p, (d.d.α - 1) * d.d.θ)
+    if α ≥ 1
+        Distributions.quantile_newton(d, p, (d.d.α - 1) * d.d.θ)
+    else 
+        error("Gamma has no mode when shape < 1")
+    end
 end
 
 function quantile(d::ContinuousUnivariateCopula{Normal{T}, T}, p::T) where T <: Real
@@ -149,7 +153,7 @@ function quantile(d::ContinuousUnivariateCopula{Normal{T}, T}, p::T) where T <: 
 end
 
 function quantile(d::ContinuousUnivariateCopula{Exponential{T}, T}, p::T) where T <: Real
-    Distributions.quantile_newton(d, p, mode(d.d))
+    Distributions.quantile_newton(d, p, 0.0)
 end
 
 # since Beta density has finite extrema, we can use the bisection method to implement the inverse cdf sampling 
@@ -157,3 +161,17 @@ function quantile(d::ContinuousUnivariateCopula{Beta{T}, T}, p::T) where T <: Re
     min, max = extrema(d.d) 
     Distributions.quantile_bisect(d, p, min, max, 1.0e-12)
 end
+
+# function quantile(d::ContinuousUnivariateCopula{Beta{T}, T}, p::T) where T <: Real
+#     (α, β) = params(d.d)
+#     if (α > 1 && β > 1)
+#         Distributions.quantile_newton(d, p, (α - 1) * inv(α + β - 2))
+#     elseif (α ≤ 1 && β > 1)
+#         Distributions.quantile_newton(d, p, 0.0)
+#     elseif (α > 1 && β ≤ 1)
+#         Distributions.quantile_newton(d, p, 1.0)
+#     elseif (α < 1 && β < 1) # only when bimodal, use the bisection method.
+#         min, max = extrema(d.d) 
+#         Distributions.quantile_bisect(d, p, min, max, 1.0e-12)
+#     end
+# end
