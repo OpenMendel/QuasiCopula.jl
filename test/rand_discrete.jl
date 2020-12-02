@@ -139,4 +139,37 @@ end
 # sample mean = 1.4506; theoretical mean = 1.4600170162371608
 # sample var = 4.338793519351937; theoretical var = 4.395147436782838
 
+# ### Negative Binomial r = 5, p = 0.5 ### 
+@testset "NegativeBinomial(r = 5, p = 0.5) * (c0 + c1 * x + c2 * x^2);" begin
+Random.seed!(123)
+Γ = rand(5, 5)
+r, p = 5, 0.5
+dist = NegativeBinomial(r, p)
 
+# test if the proper c0, c1, c2 constants are stored.
+d_nb = marginal_pdf_constants(Γ, dist)
+@test d_nb.c ≈ inv(1 + 0.5 * tr(Γ))
+@test d_nb.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_nb.d)^2 * inv(var(d_nb.d)) * 0.5 * Γ[1,1])
+@test d_nb.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_nb.d) * inv(var(d_nb.d)))
+@test d_nb.c2 == 0.5 * Γ[1, 1] * (inv(var(d_nb.d)))
+
+μ = mean(dist)
+maximum = 50
+pmf = pmf_copula(maximum, d_nb)
+reordered_k, reordered_pmf = reorder_pmf(pmf, μ)
+@test sum(reordered_pmf) ≈ 1
+
+###
+Random.seed!(1234)
+nsample = 10_000 #
+@info "sample $nsample points for the $dist distribution using the Bisection method."
+s = Vector{Float64}(undef, nsample)
+discrete_rand!(maximum, d_nb, μ, s) # compile 
+@time discrete_rand!(maximum, d_nb, μ, s) # get time
+println("sample mean = $(Statistics.mean(s)); theoretical mean = $(GLMCopula.mean(d_nb))")
+println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_nb))")
+end
+
+# n = 10,0000 ::: time = 0.142361 seconds (40.00 k allocations: 18.921 MiB, 57.42% gc time)
+# sample mean = 5.3987; theoretical mean = 5.4600170162371615
+# sample var = 14.753013611361133; theoretical var = 14.848571523381025
