@@ -13,8 +13,8 @@ d_pois = marginal_pdf_constants(Γ, dist)
 @test d_pois.c2 == 0.5 * Γ[1, 1] * (inv(var(d_pois.d)))
 
 μ = 5
-maximum = 25
-pmf = pmf_copula(maximum, d_pois)
+max_value = 25
+pmf = pmf_copula(max_value, d_pois)
 reordered_k, reordered_pmf = reorder_pmf(pmf, μ)
 sum(reordered_pmf) ≈ 1
 
@@ -23,8 +23,8 @@ Random.seed!(1234)
 nsample = 10_000
 @info "sample $nsample points for the $dist distribution"
 s = Vector{Float64}(undef, nsample)
-discrete_rand!(maximum, d_pois, μ, s) # compile 
-@time discrete_rand!(maximum, d_pois, μ, s) # get time
+discrete_rand!(max_value, d_pois, μ, s) # compile 
+@time discrete_rand!(max_value, d_pois, μ, s) # get time
 println("sample mean = $(Statistics.mean(s)); theoretical mean = $(mean(d_pois))")
 println("sample var = $(Statistics.var(s)); theoretical var = $(var(d_pois))")
 end
@@ -48,8 +48,8 @@ d_binomial = marginal_pdf_constants(Γ, dist)
 @test d_binomial.c2 == 0.5 * Γ[1, 1] * (inv(var(d_binomial.d)))
 
 μ = mean(dist)
-maximum = 30
-pmf = pmf_copula(maximum, d_binomial)
+max_value = 30
+pmf = pmf_copula(max_value, d_binomial)
 reordered_k, reordered_pmf = reorder_pmf(pmf, μ)
 @test sum(reordered_pmf) ≈ 1
 
@@ -58,8 +58,8 @@ Random.seed!(1234)
 nsample = 10_000 #
 @info "sample $nsample points for the $dist distribution using the Bisection method."
 s = Vector{Float64}(undef, nsample)
-discrete_rand!(maximum, d_binomial, μ, s) # compile 
-@time discrete_rand!(maximum, d_binomial, μ, s) # get time
+discrete_rand!(max_value, d_binomial, μ, s) # compile 
+@time discrete_rand!(max_value, d_binomial, μ, s) # get time
 println("sample mean = $(Statistics.mean(s)); theoretical mean = $(GLMCopula.mean(d_binomial))")
 println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_binomial))")
 end
@@ -83,18 +83,18 @@ d_geometric = marginal_pdf_constants(Γ, dist)
 @test d_geometric.c2 == 0.5 * Γ[1, 1] * (inv(var(d_geometric.d)))
 
 μ = mean(dist)
-maximum = 200
-pmf = pmf_copula(maximum, d_geometric)
+max_value = 200
+pmf = pmf_copula(max_value, d_geometric)
 reordered_k, reordered_pmf = reorder_pmf(pmf, μ)
 @test sum(reordered_pmf) ≈ 1
 
 ###
 Random.seed!(1234)
 nsample = 10_000 #
-@info "sample $nsample points for the $dist distribution using the Bisection method."
+@info "sample $nsample points for the $dist distribution."
 s = Vector{Float64}(undef, nsample)
-discrete_rand!(maximum, d_geometric, μ, s) # compile 
-@time discrete_rand!(maximum, d_geometric, μ, s) # get time
+discrete_rand!(max_value, d_geometric, μ, s) # compile 
+@time discrete_rand!(max_value, d_geometric, μ, s) # get time
 println("sample mean = $(Statistics.mean(s)); theoretical mean = $(GLMCopula.mean(d_geometric))")
 println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_geometric))")
 end
@@ -119,18 +119,18 @@ d_geometric = marginal_pdf_constants(Γ, dist)
 @test d_geometric.c2 == 0.5 * Γ[1, 1] * (inv(var(d_geometric.d)))
 
 μ = mean(dist)
-maximum = 100
-pmf = pmf_copula(maximum, d_geometric)
+max_value = 100
+pmf = pmf_copula(max_value, d_geometric)
 reordered_k, reordered_pmf = reorder_pmf(pmf, μ)
 @test sum(reordered_pmf) ≈ 1
 
 ###
 Random.seed!(1234)
 nsample = 10_000 #
-@info "sample $nsample points for the $dist distribution using the Bisection method."
+@info "sample $nsample points for the $dist distribution."
 s = Vector{Float64}(undef, nsample)
-discrete_rand!(maximum, d_geometric, μ, s) # compile 
-@time discrete_rand!(maximum, d_geometric, μ, s) # get time
+discrete_rand!(max_value, d_geometric, μ, s) # compile 
+@time discrete_rand!(max_value, d_geometric, μ, s) # get time
 println("sample mean = $(Statistics.mean(s)); theoretical mean = $(GLMCopula.mean(d_geometric))")
 println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_geometric))")
 end
@@ -154,18 +154,18 @@ d_nb = marginal_pdf_constants(Γ, dist)
 @test d_nb.c2 == 0.5 * Γ[1, 1] * (inv(var(d_nb.d)))
 
 μ = mean(dist)
-maximum = 50
-pmf = pmf_copula(maximum, d_nb)
+max_value = 50
+pmf = pmf_copula(max_value, d_nb)
 reordered_k, reordered_pmf = reorder_pmf(pmf, μ)
 @test sum(reordered_pmf) ≈ 1
 
 ###
 Random.seed!(1234)
 nsample = 10_000 #
-@info "sample $nsample points for the $dist distribution using the Bisection method."
+@info "sample $nsample points for the $dist distribution."
 s = Vector{Float64}(undef, nsample)
-discrete_rand!(maximum, d_nb, μ, s) # compile 
-@time discrete_rand!(maximum, d_nb, μ, s) # get time
+discrete_rand!(max_value, d_nb, μ, s) # compile 
+@time discrete_rand!(max_value, d_nb, μ, s) # get time
 println("sample mean = $(Statistics.mean(s)); theoretical mean = $(GLMCopula.mean(d_nb))")
 println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_nb))")
 end

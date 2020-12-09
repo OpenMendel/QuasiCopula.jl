@@ -4,6 +4,7 @@ module PkgTest
 # include("gen_gaussian_conditional.jl")
 include("randtest.jl")
 include("rand_discrete.jl")
+include("multivariate_rand.jl")
 # include("dyestuff.jl")
 # include("simulate_logistic_mixedmodels.jl")
 # include("simulate_poisson_mixedmodels.jl")
