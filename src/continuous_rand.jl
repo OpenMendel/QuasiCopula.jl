@@ -28,41 +28,8 @@ function ContinuousUnivariateCopula(
     ContinuousUnivariateCopula(d, Tc(μ), Tc(σ2), Tc(c0), Tc(c1), Tc(c2), c)
 end
 
-# this function will fill out the appropriate constants to form the ContinuousUnivariateCopula structure. 
-function marginal_pdf_constants(Γ::Matrix{T}, dist::Union{Gamma{T}, Beta{T}, Exponential{T}}) where T <: Real
-    μ = mean(dist)
-    σ2 = var(dist)
-    c_0 = μ^2 * inv(σ2)
-    c_1 = -2μ * inv(σ2)
-    c_2 = inv(σ2)
-    c0 = 1 + 0.5 * tr(Γ[2:end, 2:end]) + 0.5 * Γ[1, 1] * c_0
-    c1 = 0.5 * Γ[1, 1] * c_1
-    c2 = 0.5 * Γ[1, 1] * c_2
-    ContinuousUnivariateCopula(dist, c0, c1, c2)
-end
-
-# this function will fill out the appropriate constants to form the ContinuousUnivariateCopula
-# structure when y ~ Normal. We will use the base distribution of the standardized residuals
-# (standard normal) here instead.
-function marginal_pdf_constants(Γ::Matrix{T}, dist::Normal{T}) where T <: Real
-    c0 = 1 + 0.5 * tr(Γ[2:end, 2:end])
-    c2 = 0.5 * Γ[1, 1]
-    ContinuousUnivariateCopula(dist, c0, 0.0, c2)
-end
-
-
-# # this function will fill out the appropriate constants for conditional distribution to form the ContinuousUnivariateCopula structure. 
-function conditional_pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist::Normal{T}) where T <: Real
-    μ = mean(dist)
-    σ2 = var(dist)
-    c0 = 1 + 0.5 * transpose(res[1:i-1]) *  Γ[1:i-1, 1:i-1] *  res[1:i-1] +  0.5 * tr(Γ[i+1:end, i+1:end])
-    c1 = crossterm_res(res, i, Γ)[1]
-    c2 = 0.5 * Γ[i, i]
-    ContinuousUnivariateCopula(dist, c0, c1, c2)
-end
-
 # this function will fill out the appropriate constants for conditional distribution to form the ContinuousUnivariateCopula structure. 
-function conditional_pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist::Union{Gamma{T}, Beta{T}, Exponential{T}}) where T <: Real
+function pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist::ContinuousUnivariateDistribution) where T <: Real
     μ = mean(dist)
     σ2 = var(dist)
     c_0 = μ^2 * inv(σ2)
@@ -96,90 +63,97 @@ function crossterm_res(res::Vector{T}, s::Integer, Γ::Matrix{T}; all = false) w
     return results
  end
 
-"""
-gvc_vec_continuous
-gvc_vec_continuous()
-GLM copula variance component model vector of observations, which contains a vector of
-`ContinuousUnivariateCopula as data and appropriate vectorized fields for easy access when simulating from conditional densities.
-"""
-struct gvc_vec_continuous{T <: BlasReal, D <: Distributions.UnivariateDistribution} #<: MathProgBase.AbstractNLPEvaluator
-    # data
-    n::Int     # total number of singleton observations
-    m::Int          # number of variance components
-    gc_obs::Vector{ContinuousUnivariateCopula}
-    res::Vector{T}  # residual vector res_i
-    Y::Vector{T}
-    V::Vector{Matrix{T}}
-    Σ::Vector{T}
-    Γ::Matrix{T}
-    # normalizing constant
-    trΓ::T
-    ## conditionalterms::ConditionalTerms{T}
-    vecd::Vector{D}
-end
+ function update_res!(
+    Y::T,
+    res::T,
+    gc_obs::Union{ContinuousUnivariateCopula{D, T}, DiscreteUnivariateCopula{D, T}}) where {T <: BlasReal, D}
+    res = (Y - gc_obs.μ) * inv(sqrt(gc_obs.σ2))
+ end
 
-function gvc_vec_continuous(
-    V::Vector{Matrix{T}},
-    Σ::Vector{T},    # m-vector: [σ12, ..., σm2],
-    vecd::Vector{D}  # vector of univariate densities
-    ) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}
-    n, m = length(vecd), length(V)
-    res = Vector{T}(undef, n)  # simulated residual vector
-    Y = Vector{T}(undef, n)    # vector of simulated outcome values transformed from residuals using hypothesized densities
-    Γ = sum(Σ[k] * V[k] for k in 1:m)
-    gc_obs = Vector{ContinuousUnivariateCopula}(undef, n)
+# """
+# gvc_vec_continuous
+# gvc_vec_continuous()
+# GLM copula variance component model vector of observations, which contains a vector of
+# `ContinuousUnivariateCopula as data and appropriate vectorized fields for easy access when simulating from conditional densities.
+# """
+# struct gvc_vec_continuous{T <: BlasReal, D <: Distributions.UnivariateDistribution} #<: MathProgBase.AbstractNLPEvaluator
+#     # data
+#     n::Int     # total number of singleton observations
+#     m::Int          # number of variance components
+#     gc_obs::Vector{ContinuousUnivariateCopula}
+#     res::Vector{T}  # residual vector res_i
+#     Y::Vector{T}
+#     V::Vector{Matrix{T}}
+#     Σ::Vector{T}
+#     Γ::Matrix{T}
+#     # normalizing constant
+#     trΓ::T
+#     ## conditionalterms::ConditionalTerms{T}
+#     vecd::Vector{D}
+# end
 
-    # form constants for the marginal density
-    gc_obs[1] = marginal_pdf_constants(Γ, vecd[1])
-    # generate y_1 
-    Y[1] = rand(gc_obs[1])
+# function gvc_vec_continuous(
+#     V::Vector{Matrix{T}},
+#     Σ::Vector{T},    # m-vector: [σ12, ..., σm2],
+#     vecd::Vector{D}  # vector of univariate densities
+#     ) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}
+#     n, m = length(vecd), length(V)
+#     res = Vector{T}(undef, n)  # simulated residual vector
+#     Y = Vector{T}(undef, n)    # vector of simulated outcome values transformed from residuals using hypothesized densities
+#     Γ = sum(Σ[k] * V[k] for k in 1:m)
+#     gc_obs = Vector{ContinuousUnivariateCopula}(undef, n)
 
-    for i in 2:length(vecd)
-        # update residuals 1,..., i-1
-        res[i-1] = update_res!(Y[i-1], res[i-1], gc_obs[i-1])
-        # form constants for conditional density of i given 1, ..., i-1
-        gc_obs[i] = conditional_pdf_constants(Γ, res, i, vecd[i])
-        # generate y_i given y_1, ..., y_i-1
-        Y[i] = rand(gc_obs[i])
-     end
-    res[end] = update_res!(Y[end], res[end], gc_obs[end])
-    trΓ = tr(Γ)
-    gvc_vec_continuous(n, m, gc_obs, res, Y, V, Σ, Γ, trΓ, vecd)
-end
+#     # form constants for the marginal density
+#     gc_obs[1] = marginal_pdf_constants(Γ, vecd[1])
+#     # generate y_1 
+#     Y[1] = rand(gc_obs[1])
 
-function gvc_vec_continuous(
-    Γ::Matrix{T},
-    vecd::Vector{D}
-    ) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}
-    n = length(vecd)
-    m = 1
-    res = Vector{T}(undef, n)  # simulated residual vector
-    Y = Vector{T}(undef, n)    # vector of simulated outcome values transformed from residuals using hypothesized densities
-    V = [Γ]
-    Σ = ones(T, m)
-    gc_obs = Vector{ContinuousUnivariateCopula}(undef, n)
+#     for i in 2:length(vecd)
+#         # update residuals 1,..., i-1
+#         res[i-1] = update_res!(Y[i-1], res[i-1], gc_obs[i-1])
+#         # form constants for conditional density of i given 1, ..., i-1
+#         gc_obs[i] = conditional_pdf_constants(Γ, res, i, vecd[i])
+#         # generate y_i given y_1, ..., y_i-1
+#         Y[i] = rand(gc_obs[i])
+#      end
+#     res[end] = update_res!(Y[end], res[end], gc_obs[end])
+#     trΓ = tr(Γ)
+#     gvc_vec_continuous(n, m, gc_obs, res, Y, V, Σ, Γ, trΓ, vecd)
+# end
 
-    # form constants for the marginal density
-    gc_obs[1] = marginal_pdf_constants(Γ, vecd[1])
-    # generate y_1 
-    Y[1] = rand!(gc_obs[1], [Y[1]])[1]
+# function gvc_vec_continuous(
+#     Γ::Matrix{T},
+#     vecd::Vector{D}
+#     ) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}
+#     n = length(vecd)
+#     m = 1
+#     res = Vector{T}(undef, n)  # simulated residual vector
+#     Y = Vector{T}(undef, n)    # vector of simulated outcome values transformed from residuals using hypothesized densities
+#     V = [Γ]
+#     Σ = ones(T, m)
+#     gc_obs = Vector{ContinuousUnivariateCopula}(undef, n)
 
-    for i in 2:length(vecd)
-        # update residuals 1,..., i-1
-        res[i-1] = update_res!(Y[i-1], res[i-1], gc_obs[i-1])
-        # form constants for conditional density of i given 1, ..., i-1
-        gc_obs[i] = conditional_pdf_constants(Γ, res, i, vecd[i])
-        # generate y_i given y_1, ..., y_i-1
-        Y[i] = rand!(gc_obs[i], [Y[i]])[1]
-     end
-    res[end] = update_res!(Y[end], res[end], gc_obs[end])
-    trΓ = tr(Γ)
-    gvc_vec_continuous(n, m, gc_obs, res, Y, V, Σ, Γ, trΓ, vecd)
-end   
+#     # form constants for the marginal density
+#     gc_obs[1] = marginal_pdf_constants(Γ, vecd[1])
+#     # generate y_1 
+#     Y[1] = rand!(gc_obs[1], [Y[1]])[1]
 
-minimum(d::ContinuousUnivariateCopula) = minimum(d.d)
-maximum(d::ContinuousUnivariateCopula) = maximum(d.d)
-insupport(d::ContinuousUnivariateCopula) = insupport(d.d)
+#     for i in 2:length(vecd)
+#         # update residuals 1,..., i-1
+#         res[i-1] = update_res!(Y[i-1], res[i-1], gc_obs[i-1])
+#         # form constants for conditional density of i given 1, ..., i-1
+#         gc_obs[i] = conditional_pdf_constants(Γ, res, i, vecd[i])
+#         # generate y_i given y_1, ..., y_i-1
+#         Y[i] = rand!(gc_obs[i], [Y[i]])[1]
+#      end
+#     res[end] = update_res!(Y[end], res[end], gc_obs[end])
+#     trΓ = tr(Γ)
+#     gvc_vec_continuous(n, m, gc_obs, res, Y, V, Σ, Γ, trΓ, vecd)
+# end   
+
+minimum(d::Union{ContinuousUnivariateCopula, DiscreteUnivariateCopula}) = minimum(d.d)
+maximum(d::Union{ContinuousUnivariateCopula, DiscreteUnivariateCopula}) = maximum(d.d)
+insupport(d::Union{ContinuousUnivariateCopula, DiscreteUnivariateCopula}) = insupport(d.d)
 
 """
     mvsk_to_absm(μ, σ², sk, kt)
@@ -199,7 +173,7 @@ end
     mean(d::ContinuousUnivariateCopula)
 Theoretical mean under the copula model. 
 """
-function mean(d::ContinuousUnivariateCopula)
+function mean(d::Union{ContinuousUnivariateCopula, DiscreteUnivariateCopula})
     μ, σ², sk, kt = mean(d.d), var(d.d), skewness(d.d), kurtosis(d.d, false) # proper kurtosis (un-corrected) when false 
     m1, m2, m3, _ = mvsk_to_absm(μ, σ², sk, kt)
     d.c * (d.c0 * m1 + d.c1 * m2 + d.c2 * m3)
@@ -209,17 +183,17 @@ end
     var(d::ContinuousUnivariateCopula)
 Theoretical variance under the copula model. 
 """
-function var(d::ContinuousUnivariateCopula)
+function var(d::Union{ContinuousUnivariateCopula, DiscreteUnivariateCopula})
     μ, σ², sk, kt = mean(d.d), var(d.d), skewness(d.d), kurtosis(d.d, false)
     _, m2, m3, m4 = mvsk_to_absm(μ, σ², sk, kt)
     d.c * (d.c0 * m2 + d.c1 * m3 + d.c2 * m4) - abs2(mean(d))
 end
 
-function logpdf(d::ContinuousUnivariateCopula, x::Real)
+function logpdf(d::Union{ContinuousUnivariateCopula, DiscreteUnivariateCopula}, x::Real)
     log(d.c * (d.c0 + d.c1 * x + d.c2 * abs2(x))) + logpdf(d.d, x)
 end
 
-function pdf(d::ContinuousUnivariateCopula, x::Real)
+function pdf(d::Union{ContinuousUnivariateCopula, DiscreteUnivariateCopula}, x::Real)
     d.c * pdf(d.d, x) * (d.c0 + d.c1 * x + d.c2 * abs2(x))
 end
 
@@ -288,17 +262,3 @@ function quantile(d::ContinuousUnivariateCopula{Beta{T}, T}, p::T) where T <: Re
     min, max = extrema(d.d) 
     Distributions.quantile_bisect(d, p, min, max, 1.0e-12)
 end
-
-# function quantile(d::ContinuousUnivariateCopula{Beta{T}, T}, p::T) where T <: Real
-#     (α, β) = params(d.d)
-#     if (α > 1 && β > 1)
-#         Distributions.quantile_newton(d, p, (α - 1) * inv(α + β - 2))
-#     elseif (α ≤ 1 && β > 1)
-#         Distributions.quantile_newton(d, p, 0.0)
-#     elseif (α > 1 && β ≤ 1)
-#         Distributions.quantile_newton(d, p, 1.0)
-#     elseif (α < 1 && β < 1) # only when bimodal, use the bisection method.
-#         min, max = extrema(d.d) 
-#         Distributions.quantile_bisect(d, p, min, max, 1.0e-12)
-#     end
-# end

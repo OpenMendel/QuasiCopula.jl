@@ -5,26 +5,24 @@ using GLMCopula, Random, Statistics, Test, LinearAlgebra, StatsFuns
 Random.seed!(1234)
 Γ = rand(5, 5)
 dist = Poisson(5)
-
+res = Vector{Float64}(undef, 5)
 # test if the proper c0, c1, c2 constants are stored.
-d_pois = marginal_pdf_constants(Γ, dist)
+d_pois = pdf_constants(Γ, res, 1, dist)
 @test d_pois.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_pois.d)^2 * inv(var(d_pois.d)) * 0.5 * Γ[1,1])
 @test d_pois.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_pois.d) * inv(var(d_pois.d)))
 @test d_pois.c2 == 0.5 * Γ[1, 1] * (inv(var(d_pois.d)))
 
-μ = 5
-max_value = 25
-pmf = pmf_copula(max_value, d_pois)
-reordered_k, reordered_pmf = reorder_pmf(pmf, μ)
+pmf = pmf_copula(d_pois)
+reordered_k, reordered_pmf = reorder_pmf(pmf, d_pois.μ)
 sum(reordered_pmf) ≈ 1
 
 ###
 Random.seed!(1234)
 nsample = 10_000
 @info "sample $nsample points for the $dist distribution"
-s = Vector{Float64}(undef, nsample)
-discrete_rand!(max_value, d_pois, μ, s) # compile 
-@time discrete_rand!(max_value, d_pois, μ, s) # get time
+s = Vector{Int64}(undef, nsample)
+rand!(d_pois, s) # compile 
+@time rand!(d_pois, s) # get time
 println("sample mean = $(Statistics.mean(s)); theoretical mean = $(mean(d_pois))")
 println("sample var = $(Statistics.var(s)); theoretical var = $(var(d_pois))")
 end
@@ -35,31 +33,30 @@ end
 # ### Binomial ### 
 @testset "Binomial(n, p) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(123)
+res = Vector{Float64}(undef, 5)
 Γ = rand(5, 5)
 n = 30
 p = 0.1
 dist = Binomial(n, p)
 
 # test if the proper c0, c1, c2 constants are stored.
-d_binomial = marginal_pdf_constants(Γ, dist)
+d_binomial = pdf_constants(Γ, res, 1, dist)
 @test d_binomial.c ≈ inv(1 + 0.5 * tr(Γ))
 @test d_binomial.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_binomial.d)^2 * inv(var(d_binomial.d)) * 0.5 * Γ[1,1])
 @test d_binomial.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_binomial.d) * inv(var(d_binomial.d)))
 @test d_binomial.c2 == 0.5 * Γ[1, 1] * (inv(var(d_binomial.d)))
 
-μ = mean(dist)
-max_value = 30
-pmf = pmf_copula(max_value, d_binomial)
-reordered_k, reordered_pmf = reorder_pmf(pmf, μ)
+pmf = pmf_copula(d_binomial)
+reordered_k, reordered_pmf = reorder_pmf(pmf, d_binomial.μ)
 @test sum(reordered_pmf) ≈ 1
 
 ###
 Random.seed!(1234)
 nsample = 10_000 #
 @info "sample $nsample points for the $dist distribution using the Bisection method."
-s = Vector{Float64}(undef, nsample)
-discrete_rand!(max_value, d_binomial, μ, s) # compile 
-@time discrete_rand!(max_value, d_binomial, μ, s) # get time
+s = Vector{Int64}(undef, nsample)
+rand!(d_binomial, s) # compile 
+@time rand!(d_binomial, s) # get time
 println("sample mean = $(Statistics.mean(s)); theoretical mean = $(GLMCopula.mean(d_binomial))")
 println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_binomial))")
 end
@@ -71,30 +68,29 @@ end
 # ### Geometric p = 0.2 ### 
 @testset "Geometric(p = 0.2) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(123)
+res = Vector{Float64}(undef, 5)
 Γ = rand(5, 5)
 p = 0.2
 dist = Geometric(p)
 
 # test if the proper c0, c1, c2 constants are stored.
-d_geometric = marginal_pdf_constants(Γ, dist)
+d_geometric = pdf_constants(Γ, res, 1, dist)
 @test d_geometric.c ≈ inv(1 + 0.5 * tr(Γ))
 @test d_geometric.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_geometric.d)^2 * inv(var(d_geometric.d)) * 0.5 * Γ[1,1])
 @test d_geometric.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_geometric.d) * inv(var(d_geometric.d)))
 @test d_geometric.c2 == 0.5 * Γ[1, 1] * (inv(var(d_geometric.d)))
 
-μ = mean(dist)
-max_value = 200
-pmf = pmf_copula(max_value, d_geometric)
-reordered_k, reordered_pmf = reorder_pmf(pmf, μ)
+pmf = pmf_copula(d_geometric)
+reordered_k, reordered_pmf = reorder_pmf(pmf, d_geometric.μ)
 @test sum(reordered_pmf) ≈ 1
 
 ###
 Random.seed!(1234)
 nsample = 10_000 #
 @info "sample $nsample points for the $dist distribution."
-s = Vector{Float64}(undef, nsample)
-discrete_rand!(max_value, d_geometric, μ, s) # compile 
-@time discrete_rand!(max_value, d_geometric, μ, s) # get time
+s = Vector{Int64}(undef, nsample)
+rand!(d_geometric, s) # compile 
+@time rand!(d_geometric, s) # get time
 println("sample mean = $(Statistics.mean(s)); theoretical mean = $(GLMCopula.mean(d_geometric))")
 println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_geometric))")
 end
@@ -107,30 +103,29 @@ end
 # ### Geometric p = 0.5### 
 @testset "Geometric(p = 0.5) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(123)
+res = Vector{Float64}(undef, 5)
 Γ = rand(5, 5)
 p = 0.5
 dist = Geometric(p)
 
 # test if the proper c0, c1, c2 constants are stored.
-d_geometric = marginal_pdf_constants(Γ, dist)
+d_geometric = pdf_constants(Γ, res, 1, dist)
 @test d_geometric.c ≈ inv(1 + 0.5 * tr(Γ))
 @test d_geometric.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_geometric.d)^2 * inv(var(d_geometric.d)) * 0.5 * Γ[1,1])
 @test d_geometric.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_geometric.d) * inv(var(d_geometric.d)))
 @test d_geometric.c2 == 0.5 * Γ[1, 1] * (inv(var(d_geometric.d)))
 
-μ = mean(dist)
-max_value = 100
-pmf = pmf_copula(max_value, d_geometric)
-reordered_k, reordered_pmf = reorder_pmf(pmf, μ)
+pmf = pmf_copula(d_geometric)
+reordered_k, reordered_pmf = reorder_pmf(pmf, d_geometric.μ)
 @test sum(reordered_pmf) ≈ 1
 
 ###
 Random.seed!(1234)
 nsample = 10_000 #
 @info "sample $nsample points for the $dist distribution."
-s = Vector{Float64}(undef, nsample)
-discrete_rand!(max_value, d_geometric, μ, s) # compile 
-@time discrete_rand!(max_value, d_geometric, μ, s) # get time
+s = Vector{Int64}(undef, nsample)
+rand!(d_geometric, s) # compile 
+@time rand!(d_geometric, s) # get time
 println("sample mean = $(Statistics.mean(s)); theoretical mean = $(GLMCopula.mean(d_geometric))")
 println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_geometric))")
 end
@@ -142,30 +137,29 @@ end
 # ### Negative Binomial r = 5, p = 0.5 ### 
 @testset "NegativeBinomial(r = 5, p = 0.5) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(123)
+res = Vector{Float64}(undef, 5)
 Γ = rand(5, 5)
 r, p = 5, 0.5
 dist = NegativeBinomial(r, p)
 
 # test if the proper c0, c1, c2 constants are stored.
-d_nb = marginal_pdf_constants(Γ, dist)
+d_nb = pdf_constants(Γ, res, 1, dist)
 @test d_nb.c ≈ inv(1 + 0.5 * tr(Γ))
 @test d_nb.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_nb.d)^2 * inv(var(d_nb.d)) * 0.5 * Γ[1,1])
 @test d_nb.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_nb.d) * inv(var(d_nb.d)))
 @test d_nb.c2 == 0.5 * Γ[1, 1] * (inv(var(d_nb.d)))
 
-μ = mean(dist)
-max_value = 50
-pmf = pmf_copula(max_value, d_nb)
-reordered_k, reordered_pmf = reorder_pmf(pmf, μ)
+pmf = pmf_copula(d_nb)
+reordered_k, reordered_pmf = reorder_pmf(pmf, d_nb.μ)
 @test sum(reordered_pmf) ≈ 1
 
 ###
 Random.seed!(1234)
 nsample = 10_000 #
 @info "sample $nsample points for the $dist distribution."
-s = Vector{Float64}(undef, nsample)
-discrete_rand!(max_value, d_nb, μ, s) # compile 
-@time discrete_rand!(max_value, d_nb, μ, s) # get time
+s = Vector{Int64}(undef, nsample)
+rand!(d_nb, s) # compile 
+@time rand!(d_nb, s) # get time
 println("sample mean = $(Statistics.mean(s)); theoretical mean = $(GLMCopula.mean(d_nb))")
 println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_nb))")
 end

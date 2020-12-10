@@ -4,19 +4,12 @@ using GLMCopula, Random, Statistics, Test, LinearAlgebra, StatsFuns
 
 # Normal
 @testset "Normal(0,1) * (1 + 0.5 x^2)" begin ## where x = mean(dist)
-dist = Normal()
+dist = Normal(10, 2)
 
 # test if the proper c0, c1, c2 constants are stored.
 Γ = zeros(5, 5)
-Γ[1, 1] = 1.0 # so tr(Γ[2:end, 2:end]) = 0.0 here but γ_11 = 1.0
-d_normal = marginal_pdf_constants(Γ, dist)
-@test d_normal.c0 == 1.0
-@test d_normal.c1 == 0.0
-@test d_normal.c2 == 0.5
-@test d_normal.c ≈ 2/3
-#@test d_normal.c ≈ inv(1+ 0.5 * tr(Γ))
-@test mean(d_normal) == 0
-@test var(d_normal) ≈ 5/3  ## check
+res = Vector{Float64}(undef, 5)
+d_normal = pdf_constants(Γ, res, 1, dist)
 
 # test if the CDF is a proper density (integrates to 1)
 @test d_normal.c * (d_normal.c0 + d_normal.c1 + d_normal.c2) == 1.0
@@ -45,11 +38,12 @@ end
 @testset "Gamma(α = 1.0, θ = 1.0) * (c0 + c1 * x + c2 * x^2)" begin ## where x = mean(dist)
 Random.seed!(1234)
 α, θ = (1.0, 1.0)
+res = Vector{Float64}(undef, 5)
 Γ = rand(5, 5)
 dist = Gamma(α, θ)
 
 # test if the proper c0, c1, c2 constants are stored.
-d_gamma = marginal_pdf_constants(Γ, dist)
+d_gamma = pdf_constants(Γ, res, 1, dist)
 @test d_gamma.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_gamma.d)^2 * inv(var(d_gamma.d)) * 0.5 * Γ[1,1])
 @test d_gamma.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_gamma.d) * inv(var(d_gamma.d)))
 @test d_gamma.c2 == 0.5 * Γ[1, 1] * (inv(var(d_gamma.d)))
@@ -86,10 +80,11 @@ end
 α, θ = (2.5, 1.0)
 Random.seed!(1234)
 Γ = rand(5, 5)
+res = Vector{Float64}(undef, 5)
 dist = Gamma(α, θ)
 
 # test if the proper c0, c1, c2 constants are stored.
-d_gamma = marginal_pdf_constants(Γ, dist)
+d_gamma = pdf_constants(Γ, res, 1, dist)
 @test d_gamma.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_gamma.d)^2 * inv(var(d_gamma.d)) * 0.5 * Γ[1,1])
 @test d_gamma.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_gamma.d) * inv(var(d_gamma.d)))
 @test d_gamma.c2 == 0.5 * Γ[1, 1] * (inv(var(d_gamma.d)))
@@ -127,10 +122,11 @@ end
 α, θ = (3.0, 2.0)
 Random.seed!(1234)
 Γ = rand(5, 5)
+res = Vector{Float64}(undef, 5)
 dist = Gamma(α, θ)
 
 # test if the proper c0, c1, c2 constants are stored.
-d_gamma = marginal_pdf_constants(Γ, dist)
+d_gamma = pdf_constants(Γ, res, 1, dist)
 @test d_gamma.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_gamma.d)^2 * inv(var(d_gamma.d)) * 0.5 * Γ[1,1])
 @test d_gamma.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_gamma.d) * inv(var(d_gamma.d)))
 @test d_gamma.c2 == 0.5 * Γ[1, 1] * (inv(var(d_gamma.d)))
@@ -165,10 +161,11 @@ end
 @testset "Exponential(θ = 3) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(1234)
 Γ = rand(5, 5)
+res = Vector{Float64}(undef, 5)
 dist = Exponential(3)
 
 # test if the proper c0, c1, c2 constants are stored.
-d_exp = marginal_pdf_constants(Γ, dist)
+d_exp = pdf_constants(Γ, res, 1, dist)
 @test d_exp.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_exp.d)^2 * inv(var(d_exp.d)) * 0.5 * Γ[1,1])
 @test d_exp.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_exp.d) * inv(var(d_exp.d)))
 @test d_exp.c2 == 0.5 * Γ[1, 1] * (inv(var(d_exp.d)))
@@ -203,10 +200,11 @@ end
 @testset "Exponential(θ = 20) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(1234)
 Γ = rand(5, 5)
+res = Vector{Float64}(undef, 5)
 dist = Exponential(20)
 
 # test if the proper c0, c1, c2 constants are stored.
-d_exp = marginal_pdf_constants(Γ, dist)
+d_exp = pdf_constants(Γ, res, 1, dist)
 @test d_exp.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_exp.d)^2 * inv(var(d_exp.d)) * 0.5 * Γ[1,1])
 @test d_exp.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_exp.d) * inv(var(d_exp.d)))
 @test d_exp.c2 == 0.5 * Γ[1, 1] * (inv(var(d_exp.d)))
@@ -242,11 +240,12 @@ end
 @testset "Beta(α = 2.0, β = 3.0) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(123)
 Γ = rand(5, 5)
+res = Vector{Float64}(undef, 5)
 α, β = (2.0, 3.0)
 dist = Beta(α, β)
 
 # test if the proper c0, c1, c2 constants are stored.
-d_beta = marginal_pdf_constants(Γ, dist)
+d_beta = pdf_constants(Γ, res, 1, dist)
 @test d_beta.c ≈ inv(1 + 0.5 * tr(Γ))
 @test d_beta.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_beta.d)^2 * inv(var(d_beta.d)) * 0.5 * Γ[1,1])
 @test d_beta.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_beta.d) * inv(var(d_beta.d)))
@@ -277,11 +276,12 @@ end
 @testset "Beta(α = 0.5, β = 3.0) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(123)
 Γ = rand(5, 5)
+res = Vector{Float64}(undef, 5)
 α, β = (0.5, 3.0)
 dist = Beta(α, β)
 
 # test if the proper c0, c1, c2 constants are stored.
-d_beta = marginal_pdf_constants(Γ, dist)
+d_beta = pdf_constants(Γ, res, 1, dist)
 @test d_beta.c ≈ inv(1 + 0.5 * tr(Γ))
 @test d_beta.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_beta.d)^2 * inv(var(d_beta.d)) * 0.5 * Γ[1,1])
 @test d_beta.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_beta.d) * inv(var(d_beta.d)))
@@ -312,11 +312,12 @@ end
 @testset "Beta(α = 2.0, β = 0.5) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(123)
 Γ = rand(5, 5)
+res = Vector{Float64}(undef, 5)
 α, β = (2.0, 0.5)
 dist = Beta(α, β)
 
 # test if the proper c0, c1, c2 constants are stored.
-d_beta = marginal_pdf_constants(Γ, dist)
+d_beta = pdf_constants(Γ, res, 1, dist)
 @test d_beta.c ≈ inv(1 + 0.5 * tr(Γ))
 @test d_beta.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_beta.d)^2 * inv(var(d_beta.d)) * 0.5 * Γ[1,1])
 @test d_beta.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_beta.d) * inv(var(d_beta.d)))
@@ -347,11 +348,12 @@ end
 @testset "Beta(α = 0.5, β = 0.5) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(123)
 Γ = rand(5, 5)
+res = Vector{Float64}(undef, 5)
 α, β = (0.5, 0.5)
 dist = Beta(α, β)
 
 # test if the proper c0, c1, c2 constants are stored.
-d_beta = marginal_pdf_constants(Γ, dist)
+d_beta = pdf_constants(Γ, res, 1, dist)
 @test d_beta.c ≈ inv(1 + 0.5 * tr(Γ))
 @test d_beta.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_beta.d)^2 * inv(var(d_beta.d)) * 0.5 * Γ[1,1])
 @test d_beta.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_beta.d) * inv(var(d_beta.d)))

@@ -1,7 +1,7 @@
 @reexport using Distributions
-import Distributions: mean, var, logpdf, pdf, cdf, maximum, minimum, insupport, quantile
-export DiscreteUnivariateCopula, marginal_pdf_constants
-export pmf_copula, reorder_pmf, discrete_rand, discrete_rand!, gvc_vec_discrete
+import Distributions: mean, var, logpdf, pdf, cdf, maximum, minimum, insupport, quantile, rand, rand!, params
+export DiscreteUnivariateCopula, pdf_constants
+export pmf_copula, reorder_pmf
 
 """
     DiscreteUnivariateCopula(d, c0, c1, c2)
@@ -22,7 +22,7 @@ struct DiscreteUnivariateCopula{
 end
 
 function DiscreteUnivariateCopula(
-    d  :: DistT, 
+    d  :: DistT,
     c0 :: T, 
     c1 :: T, 
     c2 :: T) where {DistT <: DiscreteUnivariateDistribution, T <: Real}
@@ -33,21 +33,8 @@ function DiscreteUnivariateCopula(
     DiscreteUnivariateCopula(d, Tc(μ), Tc(σ2), Tc(c0), Tc(c1), Tc(c2), c)
 end
 
-# this function will fill out the appropriate constants to form the ContinuousUnivariateCopula structure. 
-function marginal_pdf_constants(Γ::Matrix{T}, dist::DiscreteUnivariateDistribution) where T <: Real
-    μ = mean(dist)
-    σ2 = var(dist)
-    c_0 = μ^2 * inv(σ2)
-    c_1 = -2μ * inv(σ2)
-    c_2 = inv(σ2)
-    c0 = 1 + 0.5 * tr(Γ[2:end, 2:end]) + 0.5 * Γ[1, 1] * c_0
-    c1 = 0.5 * Γ[1, 1] * c_1
-    c2 = 0.5 * Γ[1, 1] * c_2
-    DiscreteUnivariateCopula(dist, c0, c1, c2)
-end
-
 # this function will fill out the appropriate constants for conditional distribution to form the ContinuousUnivariateCopula structure. 
-function conditional_pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist::DiscreteUnivariateDistribution) where T <: Real
+function pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist::DiscreteUnivariateDistribution) where T <: Real
     μ = mean(dist)
     σ2 = var(dist)
     c_0 = μ^2 * inv(σ2)
@@ -61,127 +48,104 @@ function conditional_pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist
     DiscreteUnivariateCopula(dist, c0, c1, c2)
 end
 
-"""
-gvc_vec
-gvc_vec()
-GLM copula variance component model vector of observations, which contains a vector of
-`ContinuousUnivariateCopula as data and appropriate vectorized fields for easy access when simulating from conditional densities.
-"""
-struct gvc_vec_discrete{T <: BlasReal, D <: Distributions.UnivariateDistribution} #<: MathProgBase.AbstractNLPEvaluator
-    # data
-    n::Int     # total number of singleton observations
-    m::Int          # number of variance components
-    gc_obs::Vector{DiscreteUnivariateCopula}
-    res::Vector{T}  # residual vector res_i
-    Y::Vector{T}
-    V::Vector{Matrix{T}}
-    Σ::Vector{T}
-    Γ::Matrix{T}
-    # normalizing constant
-    trΓ::T
-    ## conditionalterms::ConditionalTerms{T}
-    vecd::Vector{D}
-end
+#### Parameters
+# poisson is just lambda the mean
+params(d::DiscreteUnivariateCopula{Poisson{T}, T}) where T <: Real = GLMCopula.mean(d)
+params(d::DiscreteUnivariateCopula{Binomial{T}, T}) where T <: Real = d.d.n, mean(d)/d.d.n
+params(d::DiscreteUnivariateCopula{Geometric{T}, T}) where T <: Real = inv(GLMCopula.mean(d) + 1)
+params(d::DiscreteUnivariateCopula{NegativeBinomial{T}, T}) where T <: Real = d.d.r, (GLMCopula.mean(d)/d.d.r)/(1 + GLMCopula.mean(d)/d.d.r)
 
-function gvc_vec_discrete(
-    V::Vector{Matrix{T}},
-    Σ::Vector{T},    # m-vector: [σ12, ..., σm2],
-    vecd::Vector{D},  # vector of univariate densities
-    max_value::Vector{T}) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}
-    n, m = length(vecd), length(V)
-    res = Vector{T}(undef, n)  # simulated residual vector
-    Y = Vector{T}(undef, n)    # vector of simulated outcome values transformed from residuals using hypothesized densities
-    Γ = sum(Σ[k] * V[k] for k in 1:m)
+# """
+# gvc_vec
+# gvc_vec()
+# GLM copula variance component model vector of observations, which contains a vector of
+# `ContinuousUnivariateCopula as data and appropriate vectorized fields for easy access when simulating from conditional densities.
+# """
+# struct gvc_vec_discrete{T <: BlasReal, D <: Distributions.UnivariateDistribution} #<: MathProgBase.AbstractNLPEvaluator
+#     # data
+#     n::Int     # total number of singleton observations
+#     m::Int          # number of variance components
+#     gc_obs::Vector{DiscreteUnivariateCopula}
+#     res::Vector{T}  # residual vector res_i
+#     Y::Vector{T}
+#     V::Vector{Matrix{T}}
+#     Σ::Vector{T}
+#     Γ::Matrix{T}
+#     # normalizing constant
+#     trΓ::T
+#     ## conditionalterms::ConditionalTerms{T}
+#     vecd::Vector{D}
+# end
+
+# function gvc_vec_discrete(
+#     V::Vector{Matrix{T}},
+#     Σ::Vector{T},    # m-vector: [σ12, ..., σm2],
+#     vecd::Vector{D},  # vector of univariate densities
+#     max_value::Vector{T}) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}
+#     n, m = length(vecd), length(V)
+#     res = Vector{T}(undef, n)  # simulated residual vector
+#     Y = Vector{T}(undef, n)    # vector of simulated outcome values transformed from residuals using hypothesized densities
+#     Γ = sum(Σ[k] * V[k] for k in 1:m)
     
-    gc_obs = Vector{DiscreteUnivariateCopula}(undef, n)
+#     gc_obs = Vector{DiscreteUnivariateCopula}(undef, n)
 
-    # form constants for the marginal density
-    gc_obs[1] = marginal_pdf_constants(Γ, vecd[1])
-    # generate y_1 
-    Y[1] = discrete_rand(Integer(max_value[1]), gc_obs[1], gc_obs[1].μ)
+#     # form constants for the marginal density
+#     # gc_obs[1] = pdf_constants(Γ, res, 1, vecd[1])
+#     # # generate y_1 
+#     # Y[1] = discrete_rand(Integer(max_value[1]), gc_obs[1], gc_obs[1].μ)
     
-    for i in 2:length(vecd)
-        # update residuals 1,..., i-1
-        res[i-1] = update_res!(Y[i-1], res[i-1], gc_obs[i-1])
-        # form constants for conditional density of i given 1, ..., i-1
-        gc_obs[i] = conditional_pdf_constants(Γ, res, i, vecd[i])
-        # generate y_i given y_1, ..., y_i-1
-        Y[i] = discrete_rand(Integer(max_value[i]), gc_obs[i], gc_obs[i].μ)
-     end
-    res[end] = update_res!(Y[end], res[end], gc_obs[end])
-    trΓ = tr(Γ)
-    gvc_vec_discrete(n, m, gc_obs, res, Y, V, Σ, Γ, trΓ, vecd)
-end
+#     for i in 1:length(vecd)
+#         # form constants for conditional density of i given 1, ..., i-1
+#         gc_obs[i] = pdf_constants(Γ, res, i, vecd[i], max_value)
+#         # generate y_i given y_1, ..., y_i-1
+#         Y[i] = discrete_rand(Integer(max_value[i]), gc_obs[i], gc_obs[i].μ)
+#         # update residuals 1,..., i-1
+#         res[i-1] = update_res!(Y[i-1], res[i-1], gc_obs[i-1])
+#      end
+#     res[end] = update_res!(Y[end], res[end], gc_obs[end])
+#     trΓ = tr(Γ)
+#     gvc_vec_discrete(n, m, gc_obs, res, Y, V, Σ, Γ, trΓ, vecd)
+# end
 
-function gvc_vec_discrete(
-    Γ::Matrix{T},
-    vecd::Vector{D},
-    max_value::Vector{T}) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}
-    n = length(vecd)
-    m = 1
-    res = Vector{T}(undef, n)  # simulated residual vector
-    Y = Vector{T}(undef, n)    # vector of simulated outcome values transformed from residuals using hypothesized densities
-    V = [Γ]
-    Σ = ones(T, m)
-    gc_obs = Vector{DiscreteUnivariateCopula}(undef, n)
+# function gvc_vec_discrete(
+#     Γ::Matrix{T},
+#     vecd::Vector{D},
+#     max_value::Vector{T}) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}
+#     n = length(vecd)
+#     m = 1
+#     res = Vector{T}(undef, n)  # simulated residual vector
+#     Y = Vector{T}(undef, n)    # vector of simulated outcome values transformed from residuals using hypothesized densities
+#     V = [Γ]
+#     Σ = ones(T, m)
+#     gc_obs = Vector{DiscreteUnivariateCopula}(undef, n)
 
-    # form constants for the marginal density
-    gc_obs[1] = marginal_pdf_constants(Γ, vecd[1])
-    # generate y_1 
-    Y[1] = discrete_rand(max_value[1], gc_obs[1], gc_obs[1].μ)
+#     # form constants for the marginal density
+#     gc_obs[1] = marginal_pdf_constants(Γ, vecd[1])
+#     # generate y_1 
+#     Y[1] = discrete_rand(max_value[1], gc_obs[1], gc_obs[1].μ)
     
-    for i in 2:length(vecd)
-        # update residuals 1,..., i-1
-        res[i-1] = update_res!(Y[i-1], res[i-1], gc_obs[i-1])
-        # form constants for conditional density of i given 1, ..., i-1
-        gc_obs[i] = conditional_pdf_constants(Γ, res, i, vecd[i])
-        # generate y_i given y_1, ..., y_i-1
-        Y[i] = discrete_rand(max_value[i], gc_obs[i], gc_obs[i].μ)
-     end
-    res[end] = update_res!(Y[end], res[end], gc_obs[end])
-    trΓ = tr(Γ)
-    gvc_vec_discrete(n, m, gc_obs, res, Y, V, Σ, Γ, trΓ, vecd)
-end   
-
-function update_res!(
-    Y::T,
-    res::T,
-    gc_obs::Union{ContinuousUnivariateCopula{D, T}, DiscreteUnivariateCopula{D, T}}) where {T <: BlasReal, D}
-    res = (Y - gc_obs.μ) * inv(sqrt(gc_obs.σ2))
- end
-
-"""
-    mean(d::DiscreteUnivariateCopula)
-Theoretical mean under the copula model. 
-"""
-function mean(d::DiscreteUnivariateCopula)
-    μ, σ², sk, kt = mean(d.d), var(d.d), skewness(d.d), kurtosis(d.d, false) # proper kurtosis (un-corrected) when false 
-    m1, m2, m3, _ = mvsk_to_absm(μ, σ², sk, kt)
-    d.c * (d.c0 * m1 + d.c1 * m2 + d.c2 * m3)
-end
-
-"""
-    var(d::DiscreteUnivariateCopula)
-Theoretical variance under the copula model. 
-"""
-function var(d::DiscreteUnivariateCopula)
-    μ, σ², sk, kt = mean(d.d), var(d.d), skewness(d.d), kurtosis(d.d, false)
-    _, m2, m3, m4 = mvsk_to_absm(μ, σ², sk, kt)
-    d.c * (d.c0 * m2 + d.c1 * m3 + d.c2 * m4) - abs2(mean(d))
-end
-
-
-function pdf(d::DiscreteUnivariateCopula, x::Real)
-    d.c * pdf(d.d, x) * (d.c0 + d.c1 * x + d.c2 * abs2(x))
-end
+#     for i in 2:length(vecd)
+#         # update residuals 1,..., i-1
+#         res[i-1] = update_res!(Y[i-1], res[i-1], gc_obs[i-1])
+#         # form constants for conditional density of i given 1, ..., i-1
+#         gc_obs[i] = conditional_pdf_constants(Γ, res, i, vecd[i])
+#         # generate y_i given y_1, ..., y_i-1
+#         Y[i] = discrete_rand(max_value[i], gc_obs[i], gc_obs[i].μ)
+#      end
+#     res[end] = update_res!(Y[end], res[end], gc_obs[end])
+#     trΓ = tr(Γ)
+#     gvc_vec_discrete(n, m, gc_obs, res, Y, V, Σ, Γ, trΓ, vecd)
+# end   
 
 #### discrete specific #### 
 
 # using our pdf function
-function pmf_copula(maximum::T, dist::DiscreteUnivariateCopula) where T<: Real
-    y_sample = collect(0:maximum)
+function pmf_copula(dist::DiscreteUnivariateCopula) where T<: Real
+    # get params to make general 
+    max_value = quantile(Base.typename(typeof(dist.d)).wrapper(params(dist)...), 0.999999999999)
+    y_sample = collect(0:max_value)
     pmf_vec = zeros(length(y_sample)) # marginal pmf
-    for k in 1:maximum
+    for k in 1:Integer(max_value)
         pmf_vec[k] = pdf(dist, y_sample[k]) # get the pmf given maximum and our pdf implementation
     end
     pmf_vec
@@ -215,9 +179,9 @@ function reorder_pmf(pmf::Vector{T}, μ) where T <: Real
 end
 
 # for a single mu, generate a single poisson.
-function discrete_rand(maximum::Int64, dist::DiscreteUnivariateCopula, μ::T) where T <: Real
-    pmf_vec = pmf_copula(maximum, dist) # get pmf under our copula density 
-    listofj, reordered_pmf = reorder_pmf(pmf_vec, μ) # re-order the pmf 
+function rand(dist::DiscreteUnivariateCopula) where T <: Real
+    pmf_vec = pmf_copula(dist) # get pmf under our copula density 
+    listofj, reordered_pmf = reorder_pmf(pmf_vec, dist.μ) # re-order the pmf 
     # listofj[1] == μ  #### make sure the first entry of the pmf is the mean.
 
     sample = rand() # generate x from uniform(0, 1)
@@ -234,17 +198,17 @@ function discrete_rand(maximum::Int64, dist::DiscreteUnivariateCopula, μ::T) wh
     random_deviate
 end
 
-function discrete_rand(maximum::Int64, dist::DiscreteUnivariateCopula, μ, n_reps::Int64) where T <: Real
+function rand(dist::DiscreteUnivariateCopula, n_reps::Int64) where T <: Real
     random_deviate = zeros(Int64, n_reps)
     for l in 1:n_reps
-        random_deviate[l] = discrete_rand(maximum, dist, μ)
+        random_deviate[l] = rand(dist)
     end
     random_deviate
 end
 
-function discrete_rand!(maximum::Int64, dist::DiscreteUnivariateCopula, μ, sample::Vector) where T <: Real
+function rand!(dist::DiscreteUnivariateCopula, sample::Vector{T}) where T <: Real
     for i in 1:length(sample)
-        sample[i] = discrete_rand(maximum, dist, μ)
+        sample[i] = rand(dist)
     end
     sample
 end
