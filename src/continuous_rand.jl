@@ -16,6 +16,11 @@ struct ContinuousUnivariateCopula{
     c  :: T # normalizing constant
 end
 
+"""
+    ContinuousUnivariateCopula(d, c0, c1, c2)
+The distribution with density `c * P(x = x) * (c0 + c1 * x + c2 * x^2)`, where `f` 
+is the density of the base distribution `d` and `c` is the normalizing constant.
+"""
 function ContinuousUnivariateCopula(
     d  :: DistT, 
     c0 :: T, 
@@ -28,7 +33,10 @@ function ContinuousUnivariateCopula(
     ContinuousUnivariateCopula(d, Tc(μ), Tc(σ2), Tc(c0), Tc(c1), Tc(c2), c)
 end
 
-# this function will fill out the appropriate constants for conditional distribution to form the ContinuousUnivariateCopula structure. 
+"""
+    pdf_constants(Γ::Matrix{<:Real}, res::Vector{<:Real}, i::Int64, dist::ContinuousUnivariateDistribution)
+This function will fill out the appropriate constants, c0, c1, c2 for each conditional distribution to form the `ContinuousUnivariateCopula` structure. 
+"""
 function pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist::ContinuousUnivariateDistribution) where T <: Real
     μ = mean(dist)
     σ2 = var(dist)
@@ -43,6 +51,11 @@ function pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist::Continuous
     ContinuousUnivariateCopula(dist, c0, c1, c2)
 end
 
+"""
+    crossterm_res(res::Vector{<:Real}, s::Int64, Γ::Matrix{<:Real}; all = false)
+This function will compute the crossterm involving the residual values for constants c0 and c1 in the conditional densities. 
+Default all = false (conditional density):sum_{j = 1}^{i-1} γ_ij * r_j, but if all = true then will output (marginal density): sum_{j = 1}^{i} γ_ij * r_j
+"""
 function crossterm_res(res::Vector{T}, s::Integer, Γ::Matrix{T}; all = false) where {T<: BlasReal}
     results = []
     if s == 1
@@ -63,93 +76,17 @@ function crossterm_res(res::Vector{T}, s::Integer, Γ::Matrix{T}; all = false) w
     return results
  end
 
+
+"""
+    update_res!(Y::Real, res:Real, gc_obs::Union{ContinuousUnivariateCopula{<:ContinuousUnivariateDistribution, <:Real}, DiscreteUnivariateCopula{<:DiscreteUnivariateDistribution, <:Real}})
+This function will update the residual value, given the base distributions mean and variance. This step is necessary when constructing the constants, c0, c1, c2, in the conditional density. 
+"""
  function update_res!(
     Y::T,
     res::T,
     gc_obs::Union{ContinuousUnivariateCopula{D, T}, DiscreteUnivariateCopula{D, T}}) where {T <: BlasReal, D}
     res = (Y - gc_obs.μ) * inv(sqrt(gc_obs.σ2))
  end
-
-# """
-# gvc_vec_continuous
-# gvc_vec_continuous()
-# GLM copula variance component model vector of observations, which contains a vector of
-# `ContinuousUnivariateCopula as data and appropriate vectorized fields for easy access when simulating from conditional densities.
-# """
-# struct gvc_vec_continuous{T <: BlasReal, D <: Distributions.UnivariateDistribution} #<: MathProgBase.AbstractNLPEvaluator
-#     # data
-#     n::Int     # total number of singleton observations
-#     m::Int          # number of variance components
-#     gc_obs::Vector{ContinuousUnivariateCopula}
-#     res::Vector{T}  # residual vector res_i
-#     Y::Vector{T}
-#     V::Vector{Matrix{T}}
-#     Σ::Vector{T}
-#     Γ::Matrix{T}
-#     # normalizing constant
-#     trΓ::T
-#     ## conditionalterms::ConditionalTerms{T}
-#     vecd::Vector{D}
-# end
-
-# function gvc_vec_continuous(
-#     V::Vector{Matrix{T}},
-#     Σ::Vector{T},    # m-vector: [σ12, ..., σm2],
-#     vecd::Vector{D}  # vector of univariate densities
-#     ) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}
-#     n, m = length(vecd), length(V)
-#     res = Vector{T}(undef, n)  # simulated residual vector
-#     Y = Vector{T}(undef, n)    # vector of simulated outcome values transformed from residuals using hypothesized densities
-#     Γ = sum(Σ[k] * V[k] for k in 1:m)
-#     gc_obs = Vector{ContinuousUnivariateCopula}(undef, n)
-
-#     # form constants for the marginal density
-#     gc_obs[1] = marginal_pdf_constants(Γ, vecd[1])
-#     # generate y_1 
-#     Y[1] = rand(gc_obs[1])
-
-#     for i in 2:length(vecd)
-#         # update residuals 1,..., i-1
-#         res[i-1] = update_res!(Y[i-1], res[i-1], gc_obs[i-1])
-#         # form constants for conditional density of i given 1, ..., i-1
-#         gc_obs[i] = conditional_pdf_constants(Γ, res, i, vecd[i])
-#         # generate y_i given y_1, ..., y_i-1
-#         Y[i] = rand(gc_obs[i])
-#      end
-#     res[end] = update_res!(Y[end], res[end], gc_obs[end])
-#     trΓ = tr(Γ)
-#     gvc_vec_continuous(n, m, gc_obs, res, Y, V, Σ, Γ, trΓ, vecd)
-# end
-
-# function gvc_vec_continuous(
-#     Γ::Matrix{T},
-#     vecd::Vector{D}
-#     ) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}
-#     n = length(vecd)
-#     m = 1
-#     res = Vector{T}(undef, n)  # simulated residual vector
-#     Y = Vector{T}(undef, n)    # vector of simulated outcome values transformed from residuals using hypothesized densities
-#     V = [Γ]
-#     Σ = ones(T, m)
-#     gc_obs = Vector{ContinuousUnivariateCopula}(undef, n)
-
-#     # form constants for the marginal density
-#     gc_obs[1] = marginal_pdf_constants(Γ, vecd[1])
-#     # generate y_1 
-#     Y[1] = rand!(gc_obs[1], [Y[1]])[1]
-
-#     for i in 2:length(vecd)
-#         # update residuals 1,..., i-1
-#         res[i-1] = update_res!(Y[i-1], res[i-1], gc_obs[i-1])
-#         # form constants for conditional density of i given 1, ..., i-1
-#         gc_obs[i] = conditional_pdf_constants(Γ, res, i, vecd[i])
-#         # generate y_i given y_1, ..., y_i-1
-#         Y[i] = rand!(gc_obs[i], [Y[i]])[1]
-#      end
-#     res[end] = update_res!(Y[end], res[end], gc_obs[end])
-#     trΓ = tr(Γ)
-#     gvc_vec_continuous(n, m, gc_obs, res, Y, V, Σ, Γ, trΓ, vecd)
-# end   
 
 minimum(d::Union{ContinuousUnivariateCopula, DiscreteUnivariateCopula}) = minimum(d.d)
 maximum(d::Union{ContinuousUnivariateCopula, DiscreteUnivariateCopula}) = maximum(d.d)
@@ -189,15 +126,26 @@ function var(d::Union{ContinuousUnivariateCopula, DiscreteUnivariateCopula})
     d.c * (d.c0 * m2 + d.c1 * m3 + d.c2 * m4) - abs2(mean(d))
 end
 
+"""
+    logpdf(d::Union{ContinuousUnivariateCopula, DiscreteUnivariateCopula}, x::Real)
+Theoretical log pdf under the copula model. 
+"""
 function logpdf(d::Union{ContinuousUnivariateCopula, DiscreteUnivariateCopula}, x::Real)
     log(d.c * (d.c0 + d.c1 * x + d.c2 * abs2(x))) + logpdf(d.d, x)
 end
 
+"""
+    pdf(d::Union{ContinuousUnivariateCopula, DiscreteUnivariateCopula}, x::Real)
+Theoretical pdf under the copula model. 
+"""
 function pdf(d::Union{ContinuousUnivariateCopula, DiscreteUnivariateCopula}, x::Real)
     d.c * pdf(d.d, x) * (d.c0 + d.c1 * x + d.c2 * abs2(x))
 end
 
-# this function specialized to Normal base distribution
+"""
+    cdf(d::Union{ContinuousUnivariateCopula{Normal{<:Real}}, x::Real)
+Theoretical cdf for the Normal base distribution derived under the copula model. 
+"""
 function cdf(d::ContinuousUnivariateCopula{Normal{T},T}, x::Real) where T <: Real
     μ, σ    = d.d.μ, d.d.σ
     z       = (x - μ) / σ
@@ -208,7 +156,10 @@ function cdf(d::ContinuousUnivariateCopula{Normal{T},T}, x::Real) where T <: Rea
     result *= d.c
 end
 
-# this function specialized to Gamma base distribution
+"""
+    cdf(d::Union{ContinuousUnivariateCopula{Gamma{<:Real}}, x::Real)
+Theoretical cdf for the Gamma base distribution derived under the copula model. 
+"""
 function cdf(d::ContinuousUnivariateCopula{Gamma{T},T}, x::Real) where T <: Real
     α, θ = params(d.d)
     result  = d.c0 * cdf(d.d, x)
@@ -217,7 +168,10 @@ function cdf(d::ContinuousUnivariateCopula{Gamma{T},T}, x::Real) where T <: Real
     result *= d.c
 end
 
-#this function specialized to exponential base distribution
+"""
+    cdf(d::Union{ContinuousUnivariateCopula{Exponential{<:Real}}, x::Real)
+Theoretical cdf for the Exponential base distribution derived under the copula model. 
+"""
 function cdf(d::ContinuousUnivariateCopula{Exponential{T},T}, x::Real) where T <: Real
     θ = params(d.d)[1]
     normalizing_c1 = θ * (StatsFuns.gamma(2)/ StatsFuns.gamma(1))
@@ -228,7 +182,10 @@ function cdf(d::ContinuousUnivariateCopula{Exponential{T},T}, x::Real) where T <
     result *= d.c
 end
 
-# this function specialized to beta base distribution
+"""
+    cdf(d::Union{ContinuousUnivariateCopula{Beta{<:Real}}, x::Real)
+Theoretical cdf for the Beta base distribution derived under the copula model. 
+"""
 function cdf(d::ContinuousUnivariateCopula{Beta{T},T}, x::Real) where T <: Real
     α, β = params(d.d)
     normalizing_c1 = inv(StatsFuns.gamma(α) * StatsFuns.gamma(α + β + 1)) * (StatsFuns.gamma(α + β) * StatsFuns.gamma(α + 1))
@@ -239,7 +196,18 @@ function cdf(d::ContinuousUnivariateCopula{Beta{T},T}, x::Real) where T <: Real
     result *= d.c
 end
 
-# Gamma has no mode when shape < 1.
+"""
+    quantile(d::Union{ContinuousUnivariateCopula{Normal{<:Real}}, p::Real)
+Finds the quantile value for the specified cumulative probability `p`, under the Normal Base distribution of the copula model, using Newtons Method. 
+"""
+function quantile(d::ContinuousUnivariateCopula{Normal{T}, T}, p::T) where T <: Real
+    Distributions.quantile_newton(d, p, mean(d))
+end
+
+"""
+    quantile(d::Union{ContinuousUnivariateCopula{Gamma{<:Real}}, p::Real)
+Finds the quantile value for the specified cumulative probability `p`, under the Gamma Base distribution of the copula model, using Newtons method. 
+"""
 function quantile(d::ContinuousUnivariateCopula{Gamma{T}, T}, p::T) where T <: Real
     α, θ = params(d.d)
     if α ≥ 1
@@ -249,15 +217,19 @@ function quantile(d::ContinuousUnivariateCopula{Gamma{T}, T}, p::T) where T <: R
     end
 end
 
-function quantile(d::ContinuousUnivariateCopula{Normal{T}, T}, p::T) where T <: Real
-    Distributions.quantile_newton(d, p, mean(d))
-end
-
+"""
+    quantile(d::Union{ContinuousUnivariateCopula{Exponential{<:Real}}, p::Real)
+Finds the quantile value for the specified cumulative probability `p`, under the Normal Base distribution of the copula model, using Newtons method. 
+"""
 function quantile(d::ContinuousUnivariateCopula{Exponential{T}, T}, p::T) where T <: Real
     Distributions.quantile_newton(d, p, 0.0)
 end
 
-# since Beta density has finite extrema, we can use the bisection method to implement the inverse cdf sampling 
+"""
+    quantile(d::Union{ContinuousUnivariateCopula{Exponential{<:Real}}, p::Real)
+Finds the quantile value for the specified cumulative probability `p`, under the Beta Base distribution of the copula model, using Bisection Method. 
+Since the Beta density has finite extrema, [0, 1], we can use the bisection method to implement the inverse cdf sampling rather than Newtons Method (greater stability). 
+"""
 function quantile(d::ContinuousUnivariateCopula{Beta{T}, T}, p::T) where T <: Real
     min, max = extrema(d.d) 
     Distributions.quantile_bisect(d, p, min, max, 1.0e-12)

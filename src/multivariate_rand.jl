@@ -2,6 +2,13 @@
 import Distributions: rand
 export MultivariateMix
 # ## create new type not in Distributions for multivariate mixture
+
+"""
+    MultivariateMix(vecd::AbstractVector{<:UnivariateDistribution}, Γ)
+An N dimensional `MultivariateMix` constructed from a vector of N `UnivariateDistribution`s, and the user-specified covariance matrix, Γ.
+Since Distributions.jl does not currently allow for multivariate vectors with mixed continuous and discrete components, this type is not of super type Distributions.MultivariateDistribution.
+We will pre-allocate a Vector of `ContinuousUnivariateCopula`s and `DiscreteUnivariateCopula`s to then fill in the appropriate constants c0, c1, c2, recursively. 
+"""
 struct MultivariateMix{
     V<:AbstractVector{UnivariateDistribution},
     T<: BlasReal

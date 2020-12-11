@@ -3,11 +3,6 @@ import Distributions: mean, var, logpdf, pdf, cdf, maximum, minimum, insupport, 
 export DiscreteUnivariateCopula, pdf_constants
 export pmf_copula, reorder_pmf
 
-"""
-    DiscreteUnivariateCopula(d, c0, c1, c2)
-The distribution with density `c * P(x = x) * (c0 + c1 * x + c2 * x^2)`, where `f` 
-is the density of the base distribution `d` and `c` is the normalizing constant.
-"""
 struct DiscreteUnivariateCopula{
     DistT <: DiscreteUnivariateDistribution, 
     T     <: Real
@@ -21,6 +16,11 @@ struct DiscreteUnivariateCopula{
     c  :: T # normalizing constant
 end
 
+"""
+    DiscreteUnivariateCopula(d, c0, c1, c2)
+The distribution with density `c * P(x = x) * (c0 + c1 * x + c2 * x^2)`, where `f` 
+is the density of the base distribution `d` and `c` is the normalizing constant.
+"""
 function DiscreteUnivariateCopula(
     d  :: DistT,
     c0 :: T, 
@@ -33,7 +33,10 @@ function DiscreteUnivariateCopula(
     DiscreteUnivariateCopula(d, Tc(μ), Tc(σ2), Tc(c0), Tc(c1), Tc(c2), c)
 end
 
-# this function will fill out the appropriate constants for conditional distribution to form the ContinuousUnivariateCopula structure. 
+"""
+    pdf_constants(Γ::Matrix{<:Real}, res::Vector{<:Real}, i::Int64, dist::DiscreteUnivariateDistribution)
+This function will fill out the appropriate constants, c0, c1, c2 for each conditional distribution to form the `DiscreteUnivariateCopula` structure. 
+"""
 function pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist::DiscreteUnivariateDistribution) where T <: Real
     μ = mean(dist)
     σ2 = var(dist)
@@ -49,97 +52,38 @@ function pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist::DiscreteUn
 end
 
 #### Parameters
-# poisson is just lambda the mean
+"""
+    params(d::DiscreteUnivariateCopula{<:Poisson{<:Real}})
+This function will get the appropriate rate/mean parameter for the Poisson base distribution, using our copula density. 
+"""
 params(d::DiscreteUnivariateCopula{Poisson{T}, T}) where T <: Real = GLMCopula.mean(d)
+
+"""
+    params(d::DiscreteUnivariateCopula{<:Binomial{<:Real}})
+This function will get the appropriate parameters, n and p, for the Binomial base distribution, using our copula density. 
+"""
 params(d::DiscreteUnivariateCopula{Binomial{T}, T}) where T <: Real = d.d.n, mean(d)/d.d.n
+
+"""
+    params(d::DiscreteUnivariateCopula{<:Geometric{<:Real}})
+This function will get the appropriate parameter, p, for the Geometric base distribution, using our copula density. 
+"""
 params(d::DiscreteUnivariateCopula{Geometric{T}, T}) where T <: Real = inv(GLMCopula.mean(d) + 1)
+
+
+"""
+    params(d::DiscreteUnivariateCopula{<:NegativeBinomial{<:Real}})
+This function will get the appropriate parameter, r and p, for the Negative Binomial base distribution, using our copula density. 
+"""
 params(d::DiscreteUnivariateCopula{NegativeBinomial{T}, T}) where T <: Real = d.d.r, (GLMCopula.mean(d)/d.d.r)/(1 + GLMCopula.mean(d)/d.d.r)
 
-# """
-# gvc_vec
-# gvc_vec()
-# GLM copula variance component model vector of observations, which contains a vector of
-# `ContinuousUnivariateCopula as data and appropriate vectorized fields for easy access when simulating from conditional densities.
-# """
-# struct gvc_vec_discrete{T <: BlasReal, D <: Distributions.UnivariateDistribution} #<: MathProgBase.AbstractNLPEvaluator
-#     # data
-#     n::Int     # total number of singleton observations
-#     m::Int          # number of variance components
-#     gc_obs::Vector{DiscreteUnivariateCopula}
-#     res::Vector{T}  # residual vector res_i
-#     Y::Vector{T}
-#     V::Vector{Matrix{T}}
-#     Σ::Vector{T}
-#     Γ::Matrix{T}
-#     # normalizing constant
-#     trΓ::T
-#     ## conditionalterms::ConditionalTerms{T}
-#     vecd::Vector{D}
-# end
+#### discrete specific ####
 
-# function gvc_vec_discrete(
-#     V::Vector{Matrix{T}},
-#     Σ::Vector{T},    # m-vector: [σ12, ..., σm2],
-#     vecd::Vector{D},  # vector of univariate densities
-#     max_value::Vector{T}) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}
-#     n, m = length(vecd), length(V)
-#     res = Vector{T}(undef, n)  # simulated residual vector
-#     Y = Vector{T}(undef, n)    # vector of simulated outcome values transformed from residuals using hypothesized densities
-#     Γ = sum(Σ[k] * V[k] for k in 1:m)
-    
-#     gc_obs = Vector{DiscreteUnivariateCopula}(undef, n)
-
-#     # form constants for the marginal density
-#     # gc_obs[1] = pdf_constants(Γ, res, 1, vecd[1])
-#     # # generate y_1 
-#     # Y[1] = discrete_rand(Integer(max_value[1]), gc_obs[1], gc_obs[1].μ)
-    
-#     for i in 1:length(vecd)
-#         # form constants for conditional density of i given 1, ..., i-1
-#         gc_obs[i] = pdf_constants(Γ, res, i, vecd[i], max_value)
-#         # generate y_i given y_1, ..., y_i-1
-#         Y[i] = discrete_rand(Integer(max_value[i]), gc_obs[i], gc_obs[i].μ)
-#         # update residuals 1,..., i-1
-#         res[i-1] = update_res!(Y[i-1], res[i-1], gc_obs[i-1])
-#      end
-#     res[end] = update_res!(Y[end], res[end], gc_obs[end])
-#     trΓ = tr(Γ)
-#     gvc_vec_discrete(n, m, gc_obs, res, Y, V, Σ, Γ, trΓ, vecd)
-# end
-
-# function gvc_vec_discrete(
-#     Γ::Matrix{T},
-#     vecd::Vector{D},
-#     max_value::Vector{T}) where {T <: BlasReal, D <: Distributions.UnivariateDistribution}
-#     n = length(vecd)
-#     m = 1
-#     res = Vector{T}(undef, n)  # simulated residual vector
-#     Y = Vector{T}(undef, n)    # vector of simulated outcome values transformed from residuals using hypothesized densities
-#     V = [Γ]
-#     Σ = ones(T, m)
-#     gc_obs = Vector{DiscreteUnivariateCopula}(undef, n)
-
-#     # form constants for the marginal density
-#     gc_obs[1] = marginal_pdf_constants(Γ, vecd[1])
-#     # generate y_1 
-#     Y[1] = discrete_rand(max_value[1], gc_obs[1], gc_obs[1].μ)
-    
-#     for i in 2:length(vecd)
-#         # update residuals 1,..., i-1
-#         res[i-1] = update_res!(Y[i-1], res[i-1], gc_obs[i-1])
-#         # form constants for conditional density of i given 1, ..., i-1
-#         gc_obs[i] = conditional_pdf_constants(Γ, res, i, vecd[i])
-#         # generate y_i given y_1, ..., y_i-1
-#         Y[i] = discrete_rand(max_value[i], gc_obs[i], gc_obs[i].μ)
-#      end
-#     res[end] = update_res!(Y[end], res[end], gc_obs[end])
-#     trΓ = tr(Γ)
-#     gvc_vec_discrete(n, m, gc_obs, res, Y, V, Σ, Γ, trΓ, vecd)
-# end   
-
-#### discrete specific #### 
-
-# using our pdf function
+"""
+    pmf_copula(dist::DiscreteUnivariateCopula)
+This function will get the appropriate probability mass function, using our copula density. 
+For discrete distributions with countably infinite values in the range, we want to find some approximate maximum value that is large enough so that the probability mass vector sums to about 1. 
+"""
 function pmf_copula(dist::DiscreteUnivariateCopula) where T<: Real
     # get params to make general 
     max_value = quantile(Base.typename(typeof(dist.d)).wrapper(params(dist)...), 0.999999999999)
@@ -151,6 +95,10 @@ function pmf_copula(dist::DiscreteUnivariateCopula) where T<: Real
     pmf_vec
 end
 
+"""
+    reorder_pmf(pmf::Vector{<:Real}, μ)
+This function will re-order the probability mass function, by sorting the vector of probabilities in decreasing order (starting with mean μ). 
+"""
 function reorder_pmf(pmf::Vector{T}, μ) where T <: Real
     listofj = zeros(Int64, length(pmf))
     k = Integer(floor.(μ))
@@ -178,7 +126,10 @@ function reorder_pmf(pmf::Vector{T}, μ) where T <: Real
     return(listofj, reordered_pmf)
 end
 
-# for a single mu, generate a single poisson.
+"""
+    rand(dist::DiscreteUnivariateCopula)
+This function will simulate the discrete random variable under our copula model. 
+"""
 function rand(dist::DiscreteUnivariateCopula) where T <: Real
     pmf_vec = pmf_copula(dist) # get pmf under our copula density 
     listofj, reordered_pmf = reorder_pmf(pmf_vec, dist.μ) # re-order the pmf 
@@ -198,6 +149,10 @@ function rand(dist::DiscreteUnivariateCopula) where T <: Real
     random_deviate
 end
 
+"""
+    rand(dist::DiscreteUnivariateCopula, n_reps::Int64)
+This function will simulate the discrete random variable under our copula model, n_reps times. 
+"""
 function rand(dist::DiscreteUnivariateCopula, n_reps::Int64) where T <: Real
     random_deviate = zeros(Int64, n_reps)
     for l in 1:n_reps
@@ -206,6 +161,10 @@ function rand(dist::DiscreteUnivariateCopula, n_reps::Int64) where T <: Real
     random_deviate
 end
 
+"""
+    rand!(dist::DiscreteUnivariateCopula, sample::Vector{T})
+This function will write over each entry in the specified sample vector, the simulated univariate discrete values under our copula model. 
+"""
 function rand!(dist::DiscreteUnivariateCopula, sample::Vector{T}) where T <: Real
     for i in 1:length(sample)
         sample[i] = rand(dist)
