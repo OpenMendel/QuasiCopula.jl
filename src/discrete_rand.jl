@@ -51,31 +51,6 @@ function pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist::DiscreteUn
     DiscreteUnivariateCopula(dist, c0, c1, c2)
 end
 
-#### Parameters
-"""
-    params(d::DiscreteUnivariateCopula{<:Poisson{<:Real}})
-This function will get the appropriate rate/mean parameter for the Poisson base distribution, using our copula density. 
-"""
-params(d::DiscreteUnivariateCopula{Poisson{T}, T}) where T <: Real = GLMCopula.mean(d)
-
-"""
-    params(d::DiscreteUnivariateCopula{<:Binomial{<:Real}})
-This function will get the appropriate parameters, n and p, for the Binomial base distribution, using our copula density. 
-"""
-params(d::DiscreteUnivariateCopula{Binomial{T}, T}) where T <: Real = d.d.n, mean(d)/d.d.n
-
-"""
-    params(d::DiscreteUnivariateCopula{<:Geometric{<:Real}})
-This function will get the appropriate parameter, p, for the Geometric base distribution, using our copula density. 
-"""
-params(d::DiscreteUnivariateCopula{Geometric{T}, T}) where T <: Real = inv(GLMCopula.mean(d) + 1)
-
-
-"""
-    params(d::DiscreteUnivariateCopula{<:NegativeBinomial{<:Real}})
-This function will get the appropriate parameter, r and p, for the Negative Binomial base distribution, using our copula density. 
-"""
-params(d::DiscreteUnivariateCopula{NegativeBinomial{T}, T}) where T <: Real = d.d.r, (GLMCopula.mean(d)/d.d.r)/(1 + GLMCopula.mean(d)/d.d.r)
 
 #### discrete specific ####
 
@@ -86,7 +61,7 @@ For discrete distributions with countably infinite values in the range, we want 
 """
 function pmf_copula(dist::DiscreteUnivariateCopula) where T<: Real
     # get params to make general 
-    max_value = quantile(Base.typename(typeof(dist.d)).wrapper(params(dist)...), 0.999999999999)
+    max_value = quantile(Base.typename(typeof(dist.d)).wrapper(params(dist.d)...), 0.999999999999)
     y_sample = collect(0:max_value)
     pmf_vec = zeros(length(y_sample)) # marginal pmf
     for k in 1:Integer(max_value)
@@ -133,8 +108,6 @@ This function will simulate the discrete random variable under our copula model.
 function rand(dist::DiscreteUnivariateCopula) where T <: Real
     pmf_vec = pmf_copula(dist) # get pmf under our copula density 
     listofj, reordered_pmf = reorder_pmf(pmf_vec, dist.μ) # re-order the pmf 
-    # listofj[1] == μ  #### make sure the first entry of the pmf is the mean.
-
     sample = rand() # generate x from uniform(0, 1)
     (random_deviate, s) = listofj[1], reordered_pmf[1] # if the cumulative probability mass is less than the P(X = listofj[1]) then leave it as the mean
     # precompute cumsum #
