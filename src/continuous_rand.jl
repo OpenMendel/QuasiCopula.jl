@@ -211,7 +211,7 @@ Finds the quantile value for the specified cumulative probability `p`, under the
 function quantile(d::ContinuousUnivariateCopula{Gamma{T}, T}, p::T) where T <: Real
     α, θ = params(d.d)
     if α ≥ 1
-        Distributions.quantile_newton(d, p, (d.d.α - 1) * d.d.θ)
+        Distributions.quantile_newton(d, p, ((d.d.α - 1) * d.d.θ))
     else 
         error("Gamma has no mode when shape < 1")
     end

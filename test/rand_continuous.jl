@@ -195,7 +195,6 @@ end
 # n = 10,0000 ::: time = 0.011543 seconds
 # sample mean = 3.9459310638867766; theoretical mean = 3.94898118645667
 # sample var = 19.46353546588883; theoretical var = 19.48720894523131
-
 ### EXPONENTIAL test
 @testset "Exponential(θ = 20) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(1234)

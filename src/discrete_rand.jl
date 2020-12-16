@@ -110,7 +110,6 @@ function rand(dist::DiscreteUnivariateCopula) where T <: Real
     listofj, reordered_pmf = reorder_pmf(pmf_vec, dist.μ) # re-order the pmf 
     sample = rand() # generate x from uniform(0, 1)
     (random_deviate, s) = listofj[1], reordered_pmf[1] # if the cumulative probability mass is less than the P(X = listofj[1]) then leave it as the mean
-    # precompute cumsum #
     for i in 2:length(reordered_pmf)  
         if sample < s
             random_deviate = listofj[i - 1]
