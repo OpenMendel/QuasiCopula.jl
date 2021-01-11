@@ -64,7 +64,7 @@ function pmf_copula(dist::DiscreteUnivariateCopula) where T<: Real
     max_value = quantile(Base.typename(typeof(dist.d)).wrapper(params(dist.d)...), 0.999999999999)
     y_sample = collect(0:max_value)
     pmf_vec = zeros(length(y_sample)) # marginal pmf
-    for k in 1:Integer(max_value)
+    for k in 1:length(y_sample)
         pmf_vec[k] = pdf(dist, y_sample[k]) # get the pmf given maximum and our pdf implementation
     end
     pmf_vec
@@ -80,7 +80,7 @@ function reorder_pmf(pmf::Vector{T}, μ) where T <: Real
     reordered_pmf = zeros(length(pmf))
     i = 1
     j = k[1]
-    while(i < length(pmf) && j > 0)
+    while(i < length(pmf) && j > 0 && j < length(pmf))
         listofj[i] = j
         reordered_pmf[i] = pmf[j + 1]
         if i%2 == 1

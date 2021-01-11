@@ -33,7 +33,7 @@ struct NonMixedMultivariateDistribution{
     S<:ValueSupport,
     T<:UnivariateDistribution{S},
     V<:AbstractVector{T},
-} # <: MultivariateDistribution{S}
+}
     vecd::V
     Γ::Matrix{Float64}
     gc_obs::Vector{Union{DiscreteUnivariateCopula, ContinuousUnivariateCopula}}
@@ -47,7 +47,7 @@ struct NonMixedMultivariateDistribution{
     end
 end
 
-# ### 
+#### 
 function rand(gc_vec::NonMixedMultivariateDistribution{S, T, V},
     Y::Vector{Float64},
     res::Vector{Float64}) where {S<: ValueSupport, T <: UnivariateDistribution{S}, V<:AbstractVector{T}}

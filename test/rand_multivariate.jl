@@ -1,79 +1,252 @@
 using GLMCopula, Random, Statistics, Test, LinearAlgebra, StatsFuns
 using LinearAlgebra: BlasReal, copytri!
-@testset "Trying mixtures of different discrete and cts distributions. Generate 3 element vector:Binomial(20, 0.5), Poisson(5), Normal(). " begin
-m = 2
-n = 3
-
-# variance components
-Random.seed!(12345)
-# simulate desired variance components (coefficients of covariance matrices V[k] for k in 1:m)
-Σ = rand(m)
-Random.seed!(12345)
-# simulate "specified" variance covariance matrices
-V = [rand(n, n) for k in 1:m]
-# desired total n x n variance matrix 
-Γ = (Σ[1]*V[1]) + (Σ[2]*V[2]) 
-
-d1 = Binomial(20, 0.5)
-d2 = Poisson(5)
-d3 = Normal()
-vecd = [d1, d2, d3]
-mixed_multivariate_dist = MultivariateMix(vecd, Γ)
-
-Y = Vector{Float64}(undef, n)
-res = Vector{Float64}(undef, n)
-rand(mixed_multivariate_dist, Y, res)
-
-end
-
 ### MVN only 
-@testset "Trying just the normal. Generate 3 element vector: Normal(), Normal(), Normal(). " begin
-m = 2
-n = 3
-
-# variance components
+@testset "Generate a 3 element random vector each with Y1, Y2, Y3 ~ Normal(5, 0.2). First we check the conditional mean and variance of Y2 | Y1 and then for Y3 | Y1, Y2. " begin
 Random.seed!(12345)
-# simulate desired variance components (coefficients of covariance matrices V[k] for k in 1:m)
-Σ = rand(m)
-Random.seed!(12345)
-# simulate "specified" variance covariance matrices
-V = [rand(n, n) for k in 1:m]
-# desired total n x n variance matrix 
-Γ = (Σ[1]*V[1]) + (Σ[2]*V[2]) 
-
-d1 = Normal()
-d2 = Normal()
-d3 = Normal()
+mean_normal = 5
+var_normal = 0.2
+d1 = Normal(mean_normal, var_normal)
+d2 = Normal(mean_normal, var_normal)
+d3 = Normal(mean_normal, var_normal)
 
 vecd = [d1, d2, d3]
-mvn_dist = NonMixedMultivariateDistribution(vecd, Γ)
+random_intercept_1 = 0.1
+Γ = random_intercept_1 * ones(3, 3)
+
+nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
+
+#### Testing if the second element in the bivariate poisson follows correct mean and variance 
+# preallocate Y and res to simulate and store 
+n = 3
 Y = Vector{Float64}(undef, n)
 res = Vector{Float64}(undef, n)
-rand(mvn_dist, Y, res)
+
+# simulate Y1 first
+i = 1
+# form constants for Y1 pdf 
+nonmixed_multivariate_dist.gc_obs[i] = pdf_constants(nonmixed_multivariate_dist.Γ, res, i, nonmixed_multivariate_dist.vecd[i])
+# simulate Y1 and store it to Y[1]
+Random.seed!(12345)
+Y[i] = rand(nonmixed_multivariate_dist.gc_obs[i])
+# update residuals res[1] using Y[1] and the mean and variance (lambda for Poisson) using GLM package
+res[i] = update_res!(Y[i], res[i], nonmixed_multivariate_dist.gc_obs[i])
+
+# next, for conditional density of Y2 | Y1, form the constants for pdf 
+i = 2
+nonmixed_multivariate_dist.gc_obs[i] = pdf_constants(nonmixed_multivariate_dist.Γ, res, i, nonmixed_multivariate_dist.vecd[i])
+
+# pre allocate for sampling nsample times from conditional density
+Random.seed!(12345)
+nsample = 10_000
+@info "sample $nsample points for the conditional Poisson distribution"
+s = Vector{Float64}(undef, nsample)
+Random.seed!(12345)
+rand!(nonmixed_multivariate_dist.gc_obs[i], s) # compile
+Random.seed!(12345)
+@time rand!(nonmixed_multivariate_dist.gc_obs[i], s) # get time
+# 0.032922 seconds (1 allocation: 32 bytes)
+println("sample mean = $(Statistics.mean(s)); theoretical mean = $(mean(nonmixed_multivariate_dist.gc_obs[i]))")
+println("sample var = $(Statistics.var(s)); theoretical var = $(var(nonmixed_multivariate_dist.gc_obs[i]))")
+# conditional mean and variance of Y2 given Y1
+# sample mean = 5.005900458369502; theoretical mean = 5.002996732265867
+# sample var = 0.04316391761735573; theoretical var = 0.04362288747145726
+
+## now testing conditional Y3 given Y1, Y2
+# simulate Y2 first
+i = 2
+# form constants for Y1 pdf 
+nonmixed_multivariate_dist.gc_obs[i] = pdf_constants(nonmixed_multivariate_dist.Γ, res, i, nonmixed_multivariate_dist.vecd[i])
+# simulate Y1 and store it to Y[1]
+Random.seed!(12345)
+Y[i] = rand(nonmixed_multivariate_dist.gc_obs[i])
+# update residuals res[2] using Y[2] and the mean and variance (lambda for Poisson) using GLM package
+res[i] = update_res!(Y[i], res[i], nonmixed_multivariate_dist.gc_obs[i])
+
+# next, for conditional density of Y2 | Y1, form the constants for pdf 
+i = 3
+nonmixed_multivariate_dist.gc_obs[i] = pdf_constants(nonmixed_multivariate_dist.Γ, res, i, nonmixed_multivariate_dist.vecd[i])
+# pre allocate for sampling nsample times from conditional density
+Random.seed!(12345)
+nsample = 10_000
+@info "sample $nsample points for the conditional Normal distribution"
+s = Vector{Float64}(undef, nsample)
+Random.seed!(12345)
+rand!(nonmixed_multivariate_dist.gc_obs[i], s) # compile
+Random.seed!(12345)
+@time rand!(nonmixed_multivariate_dist.gc_obs[i], s) # get time
+# 0.040553 seconds (1 allocation: 32 bytes)
+println("sample mean = $(Statistics.mean(s)); theoretical mean = $(mean(nonmixed_multivariate_dist.gc_obs[i]))")
+println("sample var = $(Statistics.var(s)); theoretical var = $(var(nonmixed_multivariate_dist.gc_obs[i]))")
+# conditional mean and variance of Y3 given Y1, Y2
+# sample mean = 5.006034080584214; theoretical mean = 5.003125498930692
+# sample var = 0.04331760554438279; theoretical var = 0.043778156954903835
+# rand(mvn_dist, Y, res)
 end
 
 ### Poisson only 
-@testset "Trying just the Poisson. Generate 3 element vector: Poisson(5), Poisson(5), Poisson(5). " begin
-m = 2
-n = 3
-
+@testset "Generate a 3 element random vector each with Y1, Y2, Y3 ~ Poisson(5). First we check the conditional mean and variance of Y2 | Y1 and then for Y3 | Y1, Y2. " begin
 # variance components
 Random.seed!(12345)
 # simulate desired variance components (coefficients of covariance matrices V[k] for k in 1:m)
-Σ = rand(m)
-Random.seed!(12345)
-# simulate "specified" variance covariance matrices
-V = [rand(n, n) for k in 1:m]
-# desired total n x n variance matrix 
-Γ = (Σ[1]*V[1]) + (Σ[2]*V[2]) 
-
-d1 = Poisson(5)
-d2 = Poisson(5)
-d3 = Poisson(5)
+mean1 = 5
+d1 = Poisson(mean1)
+d2 = Poisson(mean1)
+d3 = Poisson(mean1)
 
 vecd = [d1, d2, d3]
-mvp_dist = NonMixedMultivariateDistribution(vecd, Γ)
+random_intercept_1 = 0.1
+Γ = random_intercept_1 * ones(3, 3)
+
+nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
+
+#### Testing if the second element in the bivariate poisson follows correct mean and variance 
+# preallocate Y and res to simulate and store 
+n = 3
 Y = Vector{Float64}(undef, n)
 res = Vector{Float64}(undef, n)
-rand(mvp_dist, Y, res)
+
+# simulate Y1 first
+i = 1
+# form constants for Y1 pdf 
+nonmixed_multivariate_dist.gc_obs[i] = pdf_constants(nonmixed_multivariate_dist.Γ, res, i, nonmixed_multivariate_dist.vecd[i])
+# simulate Y1 and store it to Y[1]
+Random.seed!(12345)
+Y[i] = rand(nonmixed_multivariate_dist.gc_obs[i])
+# update residuals res[1] using Y[1] and the mean and variance (lambda for Poisson) using GLM package
+res[i] = update_res!(Y[i], res[i], nonmixed_multivariate_dist.gc_obs[i])
+
+# next, for conditional density of Y2 | Y1, form the constants for pdf 
+i = 2
+nonmixed_multivariate_dist.gc_obs[i] = pdf_constants(nonmixed_multivariate_dist.Γ, res, i, nonmixed_multivariate_dist.vecd[i])
+
+# pre allocate for sampling nsample times from conditional density
+Random.seed!(12345)
+nsample = 10_000
+@info "sample $nsample points for the conditional Poisson distribution"
+s = Vector{Int64}(undef, nsample)
+Random.seed!(12345)
+rand!(nonmixed_multivariate_dist.gc_obs[i], s) # compile
+Random.seed!(12345)
+@time rand!(nonmixed_multivariate_dist.gc_obs[i], s) # get time
+# 0.019684 seconds (50.00 k allocations: 12.207 MiB)
+println("sample mean = $(Statistics.mean(s)); theoretical mean = $(mean(nonmixed_multivariate_dist.gc_obs[i]))")
+println("sample var = $(Statistics.var(s)); theoretical var = $(var(nonmixed_multivariate_dist.gc_obs[i]))")
+# conditional mean and variance of Y2 given Y1 
+# sample mean = 5.2485; theoretical mean = 5.219298245614036
+# sample var = 5.689716721672168; theoretical var = 5.6098030163127035
+
+## now testing conditional Y3 given Y1, Y2
+# simulate Y2 first
+i = 2
+# form constants for Y1 pdf 
+nonmixed_multivariate_dist.gc_obs[i] = pdf_constants(nonmixed_multivariate_dist.Γ, res, i, nonmixed_multivariate_dist.vecd[i])
+# simulate Y1 and store it to Y[1]
+Random.seed!(12345)
+Y[i] = rand(nonmixed_multivariate_dist.gc_obs[i])
+# update residuals res[2] using Y[2] and the mean and variance (lambda for Poisson) using GLM package
+res[i] = update_res!(Y[i], res[i], nonmixed_multivariate_dist.gc_obs[i])
+
+# next, for conditional density of Y2 | Y1, form the constants for pdf 
+i = 3
+nonmixed_multivariate_dist.gc_obs[i] = pdf_constants(nonmixed_multivariate_dist.Γ, res, i, nonmixed_multivariate_dist.vecd[i])
+# pre allocate for sampling nsample times from conditional density
+Random.seed!(12345)
+nsample = 10_000
+@info "sample $nsample points for the conditional Poisson distribution"
+s = Vector{Int64}(undef, nsample)
+Random.seed!(12345)
+rand!(nonmixed_multivariate_dist.gc_obs[i], s) # compile
+Random.seed!(12345)
+@time rand!(nonmixed_multivariate_dist.gc_obs[i], s) # get time
+# 0.024654 seconds (50.00 k allocations: 12.207 MiB)
+println("sample mean = $(Statistics.mean(s)); theoretical mean = $(mean(nonmixed_multivariate_dist.gc_obs[i]))")
+println("sample var = $(Statistics.var(s)); theoretical var = $(var(nonmixed_multivariate_dist.gc_obs[i]))")
+# conditional mean and variance of Y3 given Y1, Y2
+# sample mean = 5.2381; theoretical mean = 5.206611570247935
+# sample var = 5.658774267426744; theoretical var = 5.577146369783474
+end
+
+@testset "Form mixtures of different discrete and cts distributions. Generate 3 element vector: Y1 ~ Normal(5, 0.2), Y2 ~ Exponential(1/5), Y3 ~ Poisson(5) " begin
+Random.seed!(12345)
+mean_normal = 5
+var_normal = 0.2
+
+d1 = Normal(mean_normal, var_normal)
+d2 = Exponential(1/mean_normal)
+d3 = Poisson(exp(mean_normal))
+
+random_intercept_1 = 0.1
+Γ = random_intercept_1 * ones(3, 3)
+
+vecd = [d1, d2, d3]
+mixed_multivariate_dist = MultivariateMix(vecd, Γ)
+
+# Y = Vector{Float64}(undef, n)
+# res = Vector{Float64}(undef, n)
+# rand(mixed_multivariate_dist, Y, res)
+#### Testing if the second element in the bivariate poisson follows correct mean and variance 
+# preallocate Y and res to simulate and store 
+n = 3
+Y = Vector{Float64}(undef, n)
+res = Vector{Float64}(undef, n)
+
+# simulate Y1 first
+i = 1
+# form constants for Y1 pdf 
+mixed_multivariate_dist.gc_obs[i] = pdf_constants(mixed_multivariate_dist.Γ, res, i, mixed_multivariate_dist.vecd[i])
+# simulate Y1 and store it to Y[1]
+Random.seed!(12345)
+Y[i] = rand(mixed_multivariate_dist.gc_obs[i])
+# update residuals res[1] using Y[1] and the mean and variance (lambda for Poisson) using GLM package
+res[i] = update_res!(Y[i], res[i], mixed_multivariate_dist.gc_obs[i])
+
+# next, for conditional density of Y2 | Y1, form the constants for pdf 
+i = 2
+mixed_multivariate_dist.gc_obs[i] = pdf_constants(mixed_multivariate_dist.Γ, res, i, mixed_multivariate_dist.vecd[i])
+
+# pre allocate for sampling nsample times from conditional density
+Random.seed!(12345)
+nsample = 10_000
+@info "sample $nsample points for the conditional Exponential distribution"
+s = Vector{Float64}(undef, nsample)
+Random.seed!(12345)
+rand!(mixed_multivariate_dist.gc_obs[i], s) # compile
+Random.seed!(12345)
+@time rand!(mixed_multivariate_dist.gc_obs[i], s) # get time
+# 0.030101 seconds (50.00 k allocations: 12.207 MiB)
+println("sample mean = $(Statistics.mean(s)); theoretical mean = $(mean(mixed_multivariate_dist.gc_obs[i]))")
+println("sample var = $(Statistics.var(s)); theoretical var = $(var(mixed_multivariate_dist.gc_obs[i]))")
+# conditional mean and variance of Y2 given Y1
+# sample mean = 5.005900458369502; theoretical mean = 5.002996732265867
+# sample var = 0.04316391761735573; theoretical var = 0.04362288747145726
+
+## now testing conditional Y3 given Y1, Y2
+# simulate Y2 first
+i = 2
+# form constants for Y1 pdf 
+mixed_multivariate_dist.gc_obs[i] = pdf_constants(mixed_multivariate_dist.Γ, res, i, mixed_multivariate_dist.vecd[i])
+# simulate Y2 and store it to Y[2]
+Random.seed!(12345)
+Y[i] = rand(mixed_multivariate_dist.gc_obs[i])
+# update residuals res[2] using Y[2] and the mean and variance (1/5 for Exponential) using GLM package
+res[i] = update_res!(Y[i], res[i], mixed_multivariate_dist.gc_obs[i])
+
+# next, for conditional density of Y2 | Y1, form the constants for pdf 
+i = 3
+mixed_multivariate_dist.gc_obs[i] = pdf_constants(mixed_multivariate_dist.Γ, res, i, mixed_multivariate_dist.vecd[i])
+# pre allocate for sampling nsample times from conditional density
+Random.seed!(12345)
+nsample = 10_000
+@info "sample $nsample points for the conditional Poisson distribution"
+s = Vector{Int64}(undef, nsample)
+Random.seed!(12345)
+rand!(mixed_multivariate_dist.gc_obs[i], s) # compile
+Random.seed!(12345)
+@time rand!(mixed_multivariate_dist.gc_obs[i], s) # get time
+# 0.024654 seconds (50.00 k allocations: 12.207 MiB)
+println("sample mean = $(Statistics.mean(s)); theoretical mean = $(mean(mixed_multivariate_dist.gc_obs[i]))")
+println("sample var = $(Statistics.var(s)); theoretical var = $(var(mixed_multivariate_dist.gc_obs[i]))")
+# conditional mean and variance of Y3 given Y1, Y2
+# sample mean = 148.6428; theoretical mean = 148.65222835737683
+# sample var = 164.9849066506651; theoretical var = 162.72864533082247
 end

@@ -110,7 +110,7 @@ function copula_gradient_addendum(
         gc.q[k] = dot(gc.res, gc.storage_n) / 2
     end
 
-    qsum  = dot(Σ[1], gc.q)
+    qsum  = dot(Σ, gc.q)
     # gradient
         denom = 1 .+ qsum
         inv1pq = inv(denom) #0.9625492359318475
