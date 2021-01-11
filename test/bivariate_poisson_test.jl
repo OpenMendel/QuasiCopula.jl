@@ -3,8 +3,8 @@ using GLMCopula, Random, Statistics, Test, LinearAlgebra, StatsFuns
 @testset "Generate 10,000 independent bivariate poisson vectors and then fit the model to test for the correct random intercepts and mean. " begin
 Random.seed!(12345)
 n = 2
-random_intercept_1 = 0.5
-Γ = random_intercept_1 * ones(2, 2) + 0.8 * [1.0 0.0; 0.0 1.0]
+variance_component_1 = 0.2
+Γ = variance_component_1 * ones(2, 2) + variance_component_2 * [1.0 0.0; 0.0 1.0]
 
 mean_1 = 5
 d1 = Poisson(mean_1)
@@ -55,13 +55,19 @@ initialize_model!(gcm)
 
 fill!(gcm.Σ, 1.0)
 update_Σ!(gcm)
+
 GLMCopula.loglikelihood!(gcm, true, true)
 # @time GLMCopula.fit2!(gcm, IpoptSolver(print_level = 5, derivative_test = "first-order"))
-@time fit2!(gcm, IpoptSolver(print_level = 5, max_iter = 20, hessian_approximation = "exact"))
+@time fit2!(gcm, IpoptSolver(print_level = 5, max_iter = 500, hessian_approximation = "exact"))
+# # -47866.12441845658
+# check default ipopt quasi newton 
+# then go back and check the hessian
 GLMCopula.loglikelihood!(gcm, true, true)
 
 println("estimated mean = $(exp.(gcm.β)[1]); true mean value= $mean_1")
-println("estimated random intercept = $(gcm.Σ[1]); true random intercept = $random_intercept_1")
+println("estimated random intercept = $(gcm.Σ[1]); true random intercept = 0.2")
+println("estimated additional random noise = $(gcm.Σ[2]); true additional random noise = $(1 - 0.2)")
+
 # should be about mean_1
 # @show exp.(gcm.β)
 

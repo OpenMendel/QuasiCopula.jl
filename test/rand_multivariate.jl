@@ -10,8 +10,8 @@ d2 = Normal(mean_normal, var_normal)
 d3 = Normal(mean_normal, var_normal)
 
 vecd = [d1, d2, d3]
-random_intercept_1 = 0.1
-Γ = random_intercept_1 * ones(3, 3)
+variance_component_1 = 0.1
+Γ = variance_component_1 * ones(3, 3)
 
 nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
 
@@ -38,7 +38,7 @@ nonmixed_multivariate_dist.gc_obs[i] = pdf_constants(nonmixed_multivariate_dist.
 # pre allocate for sampling nsample times from conditional density
 Random.seed!(12345)
 nsample = 10_000
-@info "sample $nsample points for the conditional Poisson distribution"
+@info "sample $nsample points for the conditional Normal distribution"
 s = Vector{Float64}(undef, nsample)
 Random.seed!(12345)
 rand!(nonmixed_multivariate_dist.gc_obs[i], s) # compile
@@ -168,11 +168,11 @@ end
 
 @testset "Form mixtures of different discrete and cts distributions. Generate 3 element vector: Y1 ~ Normal(5, 0.2), Y2 ~ Exponential(1/5), Y3 ~ Poisson(5) " begin
 Random.seed!(12345)
-mean_normal = 5
+mean_normal = -5
 var_normal = 0.2
 
 d1 = Normal(mean_normal, var_normal)
-d2 = Exponential(1/mean_normal)
+d2 = Exponential(-1/mean_normal)
 d3 = Poisson(exp(mean_normal))
 
 random_intercept_1 = 0.1
@@ -217,8 +217,8 @@ Random.seed!(12345)
 println("sample mean = $(Statistics.mean(s)); theoretical mean = $(mean(mixed_multivariate_dist.gc_obs[i]))")
 println("sample var = $(Statistics.var(s)); theoretical var = $(var(mixed_multivariate_dist.gc_obs[i]))")
 # conditional mean and variance of Y2 given Y1
-# sample mean = 5.005900458369502; theoretical mean = 5.002996732265867
-# sample var = 0.04316391761735573; theoretical var = 0.04362288747145726
+# sample mean = 0.2235739008006706; theoretical mean = 0.22115607164570328
+# sample var = 0.056128853458491966; theoretical var = 0.05527858504273324
 
 ## now testing conditional Y3 given Y1, Y2
 # simulate Y2 first
@@ -247,6 +247,6 @@ Random.seed!(12345)
 println("sample mean = $(Statistics.mean(s)); theoretical mean = $(mean(mixed_multivariate_dist.gc_obs[i]))")
 println("sample var = $(Statistics.var(s)); theoretical var = $(var(mixed_multivariate_dist.gc_obs[i]))")
 # conditional mean and variance of Y3 given Y1, Y2
-# sample mean = 148.6428; theoretical mean = 148.65222835737683
-# sample var = 164.9849066506651; theoretical var = 162.72864533082247
+# sample mean = 0.0562; theoretical mean = 0.05564357782888464
+# sample var = 0.053646924692469226; theoretical var = 0.0538934802364384
 end

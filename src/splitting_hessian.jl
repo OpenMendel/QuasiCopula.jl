@@ -72,16 +72,16 @@ function hessian_copula_addendum(
         BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 1.0, gc.Hβ) # only lower triangular
 
 # does adding this term to the approximation of the hessian violate negative semidefinite properties?
-#     added_term_numerator = zeros(n, p)
-#     added_term2 = zeros(p, p)
-#     for k in 1:m
-#         mul!(added_term_numerator, gc.V[k], gc.∇resβ) # storage_n = V[k] * res
-#         BLAS.gemm!('T', 'N', Σ[k], gc.∇resβ, added_term_numerator, 1.0, added_term2)
-#     end
-#     #@show added_term2
-#     added_term2 .*= inv1pq
-#     #@show added_term2
-#     gc.Hβ .+= added_term2
+    added_term_numerator = zeros(n, p)
+    added_term2 = zeros(p, p)
+    for k in 1:m
+        mul!(added_term_numerator, gc.V[k], gc.∇resβ) # storage_n = V[k] * res
+        BLAS.gemm!('T', 'N', Σ[k], gc.∇resβ, added_term_numerator, 1.0, added_term2)
+    end
+    #@show added_term2
+    added_term2 .*= inv1pq
+    #@show added_term2
+    gc.Hβ .+= added_term2
     gc.Hβ
 end
 
