@@ -31,12 +31,11 @@ squares solution.
 """
 function initialize_model!(
     gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCModel{T, D}}) where {T <: BlasReal, D}
-    glm_β = glm_regress_model(gcm)[1]
+    glm_β = glm_regress_model(gcm)
     copyto!(gcm.β, glm_β)
     fill!(gcm.τ, 1.0)
     gcm
 end
-
 
 """
 glm_regress_model(gcm)
@@ -48,7 +47,7 @@ function glm_regress_model(gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCMo
    beta = zeros(p)
    ybar = gcm.Ytotal / n
    link = GLM.canonicallink(gcm.d)
-   for iteration = 1:25 # find the intercept by Newton's method
+   for iteration = 1:50 # find the intercept by Newton's method
      g1 = GLM.linkinv(link, beta[1]) #  mu
      g2 = GLM.mueta(link, beta[1])  # dmu
      beta[1] =  beta[1] - clamp((g1 - ybar) / g2, -1.0, 1.0)
@@ -58,44 +57,11 @@ function glm_regress_model(gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCMo
    end
    (obj, old_obj, c) = (0.0, 0.0, 0.0)
    epsilon = 1e-8
-   for iteration = 1:100 # scoring algorithm
-     fill!(gcm.∇β, 0.0)
-     fill!(gcm.Hβ, 0.0)
-     gcm = glm_score_statistic(gcm, beta)
-     increment = gcm.Hβ \ gcm.∇β
-     BLAS.axpy!(1, increment, beta)
-     steps = -1
-     for step_halve = 0:3 # step halving
-       obj = 0.0
-       fill!(gcm.∇β, 0.0)
-       fill!(gcm.Hβ, 0.0)
-            for i in 1:length(gcm.data)
-                gc = gcm.data[i]
-                x = zeros(p)
-               mul!(gc.η, gc.X, beta) # z = X * beta
-               update_res!(gc, beta)
-               steps = steps + 1
-                   for j = 1:length(gcm.data[i].y)
-                     c = gc.res[j] * gc.w1[j]
-                     copyto!(x, gc.X[j, :])
-                     BLAS.axpy!(c, x, gcm.∇β) # score = score + c * x
-                     obj = obj + loglik_obs(gc.d, gc.y[j], gc.μ[j], 1, 1)
-                    end
-            end
-       if obj > old_obj
-         break
-       else
-         BLAS.axpy!(-1, increment, beta)
-         increment = 0.5 * increment
-       end
-     end
-     println(iteration," ",old_obj," ",obj," ",steps)
-     if iteration > 1 && abs(obj - old_obj) < epsilon * (abs(old_obj) + 1.0)
-       return (beta, obj)
-     else
-       old_obj = obj
-     end
-    end
+    fill!(gcm.∇β, 0.0)
+    fill!(gcm.Hβ, 0.0)
+    gcm = glm_score_statistic(gcm, beta)
+    increment = gcm.Hβ \ gcm.∇β
+    BLAS.axpy!(1, increment, beta)
     return beta
 end # function glm_regress
 
