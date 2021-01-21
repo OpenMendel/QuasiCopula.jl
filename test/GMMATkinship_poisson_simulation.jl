@@ -1,19 +1,23 @@
-## simulating to test using kinship for poisson vector outcome 
 using CSV
+using GLMCopula, Random, Statistics, Test, LinearAlgebra, StatsFuns
 
-@testset "Generate 10 independent poisson normal vectors and then fit the model to test for the correct random intercepts and mean. " begin
+
+@testset "Generate 10 independent multivariate normal vectors and then fit the model to test for the correct random intercepts and mean. " begin
+Random.seed!(12345)
+n = 400
+
+
 df = CSV.read("GMMAT_example_pheno.csv")
 kinship = CSV.read("GMMAT_example_pheno_GRM.csv")
 
-Random.seed!(12345)
-n = 400
+
 variance_component_1 = 0.8
 Γ = variance_component_1 * Matrix(kinship[:, 2:end])
 
 cov1 = Float64.(df[:, :age])
 cov2 = Float64.(df[:, :sex])
 X = [ones(400, 1) cov1 cov2]
-β = [3.75;  0.04;  0.42]
+β = [1.2; 0.02; 0.05]
 η = X * β
 μ = exp.(η)
 noise_sd = 0.05
@@ -44,7 +48,7 @@ function simulate_nobs_independent_vectors(
     Y
 end
 
-nsample = 10
+nsample = 1
 @info "sample $nsample independent vectors for the mvn distribution"
 # compile
 Y_nsample = simulate_nobs_independent_vectors(nonmixed_multivariate_dist, nsample)
@@ -85,3 +89,5 @@ GLMCopula.loglikelihood!(gcm, true, true)
 
 println("estimated mean = $(gcm.β)); true mean value= $β")
 println("estimated variance component = $(gcm.Σ[1]); true variance component 1 = $variance_component_1")
+end
+
