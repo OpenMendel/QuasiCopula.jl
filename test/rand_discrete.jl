@@ -3,14 +3,14 @@ using GLMCopula, Random, Statistics, Test, LinearAlgebra, StatsFuns
 ### Poisson ### 
 @testset "Poisson(θ) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(1234)
-Γ = rand(5, 5)
 dist = Poisson(5)
-res = Vector{Float64}(undef, 5)
 # test if the proper c0, c1, c2 constants are stored.
-d_pois = pdf_constants(Γ, res, 1, dist)
-@test d_pois.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_pois.d)^2 * inv(var(d_pois.d)) * 0.5 * Γ[1,1])
-@test d_pois.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_pois.d) * inv(var(d_pois.d)))
-@test d_pois.c2 == 0.5 * Γ[1, 1] * (inv(var(d_pois.d)))
+γ = 1.0
+d_pois = pdf_constants(γ, dist)
+
+@test d_pois.c0 == 1 + (mean(d_pois.d)^2 * inv(var(d_pois.d)) * 0.5 * γ)
+@test d_pois.c1 == 0.5 * γ * (-2 * mean(d_pois.d) * inv(var(d_pois.d)))
+@test d_pois.c2 == 0.5 * γ * (inv(var(d_pois.d)))
 
 pmf = pmf_copula(d_pois)
 reordered_k, reordered_pmf = reorder_pmf(pmf, d_pois.μ)
@@ -27,24 +27,24 @@ println("sample mean = $(Statistics.mean(s)); theoretical mean = $(mean(d_pois))
 println("sample var = $(Statistics.var(s)); theoretical var = $(var(d_pois))")
 end
 # n = 10,0000 ::: time = 0.019234 seconds
-# sample mean = 5.1773; theoretical mean = 5.186521822457729
-# sample var = 7.017566466646667; theoretical var = 7.016949656782039
+# sample mean = 5.315; theoretical mean = 5.333333333333333
+# sample var = 8.48922392239224; theoretical var = 8.555555555555557
 
 # ### Binomial ### 
 @testset "Binomial(n, p) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(123)
-res = Vector{Float64}(undef, 5)
-Γ = rand(5, 5)
 n = 30
 p = 0.1
 dist = Binomial(n, p)
 
-# test if the proper c0, c1, c2 constants are stored.
-d_binomial = pdf_constants(Γ, res, 1, dist)
-@test d_binomial.c ≈ inv(1 + 0.5 * tr(Γ))
-@test d_binomial.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_binomial.d)^2 * inv(var(d_binomial.d)) * 0.5 * Γ[1,1])
-@test d_binomial.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_binomial.d) * inv(var(d_binomial.d)))
-@test d_binomial.c2 == 0.5 * Γ[1, 1] * (inv(var(d_binomial.d)))
+# test if the proper c0, c1, c2 constants are stored. 
+γ = 1.0
+d_binomial = pdf_constants(γ, dist)
+
+@test d_binomial.c ≈ inv(1 + 0.5 * γ)
+@test d_binomial.c0 == 1 + (mean(d_binomial.d)^2 * inv(var(d_binomial.d)) * 0.5 * γ)
+@test d_binomial.c1 == 0.5 * γ * (-2 * mean(d_binomial.d) * inv(var(d_binomial.d)))
+@test d_binomial.c2 == 0.5 * γ * (inv(var(d_binomial.d)))
 
 pmf = pmf_copula(d_binomial)
 reordered_k, reordered_pmf = reorder_pmf(pmf, d_binomial.μ)
@@ -68,17 +68,17 @@ end
 # ### Geometric p = 0.2 ### 
 @testset "Geometric(p = 0.2) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(123)
-res = Vector{Float64}(undef, 5)
-Γ = rand(5, 5)
 p = 0.2
 dist = Geometric(p)
 
 # test if the proper c0, c1, c2 constants are stored.
-d_geometric = pdf_constants(Γ, res, 1, dist)
-@test d_geometric.c ≈ inv(1 + 0.5 * tr(Γ))
-@test d_geometric.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_geometric.d)^2 * inv(var(d_geometric.d)) * 0.5 * Γ[1,1])
-@test d_geometric.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_geometric.d) * inv(var(d_geometric.d)))
-@test d_geometric.c2 == 0.5 * Γ[1, 1] * (inv(var(d_geometric.d)))
+γ = 1.0
+d_geometric = pdf_constants(γ, dist)
+
+@test d_geometric.c ≈ inv(1 + 0.5 * γ)
+@test d_geometric.c0 == 1 + (mean(d_geometric.d)^2 * inv(var(d_geometric.d)) * 0.5 * γ)
+@test d_geometric.c1 == 0.5 * γ * (-2 * mean(d_geometric.d) * inv(var(d_geometric.d)))
+@test d_geometric.c2 == 0.5 * γ * (inv(var(d_geometric.d)))
 
 pmf = pmf_copula(d_geometric)
 reordered_k, reordered_pmf = reorder_pmf(pmf, d_geometric.μ)
@@ -96,24 +96,22 @@ println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_
 end
 
 # n = 10,0000 ::: time = 0.032615 seconds (40.00 k allocations: 34.180 MiB, 21.35% gc time)
-# sample mean = 5.3313; theoretical mean = 5.380051048711484
-# sample var = 42.31337164716471; theoretical var = 42.78303897434462
-
 
 # ### Geometric p = 0.5### 
 @testset "Geometric(p = 0.5) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(123)
-res = Vector{Float64}(undef, 5)
-Γ = rand(5, 5)
+
 p = 0.5
 dist = Geometric(p)
 
 # test if the proper c0, c1, c2 constants are stored.
-d_geometric = pdf_constants(Γ, res, 1, dist)
-@test d_geometric.c ≈ inv(1 + 0.5 * tr(Γ))
-@test d_geometric.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_geometric.d)^2 * inv(var(d_geometric.d)) * 0.5 * Γ[1,1])
-@test d_geometric.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_geometric.d) * inv(var(d_geometric.d)))
-@test d_geometric.c2 == 0.5 * Γ[1, 1] * (inv(var(d_geometric.d)))
+γ = 1.0
+d_geometric = pdf_constants(γ, dist)
+
+@test d_geometric.c ≈ inv(1 + 0.5 * γ)
+@test d_geometric.c0 == 1 + (mean(d_geometric.d)^2 * inv(var(d_geometric.d)) * 0.5 * γ)
+@test d_geometric.c1 == 0.5 * γ * (-2 * mean(d_geometric.d) * inv(var(d_geometric.d)))
+@test d_geometric.c2 == 0.5 * γ * (inv(var(d_geometric.d)))
 
 pmf = pmf_copula(d_geometric)
 reordered_k, reordered_pmf = reorder_pmf(pmf, d_geometric.μ)
@@ -131,23 +129,21 @@ println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_
 end
 
 # n = 10,0000 ::: time = 0.025624 seconds (40.00 k allocations: 34.180 MiB, 33.37% gc time)
-# sample mean = 1.4506; theoretical mean = 1.4600170162371608
-# sample var = 4.338793519351937; theoretical var = 4.395147436782838
 
 # ### Negative Binomial r = 5, p = 0.5 ### 
 @testset "NegativeBinomial(r = 5, p = 0.5) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(123)
-res = Vector{Float64}(undef, 5)
-Γ = rand(5, 5)
 r, p = 5, 0.5
 dist = NegativeBinomial(r, p)
 
 # test if the proper c0, c1, c2 constants are stored.
-d_nb = pdf_constants(Γ, res, 1, dist)
-@test d_nb.c ≈ inv(1 + 0.5 * tr(Γ))
-@test d_nb.c0 == 1 + 0.5tr(Γ[2:end, 2:end]) + (mean(d_nb.d)^2 * inv(var(d_nb.d)) * 0.5 * Γ[1,1])
-@test d_nb.c1 == 0.5 * Γ[1, 1] * (-2 * mean(d_nb.d) * inv(var(d_nb.d)))
-@test d_nb.c2 == 0.5 * Γ[1, 1] * (inv(var(d_nb.d)))
+γ = 1.0
+d_nb = pdf_constants(γ, dist)
+
+@test d_nb.c ≈ inv(1 + 0.5 * γ)
+@test d_nb.c0 == 1  + (mean(d_nb.d)^2 * inv(var(d_nb.d)) * 0.5 * γ)
+@test d_nb.c1 == 0.5 * γ * (-2 * mean(d_nb.d) * inv(var(d_nb.d)))
+@test d_nb.c2 == 0.5 * γ * (inv(var(d_nb.d)))
 
 pmf = pmf_copula(d_nb)
 reordered_k, reordered_pmf = reorder_pmf(pmf, d_nb.μ)
@@ -165,5 +161,32 @@ println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_
 end
 
 # n = 10,0000 ::: time = 0.142361 seconds (40.00 k allocations: 18.921 MiB, 57.42% gc time)
-# sample mean = 5.3987; theoretical mean = 5.4600170162371615
-# sample var = 14.753013611361133; theoretical var = 14.848571523381025
+### Bernoulli ### 
+@testset "Bernoulli(θ) * (c0 + c1 * x + c2 * x^2);" begin
+Random.seed!(1234)
+dist = Bernoulli(0.8)
+# test if the proper c0, c1, c2 constants are stored.
+γ = 1.0
+d_bernoulli = pdf_constants(γ, dist)
+
+@test d_bernoulli.c0 == 1 + (mean(d_bernoulli.d)^2 * inv(var(d_bernoulli.d)) * 0.5 * γ)
+@test d_bernoulli.c1 == 0.5 * γ * (-2 * mean(d_bernoulli.d) * inv(var(d_bernoulli.d)))
+@test d_bernoulli.c2 == 0.5 * γ * (inv(var(d_bernoulli.d)))
+
+pmf = pmf_copula(d_bernoulli)
+reordered_k, reordered_pmf = reorder_pmf(pmf, d_bernoulli.μ)
+sum(reordered_pmf) ≈ 1
+
+###
+Random.seed!(1234)
+nsample = 10_000
+@info "sample $nsample points for the $dist distribution"
+s = Vector{Int64}(undef, nsample)
+rand!(d_bernoulli, s) # compile 
+@time rand!(d_bernoulli, s) # get time
+println("sample mean = $(Statistics.mean(s)); theoretical mean = $(mean(d_bernoulli))")
+println("sample var = $(Statistics.var(s)); theoretical var = $(var(d_bernoulli))")
+end
+# n = 10,0000 ::: time = 0.019234 seconds
+# sample mean = 5.315; theoretical mean = 5.333333333333333
+# sample var = 8.48922392239224; theoretical var = 8.555555555555557

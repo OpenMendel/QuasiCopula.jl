@@ -20,9 +20,9 @@ df[!, :counts] = rand.(Poisson.(GLM.linkinv.(canonicallink(Poisson()), response(
 df
 
 poisson_formula = @formula(counts ~ 1 + normal + (1|gene));
-mdl = GeneralizedLinearMixedModel(poisson_formula, df, Poisson());
+@time mdl = GeneralizedLinearMixedModel(poisson_formula, df, Poisson());
 loglikelihood(mdl)
-
+# -1891.2586221674821
 groups = unique(df[!, :gene])
 n, p, m = length(groups), 1, 1
 d = Poisson()
@@ -327,4 +327,5 @@ GLMCopula.loglikelihood!(gcm, true, true)
 GLMCopula.loglikelihood!(gcm, true, true)
 # -1863.1043633723516
 
+# 0.218887 seconds (1.08 M allocations: 101.188 MiB, 18.91% gc time)
 # using MixedModels -1891.2586221674821

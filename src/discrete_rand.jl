@@ -38,8 +38,8 @@ end
 This function will fill out the appropriate constants, c0, c1, c2 for each conditional distribution to form the `DiscreteUnivariateCopula` structure. 
 """
 function pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist::DiscreteUnivariateDistribution) where T <: Real
-    μ = mean(dist)
-    σ2 = var(dist)
+    μ = Distributions.mean(dist)
+    σ2 = Distributions.var(dist)
     c_0 = μ^2 * inv(σ2)
     c__0 = μ * inv(sqrt(σ2)) * crossterm_res(res, i, Γ)
     c_1 = -2μ * inv(σ2)
@@ -48,6 +48,39 @@ function pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist::DiscreteUn
     c0 = 1 + 0.5 * transpose(res[1:i-1]) *  Γ[1:i-1, 1:i-1] *  res[1:i-1] +  0.5 * tr(Γ[i+1:end, i+1:end]) + 0.5 * Γ[i, i] * c_0  - c__0[1]
     c1 = 0.5 * Γ[i, i] * c_1  + c__1[1]
     c2 = 0.5 * Γ[i, i] * c_2
+    DiscreteUnivariateCopula(dist, c0, c1, c2)
+end
+
+"""
+    pdf_constants(Γ::Matrix{<:Real}, dist::DiscreteUnivariateDistribution)
+This function will fill out the appropriate constants, c0, c1, c2 for the univariate marginal distribution to form the `DiscreteUnivariateCopula` structure. 
+"""
+function pdf_constants(Γ::Matrix{T}, i::Int64, dist::DiscreteUnivariateDistribution) where T <: Real
+    μ = Distributions.mean(dist)
+    σ2 = Distributions.var(dist)
+    c_0 = μ^2 * inv(σ2)
+    c_1 = -2μ * inv(σ2)
+    c_2 = inv(σ2)
+    c0 = 1  +  0.5 * (tr(Γ) - Γ[i, i]) + 0.5 * Γ[i, i] * c_0
+    c1 = 0.5 * Γ[i, i] * c_1 
+    c2 = 0.5 * Γ[i, i] * c_2
+    DiscreteUnivariateCopula(dist, c0, c1, c2)
+end
+
+"""
+    pdf_constants(γ::T, dist::DiscreteUnivariateDistribution)
+This function will fill out the appropriate constants, c0, c1, c2 for the univariate marginal distribution to form the `DiscreteUnivariateCopula` structure. 
+When the number of observations in the cluster is 1
+"""
+function pdf_constants(γ::T, dist::DiscreteUnivariateDistribution) where T <: Real
+    μ = Distributions.mean(dist)
+    σ2 = Distributions.var(dist)
+    c_0 = μ^2 * inv(σ2)
+    c_1 = -2μ * inv(σ2)
+    c_2 = inv(σ2)
+    c0 = 1  + 0.5 * γ * c_0
+    c1 = 0.5 * γ * c_1 
+    c2 = 0.5 * γ * c_2
     DiscreteUnivariateCopula(dist, c0, c1, c2)
 end
 
@@ -144,3 +177,35 @@ function rand!(dist::DiscreteUnivariateCopula, sample::Vector{T}) where T <: Rea
     sample
 end
 
+"""
+    rand(dist::DiscreteUnivariateCopula)
+This function will simulate the discrete random variable under our copula model. 
+"""
+function rand(dist::DiscreteUnivariateCopula{Bernoulli{T}, T}) where T <: Real
+    random_deviate = Float64(rand(Bernoulli(GLMCopula.mean(dist))))
+    random_deviate
+end
+
+
+"""
+    rand(dist::DiscreteUnivariateCopula, n_reps::Int64)
+This function will simulate the discrete random variable under our copula model, n_reps times. 
+"""
+function rand(dist::DiscreteUnivariateCopula{Bernoulli{T}, T}, n_reps::Int64) where T <: Real
+    random_deviate = zeros(Int64, n_reps)
+    for l in 1:n_reps
+        random_deviate[l] = rand(dist)
+    end
+    random_deviate
+end
+
+"""
+    rand!(dist::DiscreteUnivariateCopula, sample::Vector{T})
+This function will write over each entry in the specified sample vector, the simulated univariate discrete values under our copula model. 
+"""
+function rand!(dist::DiscreteUnivariateCopula{Bernoulli{T}, T}, sample::Vector{T}) where T <: Real
+    for i in 1:length(sample)
+        sample[i] = rand(dist)
+    end
+    sample
+end

@@ -38,8 +38,8 @@ end
 This function will fill out the appropriate constants, c0, c1, c2 for each conditional distribution to form the `ContinuousUnivariateCopula` structure. 
 """
 function pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist::ContinuousUnivariateDistribution) where T <: Real
-    μ = mean(dist)
-    σ2 = var(dist)
+    μ = Distributions.mean(dist)
+    σ2 = Distributions.var(dist)
     c_0 = μ^2 * inv(σ2)
     c__0 = μ * inv(sqrt(σ2)) * crossterm_res(res, i, Γ)
     c_1 = -2μ * inv(σ2)
@@ -50,6 +50,42 @@ function pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist::Continuous
     c2 = 0.5 * Γ[i, i] * c_2
     ContinuousUnivariateCopula(dist, c0, c1, c2)
 end
+
+
+"""
+    pdf_constants(Γ::Matrix{<:Real}, dist::DiscreteUnivariateDistribution)
+This function will fill out the appropriate constants, c0, c1, c2 for the univariate marginal distribution to form the `DiscreteUnivariateCopula` structure. 
+"""
+function pdf_constants(Γ::Matrix{T}, i::Int64, dist::ContinuousUnivariateDistribution) where T <: Real
+    μ = Distributions.mean(dist)
+    σ2 = Distributions.var(dist)
+    c_0 = μ^2 * inv(σ2)
+    c_1 = -2μ * inv(σ2)
+    c_2 = inv(σ2)
+    c0 = 1  +  0.5 * (tr(Γ) - Γ[i, i]) + 0.5 * Γ[i, i] * c_0
+    c1 = 0.5 * Γ[i, i] * c_1 
+    c2 = 0.5 * Γ[i, i] * c_2
+    ContinuousUnivariateCopula(dist, c0, c1, c2)
+end
+
+
+"""
+    pdf_constants(γ::T, dist::ContinuousUnivariateDistribution)
+This function will fill out the appropriate constants, c0, c1, c2 for the univariate marginal distribution to form the `ContinuousUnivariateCopula` structure. 
+When the number of observations in the cluster is 1
+"""
+function pdf_constants(γ::T, dist::ContinuousUnivariateDistribution) where T <: Real
+    μ = Distributions.mean(dist)
+    σ2 = Distributions.var(dist)
+    c_0 = μ^2 * inv(σ2)
+    c_1 = -2μ * inv(σ2)
+    c_2 = inv(σ2)
+    c0 = 1  + 0.5 * γ * c_0
+    c1 = 0.5 * γ * c_1 
+    c2 = 0.5 * γ * c_2
+    ContinuousUnivariateCopula(dist, c0, c1, c2)
+end
+
 
 """
     crossterm_res(res::Vector{<:Real}, s::Int64, Γ::Matrix{<:Real}; all = false)
@@ -100,9 +136,9 @@ moments about zero. See formula at <https://en.wikipedia.org/wiki/Central_moment
 function mvsk_to_absm(μ, σ², sk, kt)
     σ = sqrt(σ²)
     m1 = μ # E[X]
-    m2 = σ² + abs2(μ) # E[X^2] - E[X]^2 + E[X]^2 = E[X^2]
-    m3 = sk * σ^3 + 3μ * m2 - 2μ^3 # E[X^3] = E[((X-μ)/σ)^3] * (1 / σ^3) + 3 μ E[X^2] - 3μ^2 * E[X] + μ^3 
-    m4 = kt * abs2(σ²) + 4μ * m3 - 6 * abs2(μ) * m2 + 3μ^4
+    m2 = σ² + abs2(μ) # Var(X) + E[X]^2 = E[X^2]
+    m3 = sk * σ^3 + 3μ * m2 - 2μ^3 # E[X^3] ; where sk = m3 - 3μ(m2) + 2μ^3
+    m4 = kt * abs2(σ²) + 4μ * m3 - 6 * abs2(μ) * m2 + 3μ^4 # E[X^4]; where kt = m4 - 4μ (m3) + 6μ^2 (m2) -3μ^4
     m1, m2, m3, m4
 end
 
@@ -111,7 +147,7 @@ end
 Theoretical mean under the copula model. 
 """
 function mean(d::Union{ContinuousUnivariateCopula, DiscreteUnivariateCopula})
-    μ, σ², sk, kt = mean(d.d), var(d.d), skewness(d.d), kurtosis(d.d, false) # proper kurtosis (un-corrected) when false 
+    μ, σ², sk, kt = Distributions.mean(d.d), Distributions.var(d.d), Distributions.skewness(d.d), Distributions.kurtosis(d.d, false) # proper kurtosis (un-corrected) when false 
     m1, m2, m3, _ = mvsk_to_absm(μ, σ², sk, kt)
     d.c * (d.c0 * m1 + d.c1 * m2 + d.c2 * m3)
 end
@@ -123,7 +159,7 @@ Theoretical variance under the copula model.
 function var(d::Union{ContinuousUnivariateCopula, DiscreteUnivariateCopula})
     μ, σ², sk, kt = mean(d.d), var(d.d), skewness(d.d), kurtosis(d.d, false)
     _, m2, m3, m4 = mvsk_to_absm(μ, σ², sk, kt)
-    d.c * (d.c0 * m2 + d.c1 * m3 + d.c2 * m4) - abs2(mean(d))
+    d.c * (d.c0 * m2 + d.c1 * m3 + d.c2 * m4) - abs2(mean(d)) # E[Y_k^2] - E[Y_k]^2
 end
 
 """

@@ -18,9 +18,7 @@ export hessian_glm, hessian_copula_addendum, copula_hessian
 export GLMCopulaVCObs, GLMCopulaVCModel
 export GaussianCopulaVCObs, GaussianCopulaVCModel
 
-# export GVCVec, conditional_terms!, conditional_pdf_cdf!, generate_res_vec!
-# export generate_R1_mixture_Normal, genR1
-# export joint_density_value, crossterm_res
+export GaussianCopulaLMMObs, GaussianCopulaLMMModel
 
 """
 GaussianCopulaVCObs
@@ -51,6 +49,7 @@ struct GaussianCopulaVCObs{T <: BlasReal, D}
     varμ::Vector{T} # v(μ_i) # variance as a function of the mean
     dμ::Vector{T}   # derivative of μ
     d::D            # distribution()
+    wt::Vector{T}   # weights wt for GLM.jl
     w1::Vector{T}   # working weights in the gradient = dμ/v(μ)
     w2::Vector{T}   # working weights in the information matrix = dμ^2/v(μ)
 end
@@ -81,11 +80,12 @@ function GaussianCopulaVCObs(
     μ = Vector{T}(undef, n)
     varμ = Vector{T}(undef, n)
     dμ = Vector{T}(undef, n)
+    wt = ones(T, n)
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
     GaussianCopulaVCObs{T, D}(y, X, V, ∇β, ∇resβ, ∇τ, ∇Σ, Hβ,
-        Hτ, res, xtx, xtw2x, t, q, storage_n, storage_p, η, μ, varμ, dμ, d, w1, w2)
+        Hτ, res, xtx, xtw2x, t, q, storage_n, storage_p, η, μ, varμ, dμ, d, wt, w1, w2)
 end
 
 """
@@ -151,6 +151,7 @@ function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVCObs{T, D}}) where {T 
         storage_n, storage_m, storage_Σ, gcs[1].d)
 end
 
+
 struct GLMCopulaVCObs{T <: BlasReal, D}
     # data
     y::Vector{T}
@@ -174,6 +175,7 @@ struct GLMCopulaVCObs{T <: BlasReal, D}
     varμ::Vector{T} # v(μ_i) # variance as a function of the mean
     dμ::Vector{T}   # derivative of μ
     d::D            # distribution()
+    wt::Vector{T}   # weights wt for GLM.jl
     w1::Vector{T}   # working weights in the gradient = dμ/v(μ)
     w2::Vector{T}   # working weights in the information matrix = dμ^2/v(μ)
 end
@@ -182,8 +184,7 @@ function GLMCopulaVCObs(
     y::Vector{T},
     X::Matrix{T},
     V::Vector{Matrix{T}},
-    d::D
-    ) where {T <: BlasReal, D}
+    d::D) where {T <: BlasReal, D}
     n, p, m = size(X, 1), size(X, 2), length(V)
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
@@ -203,11 +204,29 @@ function GLMCopulaVCObs(
     μ = Vector{T}(undef, n)
     varμ = Vector{T}(undef, n)
     dμ = Vector{T}(undef, n)
+    wt = Vector{T}(undef, n)
+    fill_in_weights(wt, d)
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
     GLMCopulaVCObs{T, D}(y, X, V, ∇β, ∇resβ, ∇τ, ∇Σ, Hβ,
-        Hτ, res, t, q, xtx, storage_n, storage_p, η, μ, varμ, dμ, d, w1, w2)
+        Hτ, res, t, q, xtx, storage_n, storage_p, η, μ, varμ, dμ, d, wt, w1, w2)
+end
+
+function fill_in_weights(
+    wt::Vector{T},
+    d::D
+    ) where {T <: BlasReal, D<:Binomial}
+    fill!(wt, d.n)
+    nothing
+end
+
+function fill_in_weights(
+    wt::Vector{T},
+    d::D
+    ) where {T <: BlasReal, D<:Union{Poisson, Bernoulli, Normal}}
+    fill!(wt, one(T))
+    nothing
 end
 
 """
@@ -272,6 +291,116 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D}}) where {T <: BlasRea
         storage_n, storage_m, storage_Σ, gcs[1].d)
 end
 
+#######
+
+"""
+GaussianCopulaLMMObs
+GaussianCopulaLMMObs(y, X, Z)
+A realization of Gaussian copula linear mixed model data instance.
+"""
+struct GaussianCopulaLMMObs{T <: LinearAlgebra.BlasReal}
+    # data
+    y::Vector{T}
+    X::Matrix{T}
+    Z::Matrix{T}
+    # working arrays
+    ∇β::Vector{T}   # gradient wrt β
+    ∇τ::Vector{T}   # gradient wrt τ
+    ∇Σ::Matrix{T}   # gradient wrt Σ 
+    Hβ::Matrix{T}   # Hessian wrt β
+    Hτ::Matrix{T}   # Hessian wrt τ
+    HΣ::Matrix{T}   # Hessian wrt Σ
+    res::Vector{T}  # residual vector
+    xtx::Matrix{T}  # Xi'Xi (p-by-p)
+    ztz::Matrix{T}  # Zi'Zi (q-by-q)
+    xtz::Matrix{T}  # Xi'Zi (p-by-q)
+    storage_q1::Vector{T}
+    storage_q2::Vector{T}
+end
+
+function GaussianCopulaLMMObs(
+    y::Vector{T},
+    X::Matrix{T},
+    Z::Matrix{T}
+    ) where T <: BlasReal
+    n, p, q = size(X, 1), size(X, 2), size(Z, 2)
+    @assert length(y) == n "length(y) should be equal to size(X, 1)"
+    # working arrays
+    ∇β  = Vector{T}(undef, p)
+    ∇τ  = Vector{T}(undef, 1)
+    ∇Σ  = Matrix{T}(undef, q, q)
+    Hβ  = Matrix{T}(undef, p, p)
+    Hτ  = Matrix{T}(undef, 1, 1)
+    HΣ  = Matrix{T}(undef, abs2(q), abs2(q))
+    res = Vector{T}(undef, n)
+    xtx = transpose(X) * X
+    ztz = transpose(Z) * Z
+    xtz = transpose(X) * Z
+    storage_q1 = Vector{T}(undef, q)
+    storage_q2 = Vector{T}(undef, q)
+    # constructor
+    GaussianCopulaLMMObs{T}(y, X, Z, 
+        ∇β, ∇τ, ∇Σ, Hβ, Hτ, HΣ,
+        res, xtx, ztz, xtz,
+        storage_q1, storage_q2)
+end
+
+"""
+GaussianCopulaLMMModel
+GaussianCopulaLMMModel(gcs)
+Gaussian copula linear mixed model, which contains a vector of 
+`GaussianCopulaLMMObs` as data, model parameters, and working arrays.
+"""
+struct GaussianCopulaLMMModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
+    # data
+    data::Vector{GaussianCopulaLMMObs{T}}
+    ntotal::Int     # total number of singleton observations
+    p::Int          # number of mean parameters in linear regression
+    q::Int          # number of random effects
+    # parameters
+    β::Vector{T}    # p-vector of mean regression coefficients
+    τ::Vector{T}    # inverse of linear regression variance parameter
+    Σ::Matrix{T}    # q-by-q (psd) matrix
+    # working arrays
+    ΣL::Matrix{T}
+    ∇β::Vector{T}   # gradient from all observations
+    ∇τ::Vector{T}
+    ∇Σ::Matrix{T}
+    Hβ::Matrix{T}   # Hessian from all observations
+    Hτ::Matrix{T}
+    HΣ::Matrix{T}
+    XtX::Matrix{T}      # X'X = sum_i Xi'Xi
+    storage_qq::Matrix{T}
+    storage_nq::Matrix{T}
+end
+
+function GaussianCopulaLMMModel(gcs::Vector{GaussianCopulaLMMObs{T}}) where T <: BlasReal
+    n, p, q = length(gcs), size(gcs[1].X, 2), size(gcs[1].Z, 2)
+    npar = p + 1 + (q * (q + 1)) >> 1
+    β   = Vector{T}(undef, p)
+    τ   = Vector{T}(undef, 1)
+    Σ   = Matrix{T}(undef, q, q)
+    ΣL  = similar(Σ)
+    ∇β  = Vector{T}(undef, p)
+    ∇τ  = Vector{T}(undef, 1)
+    ∇Σ  = Matrix{T}(undef, q, q)
+    Hβ  = Matrix{T}(undef, p, p)
+    Hτ  = Matrix{T}(undef, 1, 1)
+    HΣ  = Matrix{T}(undef, abs2(q), abs2(q))
+    XtX = zeros(T, p, p) # sum_i xi'xi
+    ntotal = 0
+    for i in eachindex(gcs)
+        ntotal  += length(gcs[i].y)
+        XtX    .+= gcs[i].xtx
+    end
+    storage_qq = Matrix{T}(undef, q, q)
+    storage_nq = Matrix{T}(undef, n, q)
+    GaussianCopulaLMMModel{T}(gcs, ntotal, p, q, 
+        β, τ, Σ, ΣL,
+        ∇β, ∇τ, ∇Σ, Hβ, Hτ, HΣ, 
+        XtX, storage_qq, storage_nq)
+end
+
 include("initialize_model.jl")
 include("splitting_loglikelihood.jl")
 include("splitting_gradient.jl")
@@ -281,6 +410,7 @@ include("update_sigma_and_residuals.jl")
 include("discrete_rand.jl")
 include("continuous_rand.jl")
 include("multivariate_rand.jl")
-# include("generate_random_deviates_mixturemodel_R1.jl")
-# include("gen_random_deviates_conditionaldensity.jl")
+
+include("gaussian_lmm.jl")
+
 end # module

@@ -34,7 +34,6 @@ end
 
 """
 loglik_obs!(d, y, μ, wt, ϕ)
-
 Get the loglikelihood from the GLM.jl package for each observation
 """
 
@@ -66,7 +65,7 @@ function component_loglikelihood(gc::GLMCopulaVCObs{T, D},
    end
     ϕ = inv(τ)
     @inbounds for j in eachindex(gc.y)
-        logl += GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], one(T), ϕ)
+        logl += GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], gc.wt[j], ϕ)
     end
     logl
 end

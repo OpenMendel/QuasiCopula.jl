@@ -26,15 +26,28 @@ std_res_differential!(gc)
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Bernoulli.
 """
 function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:Bernoulli{T}}
-∇σ2β = zeros(size(gc.X))
+    ∇σ2β = zeros(size(gc.X))
     for j in 1:length(gc.y)
-        ∇σ2β[j, :] = (1 - 2*gc.μ[j]) * gc.dμ[j] .* gc.X[j, :]
-        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j]))*gc.dμ[j] .* gc.X[j, :] - (1/2gc.varμ[j])*gc.res[j] .* ∇σ2β[j, :]
+        ∇σ2β[j, :] = (1 - 2 * gc.μ[j]) * gc.dμ[j] .* gc.X[j, :]
+        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * gc.dμ[j] .* gc.X[j, :] - (1 / 2gc.varμ[j]) * gc.res[j] .* ∇σ2β[j, :]
     end
     nothing
 end
 
-##  I used this to check if my gradient and hessian values for the Normal case is the same
+"""
+std_res_differential!(gc)
+compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Binomial.
+"""
+function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:Binomial{T}}
+    ∇μβ = zeros(size(gc.X))
+    ∇σ2β = zeros(size(gc.X))
+    for j in 1:length(gc.y)
+        ∇μβ[j, :] = gc.varμ[j] .* gc.X[j, :]
+        ∇σ2β[j, :] = (1 - 2*gc.μ[j]) * gc.dμ[j] .* gc.X[j, :]
+        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * ∇μβ[j, :] - (1 / 2gc.varμ[j]) * gc.res[j] .* ∇σ2β[j, :]
+    end
+    nothing
+end
 
 """
     glm_gradient(gc::GLMCopulaVCObs{T, D})
