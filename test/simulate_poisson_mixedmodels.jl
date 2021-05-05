@@ -3,7 +3,7 @@ using ForwardDiff, Test, LinearAlgebra
 using LinearAlgebra: BlasReal, copytri!
 
 Random.seed!(1235)
-p = 10   # number of genes
+p = 10   # number of clusters
 
 n = 100  # number of cells
 
@@ -22,7 +22,7 @@ df
 poisson_formula = @formula(counts ~ 1 + normal + (1|gene));
 @time mdl = GeneralizedLinearMixedModel(poisson_formula, df, Poisson());
 loglikelihood(mdl)
-# -1891.2586221674821
+
 groups = unique(df[!, :gene])
 n, p, m = length(groups), 1, 1
 d = Poisson()
