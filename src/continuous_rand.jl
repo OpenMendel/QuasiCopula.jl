@@ -41,12 +41,12 @@ function pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist::Continuous
     μ = Distributions.mean(dist)
     σ2 = Distributions.var(dist)
     c_0 = μ^2 * inv(σ2)
-    c__0 = μ * inv(sqrt(σ2)) * crossterm_res(res, i, Γ)
+    c__0 = μ * inv(sqrt(σ2)) * sum(crossterm_res(res, i, Γ))
     c_1 = -2μ * inv(σ2)
-    c__1 = inv(sqrt(σ2)) * crossterm_res(res, i, Γ) 
+    c__1 = inv(sqrt(σ2)) * sum(crossterm_res(res, i, Γ)) 
     c_2 = inv(σ2)
-    c0 = 1 + 0.5 * transpose(res[1:i-1]) *  Γ[1:i-1, 1:i-1] *  res[1:i-1] +  0.5 * tr(Γ[i+1:end, i+1:end]) + 0.5 * Γ[i, i] * c_0  - c__0[1]
-    c1 = 0.5 * Γ[i, i] * c_1  + c__1[1]
+    c0 = 1 + 0.5 * transpose(res[1:i-1]) *  Γ[1:i-1, 1:i-1] *  res[1:i-1] +  0.5 * tr(Γ[i+1:end, i+1:end]) + 0.5 * Γ[i, i] * c_0  - c__0
+    c1 = 0.5 * Γ[i, i] * c_1  + c__1
     c2 = 0.5 * Γ[i, i] * c_2
     ContinuousUnivariateCopula(dist, c0, c1, c2)
 end

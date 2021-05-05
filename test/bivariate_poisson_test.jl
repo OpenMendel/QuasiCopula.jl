@@ -65,10 +65,8 @@ GLMCopula.loglikelihood!(gcm, true, true)
 # 39 iterations at 7 seconds 
 # check default ipopt quasi newton 
 # then go back and check the hessian
-GLMCopula.loglikelihood!(gcm, true, true)
-# -48011.648934230856
+@test GLMCopula.loglikelihood!(gcm, true, true) == -48011.648934230856
 println("estimated mean = $(exp.(gcm.β)[1]); true mean value= $mean_1")
 println("estimated variance component 1 = $(gcm.Σ[1]); true variance component 1 = $variance_component_1")
 println("estimated variance component 2 = $(gcm.Σ[2]); true variance component 2 = $variance_component_2")
-
 end

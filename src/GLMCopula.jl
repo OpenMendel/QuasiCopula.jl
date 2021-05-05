@@ -39,7 +39,6 @@ struct GaussianCopulaVCObs{T <: BlasReal, D}
     Hτ::Matrix{T}   # Hessian wrt τ
     res::Vector{T}  # residual vector res_i
     xtx::Matrix{T}  # Xi'Xi
-    xtw2x::Matrix{T}# Xi'W2iXi where W2i = Diagonal(mueta(link, Xi*B))
     t::Vector{T}    # t[k] = tr(V_i[k]) / 2
     q::Vector{T}    # q[k] = res_i' * V_i[k] * res_i / 2
     storage_n::Vector{T}
@@ -71,7 +70,6 @@ function GaussianCopulaVCObs(
     Hτ  = Matrix{T}(undef, 1, 1)
     res = Vector{T}(undef, n)
     xtx = transpose(X) * X
-    xtw2x = Matrix{T}(undef, p, n)
     t   = [tr(V[k])/2 for k in 1:m]
     q   = Vector{T}(undef, m)
     storage_n = Vector{T}(undef, n)
@@ -85,7 +83,7 @@ function GaussianCopulaVCObs(
     w2 = Vector{T}(undef, n)
     # constructor
     GaussianCopulaVCObs{T, D}(y, X, V, ∇β, ∇resβ, ∇τ, ∇Σ, Hβ,
-        Hτ, res, xtx, xtw2x, t, q, storage_n, storage_p, η, μ, varμ, dμ, d, wt, w1, w2)
+        Hτ, res, xtx, t, q, storage_n, storage_p, η, μ, varμ, dμ, d, wt, w1, w2)
 end
 
 """
@@ -112,7 +110,6 @@ struct GaussianCopulaVCModel{T <: BlasReal, D} <: MathProgBase.AbstractNLPEvalua
     Hβ::Matrix{T}    # Hessian from all observations
     Hτ::Matrix{T}
     XtX::Matrix{T}  # X'X = sum_i Xi'Xi
-    XtW2X::Matrix{T} # X'W2X = sum_i Xi'W2iXi
     TR::Matrix{T}   # n-by-m matrix with tik = tr(Vi[k]) / 2
     QF::Matrix{T}   # n-by-m matrix with qik = res_i' Vi[k] res_i
     storage_n::Vector{T}
@@ -132,7 +129,6 @@ function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVCObs{T, D}}) where {T 
     Hβ  = Matrix{T}(undef, p, p)
     Hτ  = Matrix{T}(undef, 1, 1)
     XtX = zeros(T, p, p) # sum_i xi'xi
-    XtW2X = zeros(T, p, p)
     TR  = Matrix{T}(undef, n, m) # collect trace terms
     Ytotal = 0
     ntotal = 0
@@ -147,7 +143,7 @@ function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVCObs{T, D}}) where {T 
     storage_m = Vector{T}(undef, m)
     storage_Σ = Vector{T}(undef, m)
     GaussianCopulaVCModel{T, D}(gcs, Ytotal, ntotal, p, m, β, τ, Σ,
-        ∇β, ∇τ, ∇Σ, Hβ, Hτ, XtX, XtW2X, TR, QF,
+        ∇β, ∇τ, ∇Σ, Hβ, Hτ, XtX, TR, QF,
         storage_n, storage_m, storage_Σ, gcs[1].d)
 end
 

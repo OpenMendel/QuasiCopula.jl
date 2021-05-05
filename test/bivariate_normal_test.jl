@@ -1,11 +1,11 @@
 using GLMCopula, Random, Statistics, Test, LinearAlgebra, StatsFuns
 
 @testset "Generate 10,000 independent bivariate normal vectors and then fit the model to test for the correct random intercepts and mean. " begin
-Random.seed!(12345)
+Random.seed!(1234)
 
-variance_component_1 = 0.1
-variance_component_2 = 0.5
-Γ = variance_component_1 * [1.0 1.0; 1.0 1.0] + variance_component_2 * Matrix(I, 2, 2)
+variance_component_1 = 0.6
+# variance_component_2 = 0.4
+Γ = variance_component_1 * [1.0 1.0; 1.0 1.0] # + variance_component_2 * Matrix(I, 2, 2)
 mean_normal = 5
 sd_normal = 0.5
 d1 = Normal(mean_normal, sd_normal)
@@ -31,7 +31,7 @@ function simulate_nobs_independent_vectors(
     Y
 end
 
-nsample = 10_000
+nsample = 10000
 @info "sample $nsample independent vectors for the bivariate Poisson distribution"
 # compile
 Y_nsample = simulate_nobs_independent_vectors(nonmixed_multivariate_dist, nsample)
@@ -48,7 +48,7 @@ gcs = Vector{GLMCopulaVCObs{Float64, D}}(undef, nsample)
 for i in 1:nsample
     y = Float64.(Y_nsample[i])
     X = ones(dim, 1)
-    V = [ones(2, 2), [1.0 0.0; 0.0 1.0]]
+    V = [ones(2, 2)] # , [1.0 0.0; 0.0 1.0]]
     gcs[i] = GLMCopulaVCObs(y, X, V, d)
 end
 gcm = GLMCopulaVCModel(gcs);
@@ -60,14 +60,14 @@ fill!(gcm.Σ, 1.0)
 update_Σ!(gcm)
 GLMCopula.loglikelihood!(gcm, true, true)
 @time fit2!(gcm, IpoptSolver(print_level = 5, max_iter = 100, hessian_approximation = "exact"))
-GLMCopula.loglikelihood!(gcm, true, true)
 
 
+@test GLMCopula.loglikelihood!(gcm, true, true) == -17117.666567674405
 println("estimated mean = $(gcm.β[1]); true mean value= $mean_normal")
 println("estimated variance (noise) = $(inv.(gcm.τ[1])); true variance value = $(sd_normal^2)")
 println("estimated variance component 1 = $(gcm.Σ[1]); true variance component 1 = $variance_component_1")
-println("estimated variance component 2 = $(gcm.Σ[2]); true variance component 2 = $variance_component_2")
-# estimated mean = 5.001810462046591; true mean value= 5
-# estimated variance (noise) = 0.24975326265954786; true variance value = 0.25
-# estimated random intercept = 0.1886303755997991; true random intercept = 0.2
+println("gradient with respect to β = $(gcm.∇β)")
+println("gradient with respect to Σ = $(gcm.∇Σ)")
+println("gradient with respect to τ = $(gcm.∇τ)")
+
 end
