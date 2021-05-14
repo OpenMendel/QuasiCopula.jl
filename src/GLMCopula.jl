@@ -220,7 +220,7 @@ end
 function fill_in_weights(
     wt::Vector{T},
     d::D
-    ) where {T <: BlasReal, D<:Union{Poisson, Bernoulli, Normal}}
+    ) where {T <: BlasReal, D<:Union{Poisson, Bernoulli, Normal, NegativeBinomial}}
     fill!(wt, one(T))
     nothing
 end
@@ -402,11 +402,11 @@ include("splitting_loglikelihood.jl")
 include("splitting_gradient.jl")
 include("splitting_hessian.jl")
 include("fit_new.jl")
+# include("fit_old.jl")
 include("update_sigma_and_residuals.jl")
 include("discrete_rand.jl")
 include("continuous_rand.jl")
 include("multivariate_rand.jl")
-
 include("gaussian_lmm.jl")
 
 end # module

@@ -46,7 +46,11 @@ function glm_regress_model(gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCMo
   (n, p) = gcm.ntotal, gcm.p
    beta = zeros(p)
    ybar = gcm.Ytotal / n
-   link = GLM.canonicallink(gcm.d)
+   if gcm.d == NegativeBinomial()
+    link = LogLink()
+   else
+    link = GLM.canonicallink(gcm.d)
+   end
    for iteration = 1:20 # find the intercept by Newton's method
      g1 = GLM.linkinv(link, beta[1]) #  mu
      g2 = GLM.mueta(link, beta[1])  # dmu

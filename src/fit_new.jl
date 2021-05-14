@@ -17,7 +17,8 @@ function fit2!(
     optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
     GLMCopula.copy_par!(gcm, MathProgBase.getsolution(optm))
     loglikelihood!(gcm)
-    gcm
+    # gcm
+    nothing
 end
 
 function MathProgBase.initialize(
@@ -50,6 +51,7 @@ function MathProgBase.eval_grad_f(
     copy_par!(gcm, par)
     # maximize σ2 and τ at current β using MM
     update_Σ!(gcm)
+    @show gcm.Σ
     # evaluate gradient
     logl = loglikelihood!(gcm, true, false)
     copyto!(grad, gcm.∇β)

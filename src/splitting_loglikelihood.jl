@@ -24,8 +24,8 @@ These parts are an addendum to the component loglikelihood.
 """
 function copula_loglikelihood_addendum(gcm::GLMCopulaVCModel{T, D}) where {T<: BlasReal, D}
    logl = 0.0
-   update_res!(gcm)
-   standardize_res!(gcm)
+  #  update_res!(gcm)
+  #  standardize_res!(gcm)
    for i in 1:length(gcm.data)
      logl += copula_loglikelihood_addendum(gcm.data[i], gcm.Σ)
    end
@@ -44,13 +44,8 @@ loglik_obs(::Binomial, y, μ, wt, ϕ) = GLM.logpdf(Binomial(Int(wt), μ), Int(y*
 loglik_obs(::Gamma, y, μ, wt, ϕ) = wt*GLM.logpdf(Gamma(inv(ϕ), μ*ϕ), y)
 loglik_obs(::InverseGaussian, y, μ, wt, ϕ) = wt*GLM.logpdf(InverseGaussian(μ, inv(ϕ)), y)
 loglik_obs(::Normal, y, μ, wt, ϕ) = wt*GLM.logpdf(Normal(μ, sqrt(ϕ)), y)
-#loglik_obs(d::NegativeBinomial, y, μ, wt, ϕ) = wt*GLM.logpdf(NegativeBinomial(d.r, d.r/(μ+d.r)), y)
+loglik_obs(d::NegativeBinomial, y, μ, wt, ϕ) = wt*GLM.logpdf(NegativeBinomial(d.r, d.r/(μ+d.r)), y)
 loglik_obs(::Poisson, y, μ, wt, ϕ) = wt*logpdf(Poisson(μ), y)
-
-# to ensure no- infinity from loglikelihood!!
-# function loglik_obs(::Poisson, y, μ, wt, ϕ)
-#     y * log(μ) - μ - log(factorial(y))
-# end
 
 # this gets the loglikelihood from the glm.jl package for the component density
 """
@@ -95,8 +90,8 @@ function copula_loglikelihood(gc::Union{GLMCopulaVCObs{T, D}, GaussianCopulaVCOb
     Σ::Vector{T}) where {T<: BlasReal, D}
   # first get the loglikelihood from the component density with glm.jl
   logl = 0.0
-  update_res!(gc, β)
-  standardize_res!(gc)
+  # update_res!(gc, β)
+  # standardize_res!(gc)
     logl += GLMCopula.copula_loglikelihood_addendum(gc, Σ)
     logl += GLMCopula.component_loglikelihood(gc, τ, zero(T))
   logl
@@ -109,6 +104,8 @@ Calculates the full loglikelihood for our copula model
 """
 function copula_loglikelihood(gcm::GLMCopulaVCModel{T, D}) where {T<: BlasReal, D}
   logl = 0.0
+  update_res!(gcm)
+  standardize_res!(gcm)
   # first get the loglikelihood from the component density with glm.jl
   logl += component_loglikelihood(gcm)
   # second we add the parts of the loglikelihood from the copula density

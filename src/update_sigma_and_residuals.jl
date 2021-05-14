@@ -90,11 +90,35 @@ function update_res!(
    return gc.res
 end
 
+"""
+update_res!(gc, β)
+Update the residual vector according to `β` and the given inverse link for the given Distribution
+"""
+function update_res!(
+   gc::GLMCopulaVCObs{T, D},
+   β::Vector{T},
+   link) where {T <: BlasReal, D}
+   mul!(gc.η, gc.X, β)
+   for i in 1:length(gc.y)
+       gc.μ[i] = GLM.linkinv(link, gc.η[i])
+       gc.varμ[i] = GLM.glmvar(gc.d, gc.μ[i])
+       gc.dμ[i] = GLM.mueta(link, gc.η[i])
+       gc.w1[i] = gc.dμ[i] / gc.varμ[i]
+       gc.w2[i] = gc.dμ[i]^2 / gc.varμ[i]
+       gc.res[i] = gc.y[i] - gc.μ[i]
+   end
+   return gc.res
+end
+
 function update_res!(
     gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCModel{T, D}}
     ) where {T <: BlasReal, D}
     for i in eachindex(gcm.data)
-        update_res!(gcm.data[i], gcm.β)
+        if gcm.d == NegativeBinomial()
+            update_res!(gcm.data[i], gcm.β, LogLink())
+        else
+            update_res!(gcm.data[i], gcm.β)
+        end
     end
     nothing
 end

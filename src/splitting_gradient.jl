@@ -23,6 +23,21 @@ end
 
 """
 std_res_differential!(gc)
+compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Negative Binomial.
+"""
+function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:NegativeBinomial{T}}
+    ∇μβ = zeros(size(gc.X))
+    ∇σ2β = zeros(size(gc.X))
+    for j in 1:length(gc.y)
+        ∇μβ[j, :] = gc.dμ[j] .* gc.X[j, :]
+        ∇σ2β[j, :] = (gc.μ[j] * inv(gc.d.r) + (1 + inv(gc.d.r) * gc.μ[j])) * ∇μβ[j, :]
+        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * ∇μβ[j, :] - (0.5 * inv(gc.varμ[j])) * gc.res[j] * ∇σ2β[j, :]
+    end
+    gc
+end
+
+"""
+std_res_differential!(gc)
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Bernoulli.
 """
 function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:Bernoulli{T}}
@@ -58,8 +73,12 @@ function glm_gradient(gc::Union{GaussianCopulaVCObs{T, D}, GLMCopulaVCObs{T, D}}
   @assert n == length(gc.y)
   @assert p == length(β)
   score = zeros(p)
-  update_res!(gc, β)
-  if GLM.dispersion_parameter(gc.d)
+  if gc.d == NegativeBinomial()
+    update_res!(gc, β, LogLink())
+  else 
+    update_res!(gc, β)
+  end
+  if gc.d == NegativeBinomial()
       sqrtτ = sqrt.(τ[1])
       standardize_res!(gc, sqrtτ)
       gc.varμ .*= inv(τ[1])
@@ -85,6 +104,7 @@ function glm_gradient(
         if GLM.dispersion_parameter(gcm.d) == false
                 fill!(gcm.τ, 1.0)
         end
+        update_res!(gcm)
     for i in 1:length(gcm.data)
         gcm.data[i].∇β .= glm_gradient(gcm.data[i], gcm.β, gcm.τ) #.- beta_gradient_term2(gcm.data[i], gcm.β, gcm.τ[1], gcm.Σ)
         gcm.∇β .+= gcm.data[i].∇β
