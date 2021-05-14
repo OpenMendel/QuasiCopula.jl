@@ -78,7 +78,7 @@ function glm_gradient(gc::Union{GaussianCopulaVCObs{T, D}, GLMCopulaVCObs{T, D}}
   else 
     update_res!(gc, β)
   end
-  if gc.d == NegativeBinomial()
+  if gc.d == Normal()
       sqrtτ = sqrt.(τ[1])
       standardize_res!(gc, sqrtτ)
       gc.varμ .*= inv(τ[1])
@@ -125,7 +125,11 @@ function copula_gradient_addendum(
     n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
     secondterm = zeros(p)
     fill!(gc.∇β, 0.0)
-    update_res!(gc, β)
+    if gc.d == NegativeBinomial()
+        update_res!(gc, β, LogLink())
+      else 
+        update_res!(gc, β)
+    end
     if gc.d  ==  Normal()
             sqrtτ = sqrt.(τ[1]) #sqrtτ = 0.018211123993574548
             standardize_res!(gc, sqrtτ)
