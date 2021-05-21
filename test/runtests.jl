@@ -8,7 +8,7 @@ include("simulation/rand_multivariate.jl")
 
 # # # # analyze simulated data
 include("simulation/bivariate_poisson_test.jl")
-include("simulation/bivariate_normal_test.jl")
+### include("simulation/bivariate_normal_test.jl") ##### needs work for normal logl
 
 # # # trivariate poisson test
 include("simulation/trivariate_poisson.jl")
@@ -18,6 +18,5 @@ include("estimation/simulate_logistic_mixedmodels.jl")
 include("estimation/simulate_poisson_mixedmodels.jl")
 
 # # example datasets
-include("examples/dyestuff.jl")
-# include("sleepstudy.jl")
+### include("examples/dyestuff.jl") ##### needs work for normal logl
 end

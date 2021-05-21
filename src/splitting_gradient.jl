@@ -73,11 +73,7 @@ function glm_gradient(gc::Union{GaussianCopulaVCObs{T, D}, GLMCopulaVCObs{T, D}}
   @assert n == length(gc.y)
   @assert p == length(β)
   score = zeros(p)
-  if gc.d == NegativeBinomial()
-    update_res!(gc, β, LogLink())
-  else 
-    update_res!(gc, β)
-  end
+  update_res!(gc, β)
   if gc.d == Normal()
       sqrtτ = sqrt.(τ[1])
       standardize_res!(gc, sqrtτ)
@@ -102,7 +98,7 @@ function glm_gradient(
     ) where {T <: BlasReal, D}
         fill!(gcm.∇β, 0.0)
         if GLM.dispersion_parameter(gcm.d) == false
-                fill!(gcm.τ, 1.0)
+            fill!(gcm.τ, 1.0)
         end
         update_res!(gcm)
     for i in 1:length(gcm.data)
@@ -125,11 +121,7 @@ function copula_gradient_addendum(
     n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
     secondterm = zeros(p)
     fill!(gc.∇β, 0.0)
-    if gc.d == NegativeBinomial()
-        update_res!(gc, β, LogLink())
-      else 
-        update_res!(gc, β)
-    end
+    update_res!(gc, β)
     if gc.d  ==  Normal()
             sqrtτ = sqrt.(τ[1]) #sqrtτ = 0.018211123993574548
             standardize_res!(gc, sqrtτ)

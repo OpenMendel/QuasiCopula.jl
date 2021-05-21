@@ -29,8 +29,11 @@ loglikelihood(mdl)
 groups = unique(df[!, :gene])
 n, p, m = length(groups), 1, 1
 d = Bernoulli()
+link = LogitLink()
 D = typeof(d)
-gcs = Vector{GLMCopulaVCObs{Float64, D}}(undef, n)
+Link = typeof(link)
+T = Float64
+gcs = Vector{GLMCopulaVCObs{T, D, Link}}(undef, n)
 for (i, grp) in enumerate(groups)
     gidx = df[!, :gene] .== grp
     ni = count(gidx)
@@ -38,7 +41,7 @@ for (i, grp) in enumerate(groups)
     normal = Float64.(df[gidx, :normal])
     X = [ones(ni, 1) normal]
     V = [ones(ni, ni)]
-    gcs[i] = GLMCopulaVCObs(y, X, V, d)
+    gcs[i] = GLMCopulaVCObs(y, X, V, d, link)
 end
 gcm = GLMCopulaVCModel(gcs);
 

@@ -10,15 +10,18 @@ dyestuff = dataset("lme4", "Dyestuff")
 groups = unique(dyestuff[!, :Batch])
 n, p, m = length(groups), 1, 1
 d = Normal()
+link = IdentityLink()
 D = typeof(d)
-gcs = Vector{GLMCopulaVCObs{Float64, D}}(undef, n)
+Link = typeof(link)
+T = Float64
+gcs = Vector{GLMCopulaVCObs{T, D, Link}}(undef, n)
 for (i, grp) in enumerate(groups)
     gidx = dyestuff[!, :Batch] .== grp
     ni = count(gidx)
     y = Float64.(dyestuff[gidx, :Yield])
     X = ones(ni, 1)
     V = [ones(ni, ni)]
-    gcs[i] = GLMCopulaVCObs(y, X, V, d)
+    gcs[i] = GLMCopulaVCObs(y, X, V, d, link)
 end
 gcm = GLMCopulaVCModel(gcs);
 

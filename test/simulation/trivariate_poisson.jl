@@ -21,29 +21,28 @@ gc_vec = NonMixedMultivariateDistribution(vecd, Γ)
 Random.seed!(1234)
 nsample = 100_000
 Y_nsample = simulate_nobs_independent_vectors(gc_vec, nsample)
-Y_1 = [Y_nsample[i, 1][1] for i in 1:nsample]
-Y_2 = [Y_nsample[i, 1][2] for i in 1:nsample]
-Y_3 = [Y_nsample[i, 1][3] for i in 1:nsample]
+Y = zeros(nsample, n)
+for j in 1:n
+    Y[:, j] = [Y_nsample[i][j] for i in 1:nsample]
+end
+Y
 
-# using ours
 function covariance_matrix(gc_vec)
     n = length(gc_vec.gc_obs)
     Covariance = zeros(n, n)
     for i in 1:n 
         Covariance[i, i] = GLMCopula.var(gc_vec.gc_obs[i])
+        for j = i+1:n
+            Covariance[j, i] = GLMCopula.cov(gc_vec, j, i)
+            Covariance[i, j] = Covariance[j, i]
+        end
     end
-    Covariance[1, 2] = GLMCopula.cov(gc_vec, 1, 2)
-    Covariance[1, 3] = GLMCopula.cov(gc_vec, 1, 3)
-    Covariance[2, 3] = GLMCopula.cov(gc_vec, 2, 3)
-    Covariance[2, 1] = Covariance[1, 2]
-    Covariance[3, 2] = Covariance[2, 3]
-    Covariance[3, 1] = Covariance[1, 3]
     Covariance
 end
 
+
 #### check the 3 by 3 covariance 
-Matrix_Y = hcat(Y_1, Y_2, Y_3)
-@show empirical_covariance = scattermat(Matrix_Y) ./ nsample
+@show empirical_covariance = scattermat(Y) ./ nsample
 
 # using ours 
 @show theoretical_covariance = covariance_matrix(gc_vec)

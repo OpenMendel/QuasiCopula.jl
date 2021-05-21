@@ -148,7 +148,7 @@ function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVCObs{T, D}}) where {T 
 end
 
 
-struct GLMCopulaVCObs{T <: BlasReal, D}
+struct GLMCopulaVCObs{T <: BlasReal, D, Link}
     # data
     y::Vector{T}
     X::Matrix{T}
@@ -171,6 +171,7 @@ struct GLMCopulaVCObs{T <: BlasReal, D}
     varμ::Vector{T} # v(μ_i) # variance as a function of the mean
     dμ::Vector{T}   # derivative of μ
     d::D            # distribution()
+    link::Link      # link function ()
     wt::Vector{T}   # weights wt for GLM.jl
     w1::Vector{T}   # working weights in the gradient = dμ/v(μ)
     w2::Vector{T}   # working weights in the information matrix = dμ^2/v(μ)
@@ -180,7 +181,8 @@ function GLMCopulaVCObs(
     y::Vector{T},
     X::Matrix{T},
     V::Vector{Matrix{T}},
-    d::D) where {T <: BlasReal, D}
+    d::D,
+    link::Link) where {T <: BlasReal, D, Link}
     n, p, m = size(X, 1), size(X, 2), length(V)
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
@@ -201,29 +203,29 @@ function GLMCopulaVCObs(
     varμ = Vector{T}(undef, n)
     dμ = Vector{T}(undef, n)
     wt = Vector{T}(undef, n)
-    fill_in_weights(wt, d)
+    fill!(wt, one(T))
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
-    GLMCopulaVCObs{T, D}(y, X, V, ∇β, ∇resβ, ∇τ, ∇Σ, Hβ,
-        Hτ, res, t, q, xtx, storage_n, storage_p, η, μ, varμ, dμ, d, wt, w1, w2)
+    GLMCopulaVCObs{T, D, Link}(y, X, V, ∇β, ∇resβ, ∇τ, ∇Σ, Hβ,
+        Hτ, res, t, q, xtx, storage_n, storage_p, η, μ, varμ, dμ, d, link, wt, w1, w2)
 end
 
-function fill_in_weights(
-    wt::Vector{T},
-    d::D
-    ) where {T <: BlasReal, D<:Binomial}
-    fill!(wt, d.n)
-    nothing
-end
+# function fill_in_weights(
+#     wt::Vector{T},
+#     d::D
+#     ) where {T <: BlasReal, D<:Binomial}
+#     fill!(wt, d.n)
+#     nothing
+# end
 
-function fill_in_weights(
-    wt::Vector{T},
-    d::D
-    ) where {T <: BlasReal, D<:Union{Poisson, Bernoulli, Normal, NegativeBinomial}}
-    fill!(wt, one(T))
-    nothing
-end
+# function fill_in_weights(
+#     wt::Vector{T},
+#     d::D
+#     ) where {T <: BlasReal, D<:Union{Poisson, Bernoulli, Normal, NegativeBinomial}}
+#     fill!(wt, one(T))
+#     nothing
+# end
 
 """
 GLMCopulaVCModel
@@ -232,9 +234,9 @@ GLMCopulaVCModel(gcs)
 Gaussian copula variance component model, which contains a vector of
 `GLMCopulaVCObs` as data, model parameters, and working arrays.
 """
-struct GLMCopulaVCModel{T <: BlasReal, D} <: MathProgBase.AbstractNLPEvaluator
+struct GLMCopulaVCModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvaluator
     # data
-    data::Vector{GLMCopulaVCObs{T, D}}
+    data::Vector{GLMCopulaVCObs{T, D, Link}}
     Ytotal::T
     ntotal::Int     # total number of singleton observations
     p::Int          # number of mean parameters in linear regression
@@ -255,10 +257,11 @@ struct GLMCopulaVCModel{T <: BlasReal, D} <: MathProgBase.AbstractNLPEvaluator
     storage_n::Vector{T}
     storage_m::Vector{T}
     storage_Σ::Vector{T}
-    d::D
+    d::Vector{D}
+    link::Vector{Link}
 end
 
-function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D}}) where {T <: BlasReal, D}
+function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: BlasReal, D, Link}
     n, p, m = length(gcs), size(gcs[1].X, 2), length(gcs[1].V)
     β   = Vector{T}(undef, p)
     τ   = [1.0]
@@ -272,19 +275,23 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D}}) where {T <: BlasRea
     TR  = Matrix{T}(undef, n, m) # collect trace terms
     Ytotal = 0.0
     ntotal = 0.0
+    d = Vector{D}(undef, n)
+    link = Vector{Link}(undef, n)
     for i in eachindex(gcs)
         ntotal  += length(gcs[i].y)
         Ytotal  += sum(gcs[i].y)
         BLAS.axpy!(one(T), gcs[i].xtx, XtX)
         TR[i, :] = gcs[i].t
+        d[i] = gcs[i].d
+        link[i] = gcs[i].link
     end
     QF        = Matrix{T}(undef, n, m)
     storage_n = Vector{T}(undef, n)
     storage_m = Vector{T}(undef, m)
     storage_Σ = Vector{T}(undef, m)
-    GLMCopulaVCModel{T, D}(gcs, Ytotal, ntotal, p, m, β, τ, Σ,
+    GLMCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, p, m, β, τ, Σ,
         ∇β, ∇τ, ∇Σ,  XtX, Hβ, Hτ, TR, QF,
-        storage_n, storage_m, storage_Σ, gcs[1].d)
+        storage_n, storage_m, storage_Σ, d, link)
 end
 
 #######

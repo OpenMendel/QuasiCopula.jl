@@ -12,8 +12,8 @@ d_pois = pdf_constants(γ, dist)
 @test d_pois.c1 == 0.5 * γ * (-2 * mean(d_pois.d) * inv(var(d_pois.d)))
 @test d_pois.c2 == 0.5 * γ * (inv(var(d_pois.d)))
 
-pmf = pmf_copula(d_pois)
-reordered_k, reordered_pmf = reorder_pmf(pmf, d_pois.μ)
+pmf_copula!(d_pois)
+reordered_k, reordered_pmf = reorder_pmf(d_pois.pmf_vec, d_pois.μ)
 sum(reordered_pmf) ≈ 1
 
 ###
@@ -46,8 +46,8 @@ d_binomial = pdf_constants(γ, dist)
 @test d_binomial.c1 == 0.5 * γ * (-2 * mean(d_binomial.d) * inv(var(d_binomial.d)))
 @test d_binomial.c2 == 0.5 * γ * (inv(var(d_binomial.d)))
 
-pmf = pmf_copula(d_binomial)
-reordered_k, reordered_pmf = reorder_pmf(pmf, d_binomial.μ)
+pmf_copula!(d_binomial)
+reordered_k, reordered_pmf = reorder_pmf(d_binomial.pmf_vec, d_binomial.μ)
 @test sum(reordered_pmf) ≈ 1
 
 ###
@@ -80,8 +80,8 @@ d_geometric = pdf_constants(γ, dist)
 @test d_geometric.c1 == 0.5 * γ * (-2 * mean(d_geometric.d) * inv(var(d_geometric.d)))
 @test d_geometric.c2 == 0.5 * γ * (inv(var(d_geometric.d)))
 
-pmf = pmf_copula(d_geometric)
-reordered_k, reordered_pmf = reorder_pmf(pmf, d_geometric.μ)
+pmf_copula!(d_geometric)
+reordered_k, reordered_pmf = reorder_pmf(d_geometric.pmf_vec, d_geometric.μ)
 @test sum(reordered_pmf) ≈ 1
 
 ###
@@ -113,8 +113,8 @@ d_geometric = pdf_constants(γ, dist)
 @test d_geometric.c1 == 0.5 * γ * (-2 * mean(d_geometric.d) * inv(var(d_geometric.d)))
 @test d_geometric.c2 == 0.5 * γ * (inv(var(d_geometric.d)))
 
-pmf = pmf_copula(d_geometric)
-reordered_k, reordered_pmf = reorder_pmf(pmf, d_geometric.μ)
+pmf_copula!(d_geometric)
+reordered_k, reordered_pmf = reorder_pmf(d_geometric.pmf_vec, d_geometric.μ)
 @test sum(reordered_pmf) ≈ 1
 
 ###
@@ -145,8 +145,8 @@ d_nb = pdf_constants(γ, dist)
 @test d_nb.c1 == 0.5 * γ * (-2 * mean(d_nb.d) * inv(var(d_nb.d)))
 @test d_nb.c2 == 0.5 * γ * (inv(var(d_nb.d)))
 
-pmf = pmf_copula(d_nb)
-reordered_k, reordered_pmf = reorder_pmf(pmf, d_nb.μ)
+pmf_copula!(d_nb)
+reordered_k, reordered_pmf = reorder_pmf(d_nb.pmf_vec, d_nb.μ)
 @test sum(reordered_pmf) ≈ 1
 
 ###
@@ -173,8 +173,8 @@ d_bernoulli = pdf_constants(γ, dist)
 @test d_bernoulli.c1 == 0.5 * γ * (-2 * mean(d_bernoulli.d) * inv(var(d_bernoulli.d)))
 @test d_bernoulli.c2 == 0.5 * γ * (inv(var(d_bernoulli.d)))
 
-pmf = pmf_copula(d_bernoulli)
-reordered_k, reordered_pmf = reorder_pmf(pmf, d_bernoulli.μ)
+pmf_copula!(d_bernoulli)
+reordered_k, reordered_pmf = reorder_pmf(d_bernoulli.pmf_vec, d_bernoulli.μ)
 sum(reordered_pmf) ≈ 1
 
 ###

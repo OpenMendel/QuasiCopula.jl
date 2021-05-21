@@ -1,4 +1,4 @@
-using GLMCopula, Random, Statistics, Test, LinearAlgebra, StatsFuns
+using GLMCopula, Random, Statistics, Test, LinearAlgebra, StatsFuns, GLM
 
 @testset "Generate 10,000 independent bivariate poisson vectors and then fit the model to test for the correct random intercepts and mean. " begin
 Random.seed!(12345)
@@ -39,15 +39,17 @@ Random.seed!(12345)
 
 ####
 dim = 2
-p, m = 1, 1
 d = Poisson()
+link = LogLink()
 D = typeof(d)
-gcs = Vector{GLMCopulaVCObs{Float64, D}}(undef, nsample)
+Link = typeof(link)
+T = Float64
+gcs = Vector{GLMCopulaVCObs{T, D, Link}}(undef, nsample)
 for i in 1:nsample
     y = Float64.(Y_nsample[i])
     X = ones(dim, 1)
     V = [ones(2, 2), [1.0 0.0; 0.0 1.0]]
-    gcs[i] = GLMCopulaVCObs(y, X, V, d)
+    gcs[i] = GLMCopulaVCObs(y, X, V, d, link)
 end
 gcm = GLMCopulaVCModel(gcs);
 

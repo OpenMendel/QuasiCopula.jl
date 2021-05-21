@@ -1,11 +1,10 @@
-using GLMCopula, Random, Statistics, Test, LinearAlgebra, StatsFuns
+using GLMCopula, Random, Statistics, Test, LinearAlgebra, StatsFuns, GLM
 
 @testset "Generate 10,000 independent bivariate normal vectors and then fit the model to test for the correct random intercepts and mean. " begin
 Random.seed!(1234)
 
 variance_component_1 = 0.6
-# variance_component_2 = 0.4
-Γ = variance_component_1 * [1.0 1.0; 1.0 1.0] # + variance_component_2 * Matrix(I, 2, 2)
+Γ = variance_component_1 * [1.0 1.0; 1.0 1.0]
 mean_normal = 5
 sd_normal = 0.5
 d1 = Normal(mean_normal, sd_normal)
@@ -37,19 +36,20 @@ nsample = 10000
 Y_nsample = simulate_nobs_independent_vectors(nonmixed_multivariate_dist, nsample)
 Random.seed!(1234)
 @time Y_nsample = simulate_nobs_independent_vectors(nonmixed_multivariate_dist, nsample)
-# 0.083205 seconds (590.00 k allocations: 25.940 MiB)
 
 ####
 dim = 2
-p, m = 1, 1
 d = Normal()
+link = IdentityLink()
 D = typeof(d)
-gcs = Vector{GLMCopulaVCObs{Float64, D}}(undef, nsample)
+Link = typeof(link)
+T = Float64
+gcs = Vector{GLMCopulaVCObs{T, D, Link}}(undef, nsample)
 for i in 1:nsample
     y = Float64.(Y_nsample[i])
     X = ones(dim, 1)
-    V = [ones(2, 2)] # , [1.0 0.0; 0.0 1.0]]
-    gcs[i] = GLMCopulaVCObs(y, X, V, d)
+    V = [ones(2, 2)]
+    gcs[i] = GLMCopulaVCObs(y, X, V, d, link)
 end
 gcm = GLMCopulaVCModel(gcs);
 
@@ -58,11 +58,11 @@ initialize_model!(gcm)
 
 fill!(gcm.Σ, 1.0)
 update_Σ!(gcm)
-GLMCopula.loglikelihood!(gcm, true, true)
+initial_logl = GLMCopula.loglikelihood!(gcm, true, true)
 @time fit2!(gcm, IpoptSolver(print_level = 5, max_iter = 100, hessian_approximation = "exact"))
 
+post_fit_logl = GLMCopula.loglikelihood!(gcm, true, true) 
 
-@test GLMCopula.loglikelihood!(gcm, true, true) == -17117.666567674405
 println("estimated mean = $(gcm.β[1]); true mean value= $mean_normal")
 println("estimated variance (noise) = $(inv.(gcm.τ[1])); true variance value = $(sd_normal^2)")
 println("estimated variance component 1 = $(gcm.Σ[1]); true variance component 1 = $variance_component_1")

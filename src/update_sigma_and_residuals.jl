@@ -9,7 +9,6 @@ function update_Σ!(gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCModel{T, 
     update_Σ_jensen!(gcm)
 end
 
-
 """
 update_Σ_jensen!(gcm)
 
@@ -35,7 +34,7 @@ function update_Σ_jensen!(
 
         # update τ if necessary
         mul!(gcm.storage_n, gcm.QF, gcm.Σ) # gcm.storage_n[i] = sum_k^m qi[k] sigmai_[k] # denom of numerator
-        if gcm.d == Normal()
+        if gcm.d[1] == Normal()
             gcm.τ[1] = GLMCopula.update_τ(gcm.τ[1], gcm.storage_n, gcm.ntotal, rsstotal, 1)
             else
             fill!(gcm.τ, 1.0)
@@ -70,39 +69,18 @@ function update_Σ_jensen!(
     gcm.Σ
 end
 
-
-"""
-update_res!(gc, β)
-Update the residual vector according to `β` and the canonical inverse link to the given distribution.
-"""
-function update_res!(
-   gc::GLMCopulaVCObs{T, D},
-   β::Vector{T}) where {T <: BlasReal, D}
-   mul!(gc.η, gc.X, β)
-   for i in 1:length(gc.y)
-       gc.μ[i] = GLM.linkinv(canonicallink(gc.d), gc.η[i])
-       gc.varμ[i] = GLM.glmvar(gc.d, gc.μ[i])
-       gc.dμ[i] = GLM.mueta(canonicallink(gc.d), gc.η[i])
-       gc.w1[i] = gc.dμ[i] / gc.varμ[i]
-       gc.w2[i] = gc.dμ[i]^2 / gc.varμ[i]
-       gc.res[i] = gc.y[i] - gc.μ[i]
-   end
-   return gc.res
-end
-
 """
 update_res!(gc, β)
 Update the residual vector according to `β` and the given inverse link for the given Distribution
 """
 function update_res!(
    gc::GLMCopulaVCObs{T, D},
-   β::Vector{T},
-   link) where {T <: BlasReal, D}
+   β::Vector{T}) where {T <: BlasReal, D}
    mul!(gc.η, gc.X, β)
    for i in 1:length(gc.y)
-       gc.μ[i] = GLM.linkinv(link, gc.η[i])
+       gc.μ[i] = GLM.linkinv(gc.link, gc.η[i])
        gc.varμ[i] = GLM.glmvar(gc.d, gc.μ[i])
-       gc.dμ[i] = GLM.mueta(link, gc.η[i])
+       gc.dμ[i] = GLM.mueta(gc.link, gc.η[i])
        gc.w1[i] = gc.dμ[i] / gc.varμ[i]
        gc.w2[i] = gc.dμ[i]^2 / gc.varμ[i]
        gc.res[i] = gc.y[i] - gc.μ[i]
@@ -114,11 +92,7 @@ function update_res!(
     gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCModel{T, D}}
     ) where {T <: BlasReal, D}
     for i in eachindex(gcm.data)
-        if gcm.d == NegativeBinomial()
-            update_res!(gcm.data[i], gcm.β, LogLink())
-        else
-            update_res!(gcm.data[i], gcm.β)
-        end
+        update_res!(gcm.data[i], gcm.β)
     end
     nothing
 end
