@@ -45,7 +45,13 @@ function pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist::Continuous
     c_1 = -2μ * inv(σ2)
     c__1 = inv(sqrt(σ2)) * sum(crossterm_res(res, i, Γ)) 
     c_2 = inv(σ2)
-    c0 = 1 + 0.5 * transpose(res[1:i-1]) *  Γ[1:i-1, 1:i-1] *  res[1:i-1] +  0.5 * tr(Γ[i+1:end, i+1:end]) + 0.5 * Γ[i, i] * c_0  - c__0
+    storage = zeros(i-1)
+    # first multiply Γ[1:i-1, 1:i-1] *  res[1:i-1]
+    mul!(storage, Γ[1:i-1, 1:i-1], res[1:i-1])
+    # then multiply to get transpose(res[1:i-1]) *  Γ[1:i-1, 1:i-1] *  res[1:i-1]
+    # dot(storage, res[1:i-1])
+    c0 = 1 + 0.5 * dot(storage, res[1:i-1]) +  0.5 * tr(Γ[i+1:end, i+1:end]) + 0.5 * Γ[i, i] * c_0  - c__0
+    # c0 = 1 + 0.5 * transpose(res[1:i-1]) *  Γ[1:i-1, 1:i-1] *  res[1:i-1] +  0.5 * tr(Γ[i+1:end, i+1:end]) + 0.5 * Γ[i, i] * c_0  - c__0
     c1 = 0.5 * Γ[i, i] * c_1  + c__1
     c2 = 0.5 * Γ[i, i] * c_2
     ContinuousUnivariateCopula(dist, c0, c1, c2)
@@ -88,28 +94,20 @@ end
 
 
 """
-    crossterm_res(res::Vector{<:Real}, s::Int64, Γ::Matrix{<:Real}; all = false)
+    crossterm_res(res::Vector{<:Real}, i::Int64, Γ::Matrix{<:Real}; all = false)
 This function will compute the crossterm involving the residual values for constants c0 and c1 in the conditional densities. 
 Default all = false (conditional density):sum_{j = 1}^{i-1} γ_ij * r_j, but if all = true then will output (marginal density): sum_{j = 1}^{i} γ_ij * r_j
 """
-function crossterm_res(res::Vector{T}, s::Integer, Γ::Matrix{T}; all = false) where {T<: BlasReal}
-    results = []
-    if s == 1
-        return 0.0
-    elseif s > 1
-        if all == true
-            for i in 2:s
-                for j in 1:i - 1
-                    push!(results, sum(res[j] * Γ[i, j]))
-                end
-            end
-        else
-            for j in 1:s - 1
-                push!(results, sum(res[j] * Γ[s, j]))
-            end
+function crossterm_res(res::Vector{T}, i::Integer, Γ::Matrix{T}; all = false) where {T<: BlasReal}
+    results = zeros(i-1)
+    if i == 1
+        return results
+    else
+        for j in 1:i - 1
+            results[j] = res[j] * Γ[i, j]
         end
     end
-    return results
+    results
  end
 
 

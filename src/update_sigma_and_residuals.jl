@@ -35,7 +35,7 @@ function update_Σ_jensen!(
 
         # update τ if necessary
         mul!(gcm.storage_n, gcm.QF, gcm.Σ) # gcm.storage_n[i] = sum_k^m qi[k] sigmai_[k] # denom of numerator
-        if GLM.dispersion_parameter(gcm.d)
+        if gcm.d == Normal()
             gcm.τ[1] = GLMCopula.update_τ(gcm.τ[1], gcm.storage_n, gcm.ntotal, rsstotal, 1)
             else
             fill!(gcm.τ, 1.0)
