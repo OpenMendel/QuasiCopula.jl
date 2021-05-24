@@ -62,6 +62,7 @@ initial_logl = GLMCopula.loglikelihood!(gcm, true, true)
 @time fit2!(gcm, IpoptSolver(print_level = 5, max_iter = 100, hessian_approximation = "exact"))
 
 post_fit_logl = GLMCopula.loglikelihood!(gcm, true, true) 
+@test initial_logl < post_fit_logl
 
 println("estimated mean = $(gcm.β[1]); true mean value= $mean_normal")
 println("estimated variance (noise) = $(inv.(gcm.τ[1])); true variance value = $(sd_normal^2)")

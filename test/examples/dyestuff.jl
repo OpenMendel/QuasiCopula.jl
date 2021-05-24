@@ -39,7 +39,7 @@ update_Σ!(gcm)
 
 # gc = gcm.data[1]
 @test copula_gradient(gcm) ≈ [0.06561148856048]
-# @test copula_hessian(gcm) ≈ [-0.01964435497982633]
+@test  gcm.data[1].∇β ≈ [0.01997344639809115]
 
 @show loglikelihood!(gcm, true, true)
 # fit model using NLP on profiled loglikelihood
@@ -50,9 +50,9 @@ update_Σ!(gcm)
 @show gcm.β
 @show gcm.τ
 @show gcm.Σ
-@test copula_loglikelihood(gcm)[1] ≈ -163.35545423301846
+# @test copula_loglikelihood(gcm)[1] ≈ -163.35545423301846
 @show loglikelihood!(gcm, true, true)
-@test loglikelihood!(gcm, true, false) ≈ -163.35545423301846
+@test loglikelihood!(gcm, true, true) ≈ -163.35545423301846
 @show gcm.∇β
 @show gcm.∇τ
 @show gcm.∇Σ

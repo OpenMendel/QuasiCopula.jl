@@ -1,15 +1,16 @@
 
 """
-std_res_differential!(gc)
+    std_res_differential!(gc)
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta. For Normal it will be X.
 """
 function std_res_differential!(gc::Union{GaussianCopulaVCObs{T, D}, GLMCopulaVCObs{T, D}}) where {T <: BlasReal, D<:Normal{T}}
-        copyto!(gc.∇resβ, -gc.X)
-    gc
+    gc.∇resβ .= gc.X
+    gc.∇resβ .*= -one(T)
+    nothing
 end
 
 """
-std_res_differential!(gc)
+    std_res_differential!(gc)
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Poisson.
 """
 function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:Poisson{T}}
@@ -18,11 +19,11 @@ function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<
         ∇μβ[j, :] = gc.dμ[j] .* gc.X[j, :]
         gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * ∇μβ[j, :] - (1/2gc.varμ[j])*gc.res[j] * ∇μβ[j, :]
     end
-    gc
+    nothing
 end
 
 """
-std_res_differential!(gc)
+    std_res_differential!(gc)
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Negative Binomial.
 """
 function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:NegativeBinomial{T}}
@@ -33,11 +34,11 @@ function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<
         ∇σ2β[j, :] = (gc.μ[j] * inv(gc.d.r) + (1 + inv(gc.d.r) * gc.μ[j])) * ∇μβ[j, :]
         gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * ∇μβ[j, :] - (0.5 * inv(gc.varμ[j])) * gc.res[j] * ∇σ2β[j, :]
     end
-    gc
+    nothing
 end
 
 """
-std_res_differential!(gc)
+    std_res_differential!(gc)
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Bernoulli.
 """
 function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:Bernoulli{T}}
@@ -50,7 +51,7 @@ function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<
 end
 
 """
-std_res_differential!(gc)
+    std_res_differential!(gc)
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Binomial.
 """
 function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:Binomial{T}}
@@ -65,29 +66,43 @@ function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<
 end
 
 """
-    glm_gradient(gc::GLMCopulaVCObs{T, D})
+    glm_gradient(gc::GLMCopulaVCObs{T, D, Link})
 Calculates the gradient with respect to beta for our the glm portion for one obs. Keeps the residuals standardized.
 """
-function glm_gradient(gc::Union{GaussianCopulaVCObs{T, D}, GLMCopulaVCObs{T, D}}, β::Vector, τ) where {T<:Real, D}
-  (n, p) = size(gc.X)
-  @assert n == length(gc.y)
-  @assert p == length(β)
-  score = zeros(p)
-  update_res!(gc, β)
-  if gc.d == Normal()
-      sqrtτ = sqrt.(τ[1])
-      standardize_res!(gc, sqrtτ)
-      gc.varμ .*= inv(τ[1])
-  else
-      standardize_res!(gc)
-      fill!(τ, 1.0)
-  end
-  for j = 1:n
-    c = ((gc.y[j] - gc.μ[j])/ gc.varμ[j]) * gc.dμ[j]
-    BLAS.axpy!(c, gc.X[j, :], score) # score = score + c * x
-  end
-  score
+# function glm_gradient(gc::Union{GaussianCopulaVCObs{T, D}, GLMCopulaVCObs{T, D}}, β::Vector, τ) where {T<:Real, D}
+#   (n, p) = size(gc.X)
+#   @assert n == length(gc.y)
+#   @assert p == length(β)
+#   score = zeros(p)
+#   update_res!(gc, β)
+#   if gc.d == Normal()
+#       sqrtτ = sqrt.(τ[1])
+#       standardize_res!(gc, sqrtτ)
+#       fill!(gc.varμ, inv(τ[1]))
+#   else
+#       standardize_res!(gc)
+#       fill!(τ, 1.0)
+#   end
+#   for j = 1:n
+#     c = ((gc.y[j] - gc.μ[j])/ gc.varμ[j]) * gc.dμ[j]
+#     BLAS.axpy!(c, gc.X[j, :], score) # score = score + c * x
+#   end
+#   score
+# end
+
+"""
+    glm_gradient(gc::GLMCopulaVCObs{T, D, Link})
+Calculates the gradient with respect to beta for our the glm portion for one obs. Keeps the residuals standardized.
+"""
+function glm_gradient(gc::Union{GaussianCopulaVCObs{T, D}, GLMCopulaVCObs{T, D, Link}}, β::Vector, τ) where {T<:Real, D, Link}
+    (n, p) = size(gc.X)
+    update_res!(gc, β)
+    mul!(gc.storage_n, Diagonal(gc.w1), gc.res) 
+    mul!(gc.storage_p1, transpose(gc.X), gc.storage_n)
+    gc.storage_p1 .*= τ[1]
+    gc.storage_p1
 end
+
 
 """
     glm_gradient(gcm::GLMCopulaVCModel{T, D})
@@ -109,21 +124,20 @@ function glm_gradient(
 end
 
 """
-copula_gradient_addendum(gc)
+    copula_gradient_addendum(gc)
 Compute the part of gradient specific to copula density with respect to beta for a single observation
 """
 function copula_gradient_addendum(
-    gc::GLMCopulaVCObs{T, D},
+    gc::GLMCopulaVCObs{T, D, Link},
     β::Vector{T},
     τ::T,
     Σ::Vector{T}
-    ) where {T <: BlasReal, D}
+    ) where {T <: BlasReal, D, Link}
     n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
-    secondterm = zeros(p)
     fill!(gc.∇β, 0.0)
     update_res!(gc, β)
     if gc.d  ==  Normal()
-            sqrtτ = sqrt.(τ[1]) #sqrtτ = 0.018211123993574548
+            sqrtτ = sqrt.(τ[1])
             standardize_res!(gc, sqrtτ)
         else
             sqrtτ = 1.0
@@ -144,9 +158,9 @@ function copula_gradient_addendum(
         denom = 1 .+ qsum
         inv1pq = inv(denom) #0.9625492359318475
         # component_score = W1i(Yi -μi)
-        secondterm = gc.∇β .* inv1pq
-        secondterm .*= sqrtτ # since we already standardized it above
-        secondterm
+        gc.storage_p2 .= gc.∇β .* inv1pq
+        gc.storage_p2 .*= sqrtτ # since we already standardized it above
+        gc.storage_p2
 end
 
 """
@@ -171,9 +185,10 @@ end
     copula_gradient(gc::GLMCopulaVCObs{T, D})
 Calculates the full gradient with respect to beta for one observation
 """
-function copula_gradient(gc::GLMCopulaVCObs{T, D}, β, τ, Σ)  where {T<:BlasReal, D}
+function copula_gradient(gc::GLMCopulaVCObs{T, D, Link}, β, τ, Σ)  where {T<:BlasReal, D, Link}
     fill!(gc.∇β, 0.0)
-    gc.∇β .= glm_gradient(gc, β, τ) .+ copula_gradient_addendum(gc, β, τ[1], Σ)
+    gc.∇β .= glm_gradient(gc, β, τ) .+ GLMCopula.copula_gradient_addendum(gc, β, τ[1], Σ)
+    gc.∇β
 end
 
 """

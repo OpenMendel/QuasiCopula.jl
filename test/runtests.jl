@@ -1,5 +1,5 @@
 module PkgTest
-# # # # simulating data
+# # # # # simulating data
 include("simulation/rand_continuous.jl")
 include("simulation/rand_discrete.jl")
 

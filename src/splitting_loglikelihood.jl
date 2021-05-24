@@ -87,15 +87,19 @@ Calculates the full loglikelihood for our copula model for a single observation
 """
 function copula_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link}, GaussianCopulaVCObs{T, D}}, β::Vector{T}, τ::T,
 Σ::Vector{T}) where {T<: BlasReal, D, Link}
-# first get the loglikelihood from the component density with glm.jl
-logl = 0.0
-update_res!(gc, β)
-standardize_res!(gc)
-logl += GLMCopula.copula_loglikelihood_addendum(gc, Σ)
-logl += GLMCopula.component_loglikelihood(gc, τ, zero(T))
-logl
+  #first get the loglikelihood from the component density with glm.jl
+  logl = 0.0
+  update_res!(gc, β)
+  if gc.d == Normal()
+    σinv = sqrt(τ[1])# general variance
+    standardize_res!(gc, σinv)
+  else
+    standardize_res!(gc)
+  end
+  logl += GLMCopula.copula_loglikelihood_addendum(gc, Σ)
+  logl += GLMCopula.component_loglikelihood(gc, τ, zero(T))
+  logl
 end
-
 
 """
 copula_loglikelihood(gcm::GLMCopulaVCModel{T, D, Link})
@@ -122,8 +126,8 @@ needhess::Bool = false
 ) where {T <: BlasReal, D, Link}
 logl = zero(T)
 if needgrad
-    fill!(gcm.∇β, 0.0)
-    fill!(gcm.∇Σ, 0.0)
+  fill!(gcm.∇β, 0)
+  fill!(gcm.∇Σ, 0)
 end
 if needgrad
     gcm.∇β .= copula_gradient(gcm)
