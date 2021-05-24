@@ -47,8 +47,6 @@ update_Σ!(gcm)
 # @time GLMCopula.fit!(gcm, IpoptSolver(print_level=5))
 @time GLMCopula.fit2!(gcm, IpoptSolver(print_level = 5, derivative_test = "first-order"))
 
-@time fit2!(gcm, IpoptSolver(print_level = 5, max_iter = 100, hessian_approximation = "exact"))
-
 @show gcm.β
 @show gcm.τ
 @show gcm.Σ

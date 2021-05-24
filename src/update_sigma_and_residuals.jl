@@ -5,7 +5,7 @@ update_Σ!(gcm)
 Update variance components `Σ` according to the current value of
 `β` by an MM algorithm. `gcm.QF` now needs to hold qudratic forms calculated from standardized residuals.
 """
-function update_Σ!(gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCModel{T, D}}) where {T <: BlasReal, D}
+function update_Σ!(gcm::Union{GLMCopulaVCModel{T, D, Link}, GaussianCopulaVCModel{T, D}}) where {T <: BlasReal, D, Link}
     update_Σ_jensen!(gcm)
 end
 
@@ -15,10 +15,10 @@ update_Σ_jensen!(gcm)
 Update Σ using the MM algorithm and Jensens inequality, given β.
 """
 function update_Σ_jensen!(
-    gcm::GLMCopulaVCModel{T, D},
+    gcm::GLMCopulaVCModel{T, D, Link},
     maxiter::Integer=50000,
     reltol::Number=1e-6,
-    verbose::Bool=false) where {T <: BlasReal, D}
+    verbose::Bool=false) where {T <: BlasReal, D, Link}
     rsstotal = zero(T)
     for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
@@ -71,11 +71,11 @@ end
 
 """
 update_res!(gc, β)
-Update the residual vector according to `β` and the given inverse link for the given Distribution
+Update the residual vector according to `β` given link function and distribution.
 """
 function update_res!(
-   gc::GLMCopulaVCObs{T, D},
-   β::Vector{T}) where {T <: BlasReal, D}
+   gc::GLMCopulaVCObs{T, D, Link},
+   β::Vector{T}) where {T <: BlasReal, D, Link}
    mul!(gc.η, gc.X, β)
    for i in 1:length(gc.y)
        gc.μ[i] = GLM.linkinv(gc.link, gc.η[i])
@@ -89,8 +89,8 @@ function update_res!(
 end
 
 function update_res!(
-    gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCModel{T, D}}
-    ) where {T <: BlasReal, D}
+    gcm::Union{GLMCopulaVCModel{T, D, Link}, GaussianCopulaVCModel{T, D}}
+    ) where {T <: BlasReal, D, Link}
     for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
     end
@@ -98,17 +98,17 @@ function update_res!(
 end
 
 function standardize_res!(
-    gc::Union{GaussianCopulaVCObs{T, D}, GLMCopulaVCObs{T, D}},
+    gc::Union{GaussianCopulaVCObs{T, D}, GLMCopulaVCObs{T, D, Link}},
     σinv::T
-    ) where {T <: BlasReal, D}
+    ) where {T <: BlasReal, D, Link}
     for j in eachindex(gc.y)
         gc.res[j] *= σinv
     end
 end
 
 function standardize_res!(
-    gc::Union{GaussianCopulaVCObs{T, D}, GLMCopulaVCObs{T, D}}
-    ) where {T <: BlasReal, D}
+    gc::Union{GaussianCopulaVCObs{T, D}, GLMCopulaVCObs{T, D, Link}}
+    ) where {T <: BlasReal, D, Link}
     for j in eachindex(gc.y)
         σinv = inv(sqrt(gc.varμ[j]))
         gc.res[j] *= σinv
@@ -116,10 +116,10 @@ function standardize_res!(
 end
 
 function standardize_res!(
-    gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCModel{T, D}}
-    ) where {T <: BlasReal, D}
+    gcm::Union{GLMCopulaVCModel{T, D, Link}, GaussianCopulaVCModel{T, D}}
+    ) where {T <: BlasReal, D, Link}
     # standardize residual
-    if gcm.d == Normal()
+    if gcm.d[1] == Normal()
         σinv = sqrt(gcm.τ[1])# general variance
         for i in eachindex(gcm.data)
             standardize_res!(gcm.data[i], σinv)
@@ -136,7 +136,7 @@ end
 update_quadform!(gc)
 Update the quadratic forms `(r^T V[k] r) / 2` according to the current residual `r`.
 """
-function update_quadform!(gc::Union{GLMCopulaVCObs{T, D}, GaussianCopulaVCObs{T, D}}) where {T<:Real, D}
+function update_quadform!(gc::Union{GLMCopulaVCObs{T, D, Link}, GaussianCopulaVCObs{T, D}}) where {T<:Real, D, Link}
     for k in 1:length(gc.V)
         gc.q[k] = dot(gc.res, mul!(gc.storage_n, gc.V[k], gc.res)) / 2
     end
