@@ -167,6 +167,8 @@ struct GLMCopulaVCObs{T <: BlasReal, D, Link}
     storage_n::Vector{T}
     storage_p1::Vector{T}
     storage_p2::Vector{T}
+    storage_np::Matrix{T}
+    storage_pp::Matrix{T}
     η::Vector{T}    # η = Xβ systematic component
     μ::Vector{T}    # μ(β) = ginv(Xβ) # inverse link of the systematic component
     varμ::Vector{T} # v(μ_i) # variance as a function of the mean
@@ -200,6 +202,8 @@ function GLMCopulaVCObs(
     storage_n = Vector{T}(undef, n)
     storage_p1 = Vector{T}(undef, p)
     storage_p2 = Vector{T}(undef, p)
+    storage_np = Matrix{T}(undef, n, p)
+    storage_pp = Matrix{T}(undef, p, p)
     η = Vector{T}(undef, n)
     μ = Vector{T}(undef, n)
     varμ = Vector{T}(undef, n)
@@ -210,7 +214,7 @@ function GLMCopulaVCObs(
     w2 = Vector{T}(undef, n)
     # constructor
     GLMCopulaVCObs{T, D, Link}(y, X, V, ∇β, ∇resβ, ∇τ, ∇Σ, Hβ,
-        Hτ, res, t, q, xtx, storage_n, storage_p1, storage_p2, η, μ, varμ, dμ, d, link, wt, w1, w2)
+        Hτ, res, t, q, xtx, storage_n, storage_p1, storage_p2, storage_np, storage_pp, η, μ, varμ, dμ, d, link, wt, w1, w2)
 end
 
 # function fill_in_weights(

@@ -22,7 +22,7 @@ df
 # glmm1 = MixedModels.fit!(GeneralizedLinearMixedModel(@formula(counts ~ 1 + normal + (1|gene)), df, Bernoulli()))
 # loglikelihood(glmm1)
 
-const vaform = @formula(counts ~ 1 + normal + (1|gene));
+vaform = @formula(counts ~ 1 + normal + (1|gene));
 mdl = GeneralizedLinearMixedModel(vaform, df, Bernoulli());
 loglikelihood(mdl)
 
@@ -171,15 +171,10 @@ term1_grad_fctn = GLMCopula.glm_gradient(gc, β, τ)
 # ...
 ∇resβend = -1/(sqrt(gc.varμ[end])) .* ∇μβend - ((1/2gc.varμ[end]) * gc.res[end]) .* ∇σ2βend
 
-@show ∇resβ1
-@show ∇resβ2
-@show ∇resβend
-
 update_res!(gc, β)
 standardize_res!(gc)
 std_res_differential!(gc)
-@test gc.∇resβ[1, :] ≈ ∇resβ1
-
+@test gc.∇resβ[1, :] ≈ -1/(sqrt(gc.varμ[1])) .* ∇μβ1 - ((1/2gc.varμ[1]) * gc.res[1]) .* ∇σ2β1
 
 # gradient of components specific to copula density
 Γ1 = Σ[1]*gc.V[1]

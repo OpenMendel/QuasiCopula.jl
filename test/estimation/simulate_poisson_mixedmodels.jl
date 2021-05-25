@@ -173,7 +173,7 @@ term1_grad_fctn = GLMCopula.glm_gradient(gc, β, τ)
 update_res!(gc, β)
 standardize_res!(gc)
 std_res_differential!(gc)
-@test gc.∇resβ[1, :] ≈ ∇resβ1
+@test gc.∇resβ[1, :] ≈ -1/(sqrt(gc.varμ[1])) .* ∇μβ1 - ((1/2gc.varμ[1]) * gc.res[1]) .* ∇σ2β1
 
 # gradient of components specific to copula density
 Γ1 = Σ[1]*gc.V[1]
