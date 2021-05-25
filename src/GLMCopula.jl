@@ -6,12 +6,13 @@ using LinearAlgebra: BlasReal, copytri!
 @reexport using Ipopt
 @reexport using NLopt
 
-export fit!, fit2!, update_Σ_jensen!, init_β!, initialize_model!, loglikelihood!, standardize_res!, std_res_differential!
+export fit2!, update_Σ_jensen!, init_β!, initialize_model!, loglikelihood!, standardize_res!, std_res_differential!
 export update_res!, update_Σ!
 
 export glm_regress_jl, glm_regress_model, glm_score_statistic  # these are to initialize our model
 
 export copula_loglikelihood, copula_loglikelihood_addendum, component_loglikelihood
+export loglikelihood3!
 export copula_gradient, glm_gradient, copula_gradient_addendum
 export hessian_glm, hessian_copula_addendum, copula_hessian
 
@@ -412,10 +413,11 @@ end
 
 include("initialize_model.jl")
 include("splitting_loglikelihood.jl")
+include("logl.jl")
 include("splitting_gradient.jl")
 include("splitting_hessian.jl")
-include("fit_new.jl")
-# include("fit_old.jl")
+# include("fit_new.jl")
+include("fit_old.jl")
 include("update_sigma_and_residuals.jl")
 include("discrete_rand.jl")
 include("continuous_rand.jl")

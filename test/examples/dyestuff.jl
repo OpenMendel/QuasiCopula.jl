@@ -37,11 +37,14 @@ update_Σ!(gcm)
 @show gcm.τ
 @show gcm.Σ;
 
+@show loglikelihood!(gcm, true, true)
 # gc = gcm.data[1]
 @test copula_gradient(gcm) ≈ [0.06561148856048]
-@test  gcm.data[1].∇β ≈ [0.01997344639809115]
+@test gcm.data[1].∇β ≈ [0.01997344639809115]
+@test gcm.Hβ ≈ [-0.019644354979826334]
+@test gcm.data[1].Hβ ≈ [-14.894316220056414]
 
-@show loglikelihood!(gcm, true, true)
+
 # fit model using NLP on profiled loglikelihood
 @info "MLE:"
 # @time GLMCopula.fit!(gcm, IpoptSolver(print_level=5))
@@ -54,7 +57,6 @@ update_Σ!(gcm)
 @show loglikelihood!(gcm, true, true)
 @test loglikelihood!(gcm, true, true) ≈ -163.35545423301846
 @show gcm.∇β
-@show gcm.∇τ
-@show gcm.∇Σ
+@show gcm.Hβ
 
 end

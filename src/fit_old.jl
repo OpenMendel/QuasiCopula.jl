@@ -1,28 +1,23 @@
-
-"""
-    loglikelihood!(gcm::GLMCopulaVCModel{T, D})
-Calls the solver Ipopt to optimize over β vector, tells it we have the gradient.
-"""
 function fit2!(
     gcm::GLMCopulaVCModel,
-    solver=Ipopt.IpoptSolver(print_level=0),
+    solver=Ipopt.IpoptSolver(print_level=0)
     )
     optm = MathProgBase.NonlinearModel(solver)
     lb = fill(-Inf, gcm.p)
-    ub = fill(Inf, gcm.p)
+    ub = fill( Inf, gcm.p)
     MathProgBase.loadproblem!(optm, gcm.p, 0, lb, ub, Float64[], Float64[], :Max, gcm)
     MathProgBase.setwarmstart!(optm, gcm.β)
     MathProgBase.optimize!(optm)
     optstat = MathProgBase.status(optm)
     optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
-    GLMCopula.copy_par!(gcm, MathProgBase.getsolution(optm))
-    loglikelihood3!(gcm)
+    copy_par!(gcm, MathProgBase.getsolution(optm))
+    loglikelihood!(gcm)
     # gcm
     nothing
 end
 
 function MathProgBase.initialize(
-    gcm::GLMCopulaVCModel,
+    gcm::GLMCopulaVCModel, 
     requested_features::Vector{Symbol})
     for feat in requested_features
         if !(feat in [:Grad, :Hess])
@@ -33,35 +28,33 @@ end
 
 MathProgBase.features_available(gcm::GLMCopulaVCModel) = [:Grad, :Hess]
 
-
 function MathProgBase.eval_f(
-    gcm::GLMCopulaVCModel,
+    gcm::GLMCopulaVCModel, 
     par::Vector)
     copy_par!(gcm, par)
     # maximize σ2 and τ at current β using MM
     update_Σ!(gcm)
     # evaluate loglikelihood
-    loglikelihood3!(gcm, false, false)
+    loglikelihood!(gcm, false, false)
 end
 
 function MathProgBase.eval_grad_f(
-    gcm::GLMCopulaVCModel,
-    grad::Vector,
+    gcm::GLMCopulaVCModel, 
+    grad::Vector, 
     par::Vector)
     copy_par!(gcm, par)
     # maximize σ2 and τ at current β using MM
+    @show gcm.β
     update_Σ!(gcm)
     @show gcm.Σ
     # evaluate gradient
-    logl = loglikelihood3!(gcm, true, false)
+    logl = loglikelihood!(gcm, true, false)
     copyto!(grad, gcm.∇β)
-    #gcm = glm_score_statistic(gcm, gcm.β)
-    #copyto!(grad, gcm.∇β)
     nothing
 end
 
 function copy_par!(
-    gcm::GLMCopulaVCModel,
+    gcm::GLMCopulaVCModel, 
     par::Vector)
     copyto!(gcm.β, par)
     par
@@ -87,11 +80,11 @@ function MathProgBase.eval_hesslag(
     par::Vector{T},
     σ::T,
     μ::Vector{T}) where {T <: BlasReal, D}
-    GLMCopula.copy_par!(gcm, par)
+    copy_par!(gcm, par)
     # maximize σ2 and τ at current β using MM
     update_Σ!(gcm)
     # evaluate Hessian
-    loglikelihood3!(gcm, true, true)
+    loglikelihood!(gcm, true, true)
     # copy Hessian elements into H
     ct = 1
     for j in 1:gcm.p
