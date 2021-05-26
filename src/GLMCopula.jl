@@ -170,6 +170,8 @@ struct GLMCopulaVCObs{T <: BlasReal, D, Link}
     storage_p2::Vector{T}
     storage_np::Matrix{T}
     storage_pp::Matrix{T}
+    added_term_numerator::Matrix{T}
+    added_term2::Matrix{T}
     η::Vector{T}    # η = Xβ systematic component
     μ::Vector{T}    # μ(β) = ginv(Xβ) # inverse link of the systematic component
     varμ::Vector{T} # v(μ_i) # variance as a function of the mean
@@ -220,26 +222,25 @@ function GLMCopulaVCObs(
         Hτ, res, t, q, xtx, storage_n, storage_p1, storage_p2, storage_np, storage_pp, added_term_numerator, added_term2, η, μ, varμ, dμ, d, link, wt, w1, w2)
 end
 
-# # function fill_in_weights(
-# #     wt::Vector{T},
-# #     d::D
-# #     ) where {T <: BlasReal, D<:Binomial}
-# #     fill!(wt, d.n)
-# #     nothing
-# # end
+# function fill_in_weights(
+#     wt::Vector{T},
+#     d::D
+#     ) where {T <: BlasReal, D<:Binomial}
+#     fill!(wt, d.n)
+#     nothing
+# end
 
-# # function fill_in_weights(
-# #     wt::Vector{T},
-# #     d::D
-# #     ) where {T <: BlasReal, D<:Union{Poisson, Bernoulli, Normal, NegativeBinomial}}
-# #     fill!(wt, one(T))
-# #     nothing
-# # end
+# function fill_in_weights(
+#     wt::Vector{T},
+#     d::D
+#     ) where {T <: BlasReal, D<:Union{Poisson, Bernoulli, Normal, NegativeBinomial}}
+#     fill!(wt, one(T))
+#     nothing
+# end
 
 """
 GLMCopulaVCModel
 GLMCopulaVCModel(gcs)
-
 Gaussian copula variance component model, which contains a vector of
 `GLMCopulaVCObs` as data, model parameters, and working arrays.
 """
