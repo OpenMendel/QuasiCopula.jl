@@ -1,6 +1,6 @@
 using GLMCopula, Random, Statistics, Test, LinearAlgebra, StatsFuns, GLM
 
-@testset "Generate 10,000 independent bivariate poisson vectors and then fit the model to test for the correct random intercepts and mean. " begin
+@testset "Generate 10,000 independent bivariate poisson vectors and then fit the model to test for the correct variance component and mean. " begin
 Random.seed!(12345)
 n = 2
 variance_component_1 = 0.2
@@ -59,8 +59,14 @@ initialize_model!(gcm)
 fill!(gcm.Σ, 1.0)
 update_Σ!(gcm)
 
-GLMCopula.loglikelihood!(gcm, true, true)
 # -48089.24498484653
+@test GLMCopula.loglikelihood!(gcm, true, true) ≈ -48089.24498484653
+
+@test gcm.∇β ≈ [-3215.226525108171]
+@test gcm.data[1].∇β ≈ [0.17524618878789266]
+# with the extra hessian term
+@test gcm.Hβ ≈ [-72732.90810806138]
+@test gcm.data[1].Hβ ≈ [-5.986086848281841]
 
 # @time GLMCopula.fit2!(gcm, IpoptSolver(print_level = 5, derivative_test = "first-order"))
 @time fit2!(gcm, IpoptSolver(print_level = 5, max_iter = 100, hessian_approximation = "exact"))
@@ -71,4 +77,5 @@ GLMCopula.loglikelihood!(gcm, true, true)
 println("estimated mean = $(exp.(gcm.β)[1]); true mean value= $mean_1")
 println("estimated variance component 1 = $(gcm.Σ[1]); true variance component 1 = $variance_component_1")
 println("estimated variance component 2 = $(gcm.Σ[2]); true variance component 2 = $variance_component_2")
+println("gradient with respect to β = $(gcm.∇β)")
 end

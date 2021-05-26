@@ -1,6 +1,6 @@
 using GLMCopula, Random, Statistics, Test, LinearAlgebra, StatsFuns, GLM
 
-@testset "Generate 10,000 independent bivariate normal vectors and then fit the model to test for the correct random intercepts and mean. " begin
+@testset "Generate 10,000 independent bivariate normal vectors and then fit the model to test for the correct variance components and mean. " begin
 Random.seed!(12345)
 
 variance_component_1 = 0.2

@@ -205,6 +205,8 @@ function GLMCopulaVCObs(
     storage_p2 = Vector{T}(undef, p)
     storage_np = Matrix{T}(undef, n, p)
     storage_pp = Matrix{T}(undef, p, p)
+    added_term_numerator = Matrix{T}(undef, n, p)
+    added_term2 = Matrix{T}(undef, p, p)
     η = Vector{T}(undef, n)
     μ = Vector{T}(undef, n)
     varμ = Vector{T}(undef, n)
@@ -215,24 +217,24 @@ function GLMCopulaVCObs(
     w2 = Vector{T}(undef, n)
     # constructor
     GLMCopulaVCObs{T, D, Link}(y, X, V, ∇β, ∇resβ, ∇τ, ∇Σ, Hβ,
-        Hτ, res, t, q, xtx, storage_n, storage_p1, storage_p2, storage_np, storage_pp, η, μ, varμ, dμ, d, link, wt, w1, w2)
+        Hτ, res, t, q, xtx, storage_n, storage_p1, storage_p2, storage_np, storage_pp, added_term_numerator, added_term2, η, μ, varμ, dμ, d, link, wt, w1, w2)
 end
 
-# function fill_in_weights(
-#     wt::Vector{T},
-#     d::D
-#     ) where {T <: BlasReal, D<:Binomial}
-#     fill!(wt, d.n)
-#     nothing
-# end
+# # function fill_in_weights(
+# #     wt::Vector{T},
+# #     d::D
+# #     ) where {T <: BlasReal, D<:Binomial}
+# #     fill!(wt, d.n)
+# #     nothing
+# # end
 
-# function fill_in_weights(
-#     wt::Vector{T},
-#     d::D
-#     ) where {T <: BlasReal, D<:Union{Poisson, Bernoulli, Normal, NegativeBinomial}}
-#     fill!(wt, one(T))
-#     nothing
-# end
+# # function fill_in_weights(
+# #     wt::Vector{T},
+# #     d::D
+# #     ) where {T <: BlasReal, D<:Union{Poisson, Bernoulli, Normal, NegativeBinomial}}
+# #     fill!(wt, one(T))
+# #     nothing
+# # end
 
 """
 GLMCopulaVCModel

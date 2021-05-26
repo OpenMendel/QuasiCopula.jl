@@ -41,15 +41,20 @@ update_Σ!(gcm)
 # gc = gcm.data[1]
 @test copula_gradient(gcm) ≈ [0.06561148856048]
 @test gcm.data[1].∇β ≈ [0.01997344639809115]
-@test gcm.Hβ ≈ [-0.019644354979826334]
-@test gcm.data[1].Hβ ≈ [-14.894316220056414]
 
+# # without extra hessian term
+# @test gcm.Hβ ≈ [-0.019644354979826334]
+# @test gcm.data[1].Hβ ≈ [-14.894316220056414]
+
+# with the extra hessian term
+@test gcm.Hβ ≈ [-0.0060445770824270485]
+@test gcm.data[1].Hβ ≈ [-7.217632930773922]
 
 # fit model using NLP on profiled loglikelihood
 @info "MLE:"
 # @time GLMCopula.fit!(gcm, IpoptSolver(print_level=5))
 @time GLMCopula.fit2!(gcm, IpoptSolver(print_level = 5, derivative_test = "first-order"))
-
+# 11 iterations 1 second
 @show gcm.β
 @show gcm.τ
 @show gcm.Σ

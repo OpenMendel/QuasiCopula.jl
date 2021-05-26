@@ -1,6 +1,6 @@
 
 """
-copula_loglikelihood_addendum!(gc::GLMCopulaVCObs{T, D, Link})
+    copula_loglikelihood_addendum!(gc::GLMCopulaVCObs{T, D, Link})
 Calculates the parts of the loglikelihood that is particular to our density for a single observation. These parts are an addendum to the component loglikelihood from the GLM density.
 """
 function copula_loglikelihood_addendum(gc::GLMCopulaVCObs{T, D, Link}, Σ::Vector{T}) where {T<: BlasReal, D, Link}
@@ -18,7 +18,7 @@ function copula_loglikelihood_addendum(gc::GLMCopulaVCObs{T, D, Link}, Σ::Vecto
 end
 
 """
-copula_loglikelihood_addendum!(gcm::GLMCopulaVCModel{T, D, Link})
+    copula_loglikelihood_addendum!(gcm::GLMCopulaVCModel{T, D, Link})
 Calculates the parts of the loglikelihood that is particular to our density for the collection of all observations.
 These parts are an addendum to the component loglikelihood coming from the GLM density.
 """
@@ -33,7 +33,7 @@ function copula_loglikelihood_addendum(gcm::GLMCopulaVCModel{T, D, Link}) where 
 end
 
 """
-loglik_obs!(d, y, μ, wt, ϕ)
+    loglik_obs!(d, y, μ, wt, ϕ)
 Get the loglikelihood from the GLM.jl package for each observation
 """
 function loglik_obs end
@@ -48,7 +48,7 @@ loglik_obs(::Poisson, y, μ, wt, ϕ) = wt*logpdf(Poisson(μ), y)
 
 # this gets the loglikelihood from the glm.jl package for the component density
 """
-component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link})
+    component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link})
 Calculates the loglikelihood of observing `y` given mean `μ`, a distribution
 `d` using the GLM.jl package.
 """
@@ -64,7 +64,7 @@ function component_loglikelihood(gc::GLMCopulaVCObs{T, D, Link}, τ::T, logl::T)
 end
 
 """
-component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link})
+    component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link})
 Calculates the loglikelihood of observing the our density
 """
 function component_loglikelihood(gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
@@ -81,7 +81,7 @@ function component_loglikelihood(gcm::GLMCopulaVCModel{T, D, Link}) where {T <: 
 end
 
 """
-copula_loglikelihood(gcm::GLMCopulaVCModel{T, D, Link})
+    copula_loglikelihood(gcm::GLMCopulaVCModel{T, D, Link})
 Calculates the full loglikelihood for our copula model for a single observation
 """
 function copula_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link}, GaussianCopulaVCObs{T, D}}, β::Vector{T}, τ::T, Σ::Vector{T}) where {T<: BlasReal, D, Link}
@@ -100,7 +100,7 @@ function copula_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link}, GaussianCopu
 end
 
 """
-copula_loglikelihood(gcm::GLMCopulaVCModel{T, D, Link})
+    copula_loglikelihood(gcm::GLMCopulaVCModel{T, D, Link})
 Calculates the full loglikelihood for our copula model
 """
 function copula_loglikelihood(gcm::GLMCopulaVCModel{T, D, Link}) where {T<: BlasReal, D, Link}
@@ -113,7 +113,7 @@ function copula_loglikelihood(gcm::GLMCopulaVCModel{T, D, Link}) where {T<: Blas
 end
 
 """
-loglikelihood!(gcm::GLMCopulaVCModel{T, D, Link})
+    loglikelihood!(gcm::GLMCopulaVCModel{T, D, Link})
 Calculates the loglikelihood along with the gradient and hessian with respect to β
 using our split up functions.
 """
@@ -124,15 +124,16 @@ needhess::Bool = false
 ) where {T <: BlasReal, D, Link}
   logl = zero(T)
   if needgrad
-    fill!(gcm.∇β, 0)
-    fill!(gcm.∇Σ, 0)
-  end
-  if needgrad
-      gcm.∇β .= copula_gradient(gcm)
+    fill!(gcm.∇β, 0.0)
+    fill!(gcm.∇Σ, 0.0)
   end
   if needhess
       gcm.Hβ .= copula_hessian(gcm)
   end
+  if needgrad
+    gcm.∇β .= copula_gradient(gcm)
+  end
   logl += copula_loglikelihood(gcm)
   logl
 end
+

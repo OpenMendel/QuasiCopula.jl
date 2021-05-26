@@ -69,31 +69,6 @@ end
     glm_gradient(gc::GLMCopulaVCObs{T, D, Link})
 Calculates the gradient with respect to beta for our the glm portion for one obs. Keeps the residuals standardized.
 """
-# function glm_gradient(gc::Union{GaussianCopulaVCObs{T, D}, GLMCopulaVCObs{T, D}}, β::Vector, τ) where {T<:Real, D}
-#   (n, p) = size(gc.X)
-#   @assert n == length(gc.y)
-#   @assert p == length(β)
-#   score = zeros(p)
-#   update_res!(gc, β)
-#   if gc.d == Normal()
-#       sqrtτ = sqrt.(τ[1])
-#       standardize_res!(gc, sqrtτ)
-#       fill!(gc.varμ, inv(τ[1]))
-#   else
-#       standardize_res!(gc)
-#       fill!(τ, 1.0)
-#   end
-#   for j = 1:n
-#     c = ((gc.y[j] - gc.μ[j])/ gc.varμ[j]) * gc.dμ[j]
-#     BLAS.axpy!(c, gc.X[j, :], score) # score = score + c * x
-#   end
-#   score
-# end
-
-"""
-    glm_gradient(gc::GLMCopulaVCObs{T, D, Link})
-Calculates the gradient with respect to beta for our the glm portion for one obs. Keeps the residuals standardized.
-"""
 function glm_gradient(gc::Union{GaussianCopulaVCObs{T, D}, GLMCopulaVCObs{T, D, Link}}, β::Vector, τ) where {T<:Real, D, Link}
     (n, p) = size(gc.X)
     update_res!(gc, β)
@@ -101,26 +76,6 @@ function glm_gradient(gc::Union{GaussianCopulaVCObs{T, D}, GLMCopulaVCObs{T, D, 
     mul!(gc.storage_p1, transpose(gc.X), gc.storage_n)
     gc.storage_p1 .*= τ[1]
     gc.storage_p1
-end
-
-
-"""
-    glm_gradient(gcm::GLMCopulaVCModel{T, D})
-Calculates the gradient with respect to beta for our the glm portion for the gcm model
-"""
-function glm_gradient(
-    gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCModel{T, D}}
-    ) where {T <: BlasReal, D}
-        fill!(gcm.∇β, 0.0)
-        if GLM.dispersion_parameter(gcm.d) == false
-            fill!(gcm.τ, 1.0)
-        end
-        update_res!(gcm)
-    for i in 1:length(gcm.data)
-        gcm.data[i].∇β .= glm_gradient(gcm.data[i], gcm.β, gcm.τ) #.- beta_gradient_term2(gcm.data[i], gcm.β, gcm.τ[1], gcm.Σ)
-        gcm.∇β .+= gcm.data[i].∇β
-    end
-    gcm.∇β
 end
 
 """
@@ -164,24 +119,6 @@ function copula_gradient_addendum(
 end
 
 """
-copula_gradient_addendum(gcm)
-Compute the part of gradient specific to copula density with respect to beta for the gcm model
-"""
-function copula_gradient_addendum(
-    gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCModel{T, D}}
-    ) where {T <: BlasReal, D}
-        fill!(gcm.∇β, 0.0)
-        if GLM.dispersion_parameter(gcm.d) == false
-                fill!(gcm.τ, 1.0)
-        end
-    for i in 1:length(gcm.data)
-        gcm.data[i].∇β .= copula_gradient_addendum(gcm.data[i], gcm.β, gcm.τ[1], gcm.Σ)
-        gcm.∇β .+= gcm.data[i].∇β
-    end
-    gcm.∇β
-end
-
-"""
     copula_gradient(gc::GLMCopulaVCObs{T, D})
 Calculates the full gradient with respect to beta for one observation
 """
@@ -200,7 +137,7 @@ function copula_gradient(
     ) where {T <: BlasReal, D}
         fill!(gcm.∇β, 0.0)
         if GLM.dispersion_parameter(gcm.d) == false
-                fill!(gcm.τ, 1.0)
+            fill!(gcm.τ, 1.0)
         end
         update_res!(gcm)
     for i in 1:length(gcm.data)
@@ -209,3 +146,4 @@ function copula_gradient(
     end
     gcm.∇β
 end
+
