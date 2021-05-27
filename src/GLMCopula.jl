@@ -160,6 +160,8 @@ struct GLMCopulaVCObs{T <: BlasReal, D, Link}
     ∇resβ::Matrix{T}# residual gradient matrix d/dβ_p res_ij (each observation has a gradient of residual is px1)
     ∇τ::Vector{T}   # gradient wrt τ
     ∇Σ::Vector{T}   # gradient wrt σ2
+    ∇Σ1::Vector{T}   # gradient wrt σ2
+    ∇Σ2::Vector{T}   # gradient wrt σ2
     Hβ::Matrix{T}   # Hessian wrt β
     HΣ::Matrix{T}   # Hessian wrt variance components Σ
     HΣ1::Matrix{T}   # Hessian wrt variance components Σ term 1
@@ -200,6 +202,8 @@ function GLMCopulaVCObs(
     ∇resβ  = Matrix{T}(undef, n, p)
     ∇τ  = Vector{T}(undef, 1)
     ∇Σ  = Vector{T}(undef, m)
+    ∇Σ1  = Vector{T}(undef, m)
+    ∇Σ2  = Vector{T}(undef, m)
     Hβ  = Matrix{T}(undef, p, p)
     HΣ  = Matrix{T}(undef, m, m)
     HΣ1  = Matrix{T}(undef, m, m)
@@ -225,7 +229,7 @@ function GLMCopulaVCObs(
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
-    GLMCopulaVCObs{T, D, Link}(y, X, V, ∇β, ∇resβ, ∇τ, ∇Σ, Hβ, HΣ, HΣ1, HΣ2,
+    GLMCopulaVCObs{T, D, Link}(y, X, V, ∇β, ∇resβ, ∇τ, ∇Σ, ∇Σ1, ∇Σ2, Hβ, HΣ, HΣ1, HΣ2,
         Hτ, res, t, q, xtx, storage_n, storage_p1, storage_p2, storage_np, storage_pp, added_term_numerator, added_term2, η, μ, varμ, dμ, d, link, wt, w1, w2)
 end
 
