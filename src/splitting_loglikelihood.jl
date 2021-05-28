@@ -182,3 +182,39 @@ function update_∇Σ_HΣ!(
     gcm.HΣ .+= gcm.HΣ1
     gcm.HΣ .+= gcm.HΣ2
 end
+
+
+# # start working on this loglikelihood function, maybe we want to break apart gradient and hessian
+# # and give ipopt the gradient and hessian with respect to theta and 
+# """
+#     loglikelihood!(gcm::GLMCopulaVCModel{T, D, Link})
+# Calculates the loglikelihood along with the gradient and hessian with respect to β
+# using our split up functions.
+# """
+# function loglikelihood!(
+# gcm::GLMCopulaVCModel{T, D, Link},
+# needgrad::Bool = false,
+# needhess::Bool = false
+# ) where {T <: BlasReal, D, Link}
+#   logl = zero(T)
+#   if needgrad
+#     fill!(gcm.∇β, 0.0)
+#     fill!(gcm.∇Σ, 0.0)
+#   end
+#   if needgrad
+#     gcm.∇β .= copula_gradient(gcm)
+#   end
+#   if needhess
+#     gcm.Hβ .= copula_hessian(gcm)
+#   end
+
+#   update_∇Σ_HΣ!(gcm)
+#   gcm.∇θ[1:p] .= gcm.∇β
+#   gcm.∇θ[p+1:end] .= gcm.∇Σ
+
+#   gcm.Hθ[1:p, 1:p] .= gcm.Hβ
+#   gcm.Hθ[p+1:end, p+1:end] .= gcm.HΣ
+
+#   logl += copula_loglikelihood(gcm)
+#   logl
+# end

@@ -276,6 +276,7 @@ struct GLMCopulaVCModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalu
     ∇Σ::Vector{T}
     ∇Σ1::Vector{T}  # gradient term 1
     ∇Σ2::Vector{T}  # gradient term 2
+    ∇θ::Vector{T}   # overall gradient for beta and variance components vector Σ
     XtX::Matrix{T}  # X'X = sum_i Xi'Xi
     Hβ::Matrix{T}    # Hessian from all observations
     HΣ::Matrix{T}
@@ -306,6 +307,7 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: B
     ∇Σ  = Vector{T}(undef, m)
     ∇Σ1  = Vector{T}(undef, m)
     ∇Σ2  = Vector{T}(undef, m)
+    ∇θ  = Vector{T}(undef, m + p)
     XtX = zeros(T, p, p) # sum_i xi'xi
     Hβ  = Matrix{T}(undef, p, p)
     HΣ  = Matrix{T}(undef, m, m)
@@ -335,7 +337,7 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: B
     storage_m = Vector{T}(undef, m)
     storage_Σ = Vector{T}(undef, m)
     GLMCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, p, m, β, τ, Σ,
-        ∇β, ∇τ, ∇Σ, ∇Σ1, ∇Σ2, XtX, Hβ, HΣ, HΣ1, HΣ2, Hθ, Hτ, TR, QF, hess1, hess2, diagonal_n,
+        ∇β, ∇τ, ∇Σ, ∇Σ1, ∇Σ2, ∇θ, XtX, Hβ, HΣ, HΣ1, HΣ2, Hθ, Hτ, TR, QF, hess1, hess2, diagonal_n,
         storage_n, storage_n2, storage_m, storage_Σ, d, link)
 end
 
