@@ -14,10 +14,9 @@ end
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Poisson.
 """
 function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:Poisson{T}}
-    ∇μβ = zeros(size(gc.X))
     for j in 1:length(gc.y)
-        ∇μβ[j, :] = gc.dμ[j] .* gc.X[j, :]
-        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * ∇μβ[j, :] - (1/2gc.varμ[j])*gc.res[j] * ∇μβ[j, :]
+        gc.∇μβ[j, :] = gc.dμ[j] .* gc.X[j, :]
+        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * gc.∇μβ[j, :] - (1/2gc.varμ[j])*gc.res[j] * gc.∇μβ[j, :]
     end
     nothing
 end
@@ -27,12 +26,10 @@ end
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Negative Binomial.
 """
 function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:NegativeBinomial{T}}
-    ∇μβ = zeros(size(gc.X))
-    ∇σ2β = zeros(size(gc.X))
     for j in 1:length(gc.y)
-        ∇μβ[j, :] = gc.dμ[j] .* gc.X[j, :]
-        ∇σ2β[j, :] = (gc.μ[j] * inv(gc.d.r) + (1 + inv(gc.d.r) * gc.μ[j])) * ∇μβ[j, :]
-        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * ∇μβ[j, :] - (0.5 * inv(gc.varμ[j])) * gc.res[j] * ∇σ2β[j, :]
+        gc.∇μβ[j, :] = gc.dμ[j] .* gc.X[j, :]
+        gc.∇σ2β[j, :] = (gc.μ[j] * inv(gc.d.r) + (1 + inv(gc.d.r) * gc.μ[j])) * gc.∇μβ[j, :]
+        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * gc.∇μβ[j, :] - (0.5 * inv(gc.varμ[j])) * gc.res[j] * gc.∇σ2β[j, :]
     end
     nothing
 end
@@ -42,10 +39,9 @@ end
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Bernoulli.
 """
 function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:Bernoulli{T}}
-    ∇σ2β = zeros(size(gc.X))
     for j in 1:length(gc.y)
-        ∇σ2β[j, :] = (1 - 2 * gc.μ[j]) * gc.dμ[j] .* gc.X[j, :]
-        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * gc.dμ[j] .* gc.X[j, :] - (1 / 2gc.varμ[j]) * gc.res[j] .* ∇σ2β[j, :]
+        gc.∇σ2β[j, :] = (1 - 2 * gc.μ[j]) * gc.dμ[j] .* gc.X[j, :]
+        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * gc.dμ[j] .* gc.X[j, :] - (1 / 2gc.varμ[j]) * gc.res[j] .* gc.∇σ2β[j, :]
     end
     nothing
 end
@@ -55,12 +51,10 @@ end
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Binomial.
 """
 function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:Binomial{T}}
-    ∇μβ = zeros(size(gc.X))
-    ∇σ2β = zeros(size(gc.X))
     for j in 1:length(gc.y)
-        ∇μβ[j, :] = gc.varμ[j] .* gc.X[j, :]
-        ∇σ2β[j, :] = (1 - 2*gc.μ[j]) * gc.dμ[j] .* gc.X[j, :]
-        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * ∇μβ[j, :] - (1 / 2gc.varμ[j]) * gc.res[j] .* ∇σ2β[j, :]
+        gc.∇μβ[j, :] = gc.varμ[j] .* gc.X[j, :]
+        gc.∇σ2β[j, :] = (1 - 2*gc.μ[j]) * gc.dμ[j] .* gc.X[j, :]
+        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * gc.∇μβ[j, :] - (1 / 2gc.varμ[j]) * gc.res[j] .* gc.∇σ2β[j, :]
     end
     nothing
 end

@@ -157,6 +157,8 @@ struct GLMCopulaVCObs{T <: BlasReal, D, Link}
     V::Vector{Matrix{T}}
     # working arrays
     ∇β::Vector{T}   # gradient wrt β
+    ∇μβ::Matrix{T}
+    ∇σ2β::Matrix{T}
     ∇resβ::Matrix{T}# residual gradient matrix d/dβ_p res_ij (each observation has a gradient of residual is px1)
     ∇τ::Vector{T}   # gradient wrt τ
     ∇Σ::Vector{T}   # gradient wrt σ2
@@ -199,6 +201,8 @@ function GLMCopulaVCObs(
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
     ∇β  = Vector{T}(undef, p)
+    ∇μβ = Matrix{T}(undef, n, p)
+    ∇σ2β = Matrix{T}(undef, n, p)
     ∇resβ  = Matrix{T}(undef, n, p)
     ∇τ  = Vector{T}(undef, 1)
     ∇Σ  = Vector{T}(undef, m)
@@ -229,7 +233,7 @@ function GLMCopulaVCObs(
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
-    GLMCopulaVCObs{T, D, Link}(y, X, V, ∇β, ∇resβ, ∇τ, ∇Σ, ∇Σ1, ∇Σ2, Hβ, HΣ, HΣ1, HΣ2,
+    GLMCopulaVCObs{T, D, Link}(y, X, V, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇τ, ∇Σ, ∇Σ1, ∇Σ2, Hβ, HΣ, HΣ1, HΣ2,
         Hτ, res, t, q, xtx, storage_n, storage_p1, storage_p2, storage_np, storage_pp, added_term_numerator, added_term2, η, μ, varμ, dμ, d, link, wt, w1, w2)
 end
 
