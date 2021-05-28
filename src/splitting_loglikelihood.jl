@@ -127,13 +127,58 @@ needhess::Bool = false
     fill!(gcm.∇β, 0.0)
     fill!(gcm.∇Σ, 0.0)
   end
-  if needhess
-      gcm.Hβ .= copula_hessian(gcm)
-  end
   if needgrad
     gcm.∇β .= copula_gradient(gcm)
+  end
+  if needhess
+    gcm.Hβ .= copula_hessian(gcm)
   end
   logl += copula_loglikelihood(gcm)
   logl
 end
 
+#################### gradient and hessian with respect to variance component vector this should be inside of loglikelihood
+
+"""
+update_∇Σ_HΣ!(gcm)
+
+Update Σ gradient and Hessian for Newton's Algorithm, given β.
+"""
+function update_∇Σ_HΣ!(
+    gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
+    rsstotal = zero(T)
+    fill!(gcm.∇Σ, 0.0)
+    fill!(gcm.HΣ, 0.0)
+    @inbounds for i in eachindex(gcm.data)
+        update_res!(gcm.data[i], gcm.β)
+        rsstotal += abs2(norm(gcm.data[i].res))  # needed for updating τ in normal case
+        standardize_res!(gcm.data[i])            # standardize the residuals GLM variance(μ)
+        GLMCopula.update_quadform!(gcm.data[i]) # with standardized residuals
+        gcm.QF[i, :] = gcm.data[i].q
+    end
+    mul!(gcm.storage_n, gcm.QF, gcm.Σ)
+    gcm.storage_n .= inv.(1 .+ gcm.storage_n)
+    
+    mul!(gcm.storage_n2, gcm.TR, gcm.Σ)
+    gcm.storage_n2 .= inv.(1 .+ gcm.storage_n2)
+    
+    mul!(gcm.∇Σ1, transpose(gcm.QF), gcm.storage_n)
+    mul!(gcm.∇Σ2, transpose(gcm.TR), gcm.storage_n2)
+    gcm.∇Σ2 .*= -one(T)
+    
+    gcm.∇Σ .+= gcm.∇Σ1
+    gcm.∇Σ .+= gcm.∇Σ2
+    
+    # hessian
+    gcm.diagonal_n .= Diagonal(gcm.storage_n)
+    mul!(gcm.hess1, transpose(gcm.QF), gcm.diagonal_n)
+    
+    mul!(gcm.HΣ1, gcm.hess1, transpose(gcm.hess1))
+    gcm.HΣ1 .*= -one(T)
+    
+    gcm.diagonal_n .= Diagonal(gcm.storage_n2)
+    mul!(gcm.hess2, transpose(gcm.TR), gcm.diagonal_n)
+    mul!(gcm.HΣ2, gcm.hess2, transpose(gcm.hess2))
+    gcm.HΣ .+= gcm.HΣ1
+    gcm.HΣ .+= gcm.HΣ2
+end
