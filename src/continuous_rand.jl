@@ -98,7 +98,7 @@ end
 This function will compute the crossterm involving the residual values for constants c0 and c1 in the conditional densities. 
 Default all = false (conditional density):sum_{j = 1}^{i-1} γ_ij * r_j, but if all = true then will output (marginal density): sum_{j = 1}^{i} γ_ij * r_j
 """
-function crossterm_res(res::Vector{T}, i::Integer, Γ::Matrix{T}; all = false) where {T<: BlasReal}
+function crossterm_res(res::Vector{T}, i::Integer, Γ::Matrix{T}) where {T<: BlasReal}
     results = zeros(i-1)
     if i == 1
         return results
@@ -109,7 +109,6 @@ function crossterm_res(res::Vector{T}, i::Integer, Γ::Matrix{T}; all = false) w
     end
     results
  end
-
 
 """
     update_res!(Y::Real, res:Real, gc_obs::Union{ContinuousUnivariateCopula{<:ContinuousUnivariateDistribution, <:Real}, DiscreteUnivariateCopula{<:DiscreteUnivariateDistribution, <:Real}})

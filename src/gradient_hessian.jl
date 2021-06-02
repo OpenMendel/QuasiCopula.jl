@@ -1,4 +1,3 @@
-
 """
     std_res_differential!(gc)
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta. For Normal it will be X.
@@ -14,9 +13,9 @@ end
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Poisson.
 """
 function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:Poisson{T}}
-    for j in 1:length(gc.y)
-        gc.∇μβ[j, :] = gc.dμ[j] .* gc.X[j, :]
-        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * gc.∇μβ[j, :] - (1/2gc.varμ[j])*gc.res[j] * gc.∇μβ[j, :]
+    @inbounds for j in 1:length(gc.y)
+        gc.∇μβ[j, :] .= gc.dμ[j] .* gc.X[j, :]
+        gc.∇resβ[j, :] .= -(inv(sqrt(gc.varμ[j])) + (0.5 * inv(gc.varμ[j])) * gc.res[j]) .* gc.∇μβ[j, :]
     end
     nothing
 end
@@ -73,76 +72,15 @@ function glm_gradient(gc::Union{GaussianCopulaVCObs{T, D}, GLMCopulaVCObs{T, D, 
 end
 
 """
-    copula_gradient_addendum(gc)
-Compute the part of gradient specific to copula density with respect to beta for a single observation
+    glm_hessian(gc)
+Compute the part of the hessian relevant to the glm density with respect to beta for a single obs
 """
-function copula_gradient_addendum(
-    gc::GLMCopulaVCObs{T, D, Link},
-    β::Vector{T},
-    τ::T,
-    Σ::Vector{T}
-    ) where {T <: BlasReal, D, Link}
-    n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
-    fill!(gc.∇β, 0.0)
+function glm_hessian(gc::Union{GLMCopulaVCObs{T, D, Link}, GaussianCopulaVCObs{T, D}}, β) where {T <: BlasReal, D, Link}
     update_res!(gc, β)
-    if gc.d  ==  Normal()
-            sqrtτ = sqrt.(τ[1])
-            standardize_res!(gc, sqrtτ)
-        else
-            sqrtτ = 1.0
-            standardize_res!(gc)
-        end
-    fill!(gc.∇resβ, 0.0) # fill gradient of residual vector with 0
-    std_res_differential!(gc) # this will compute ∇resβ
-
-    # evaluate copula loglikelihood
-    for k in 1:m
-        mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
-        BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
-        gc.q[k] = dot(gc.res, gc.storage_n) / 2
-    end
-
-    qsum  = dot(Σ, gc.q)
-    # gradient
-        denom = 1 .+ qsum
-        inv1pq = inv(denom) #0.9625492359318475
-        # component_score = W1i(Yi -μi)
-        gc.storage_p2 .= gc.∇β .* inv1pq
-        gc.storage_p2 .*= sqrtτ # since we already standardized it above
-        gc.storage_p2
+    mul!(gc.storage_np, Diagonal(gc.w2), gc.X) 
+    mul!(gc.storage_pp, transpose(gc.X), gc.storage_np)
+    gc.storage_pp .*= -one(T)
 end
-
-"""
-    copula_gradient(gc::GLMCopulaVCObs{T, D})
-Calculates the full gradient with respect to beta for one observation
-"""
-function copula_gradient(gc::GLMCopulaVCObs{T, D, Link}, β, τ, Σ)  where {T<:BlasReal, D, Link}
-    fill!(gc.∇β, 0.0)
-    gc.∇β .= glm_gradient(gc, β, τ) .+ GLMCopula.copula_gradient_addendum(gc, β, τ[1], Σ)
-    gc.∇β
-end
-
-"""
-    copula_gradient(gcm::GLMCopulaVCModel{T, D})
-Calculates the full gradient with respect to beta for our copula model
-"""
-function copula_gradient(
-    gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCModel{T, D}}
-    ) where {T <: BlasReal, D}
-        fill!(gcm.∇β, 0.0)
-        if GLM.dispersion_parameter(gcm.d) == false
-            fill!(gcm.τ, 1.0)
-        end
-        update_res!(gcm)
-    for i in 1:length(gcm.data)
-        gcm.data[i].∇β .= copula_gradient(gcm.data[i], gcm.β, gcm.τ, gcm.Σ)
-        gcm.∇β .+= gcm.data[i].∇β
-    end
-    gcm.∇β
-end
-
-
-#### with respect to variance component vector
 
 """
     update_∇Σ!(gcm)
@@ -170,4 +108,25 @@ function update_∇Σ!(
     mul!(gcm.∇Σ2, transpose(gcm.TR), gcm.storage_n2)
     gcm.∇Σ .+= gcm.∇Σ1
     gcm.∇Σ .+= gcm.∇Σ2
+end
+
+"""
+    update_HΣ!(gcm)
+
+Update Σ Hessian for Newton's Algorithm, given β.
+"""
+function update_HΣ!(
+    gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
+    fill!(gcm.HΣ, 0.0)
+    gcm.diagonal_n .= Diagonal(gcm.storage_n)
+    mul!(gcm.hess1, transpose(gcm.QF), gcm.diagonal_n)
+    
+    mul!(gcm.HΣ1, gcm.hess1, transpose(gcm.hess1))
+    gcm.HΣ1 .*= -one(T)
+    
+    gcm.diagonal_n .= Diagonal(gcm.storage_n2)
+    mul!(gcm.hess2, transpose(gcm.TR), gcm.diagonal_n)
+    mul!(gcm.HΣ2, gcm.hess2, transpose(gcm.hess2))
+    gcm.HΣ .+= gcm.HΣ1
+    gcm.HΣ .+= gcm.HΣ2
 end

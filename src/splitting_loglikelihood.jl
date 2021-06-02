@@ -1,37 +1,3 @@
-
-"""
-    copula_loglikelihood_addendum!(gc::GLMCopulaVCObs{T, D, Link})
-Calculates the parts of the loglikelihood that is particular to our density for a single observation. These parts are an addendum to the component loglikelihood from the GLM density.
-"""
-function copula_loglikelihood_addendum(gc::GLMCopulaVCObs{T, D, Link}, Σ::Vector{T}) where {T<: BlasReal, D, Link}
-  m = length(gc.V)
-  for k in 1:m
-    mul!(gc.storage_n, gc.V[k], gc.res)
-    gc.q[k] = dot(gc.res, gc.storage_n) / 2
-  end
-  tsum = dot(Σ, gc.t)
-  logl = -log(1 + tsum)
-  qsum  = dot(Σ, gc.q)
-  inv1pq = inv(1 + qsum)
-  logl += log(1 + qsum)
-  logl
-end
-
-"""
-    copula_loglikelihood_addendum!(gcm::GLMCopulaVCModel{T, D, Link})
-Calculates the parts of the loglikelihood that is particular to our density for the collection of all observations.
-These parts are an addendum to the component loglikelihood coming from the GLM density.
-"""
-function copula_loglikelihood_addendum(gcm::GLMCopulaVCModel{T, D, Link}) where {T<: BlasReal, D, Link}
-  logl = 0.0
-  update_res!(gcm)
-  standardize_res!(gcm)
-  for i in 1:length(gcm.data)
-    logl += copula_loglikelihood_addendum(gcm.data[i], gcm.Σ)
-  end
-  logl
-end
-
 """
     loglik_obs!(d, y, μ, wt, ϕ)
 Get the loglikelihood from the GLM.jl package for each observation
@@ -63,78 +29,90 @@ function component_loglikelihood(gc::GLMCopulaVCObs{T, D, Link}, τ::T, logl::T)
   logl
 end
 
-"""
-    component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link})
-Calculates the loglikelihood of observing the our density
-"""
-function component_loglikelihood(gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
-  logl = 0.0
-  if GLM.dispersion_parameter(gcm.d)
-    τ = gcm.τ[1]
-  else
-    τ = one(T)
-  end
-  for i in 1:length(gcm.data)
-      logl += component_loglikelihood(gcm.data[i], τ, zero(T))
-  end
-  logl
-end
-
-"""
-    copula_loglikelihood(gcm::GLMCopulaVCModel{T, D, Link})
-Calculates the full loglikelihood for our copula model for a single observation
-"""
-function copula_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link}, GaussianCopulaVCObs{T, D}}, β::Vector{T}, τ::T, Σ::Vector{T}) where {T<: BlasReal, D, Link}
-#first get the loglikelihood from the component density with glm.jl
-  logl = 0.0
-  update_res!(gc, β)
-  if gc.d == Normal()
-    σinv = sqrt(τ[1])# general variance
-    standardize_res!(gc, σinv)
-  else
-    standardize_res!(gc)
-  end
-  logl += GLMCopula.copula_loglikelihood_addendum(gc, Σ)
-  logl += GLMCopula.component_loglikelihood(gc, τ, zero(T))
-  logl
-end
-
-"""
-    copula_loglikelihood(gcm::GLMCopulaVCModel{T, D, Link})
-Calculates the full loglikelihood for our copula model
-"""
-function copula_loglikelihood(gcm::GLMCopulaVCModel{T, D, Link}) where {T<: BlasReal, D, Link}
-  logl = 0.0
-  # first get the loglikelihood from the component density with glm.jl
-  logl += component_loglikelihood(gcm)
-  # second we add the parts of the loglikelihood from the copula density
-  logl += copula_loglikelihood_addendum(gcm)
-  logl
-end
-
-"""
-    loglikelihood!(gcm::GLMCopulaVCModel{T, D, Link})
-Calculates the loglikelihood along with the gradient and hessian with respect to β and variance component vector Σ
-using our split up functions.
-"""
 function loglikelihood!(
-gcm::GLMCopulaVCModel{T, D, Link},
-needgrad::Bool = false,
-needhess::Bool = false
-) where {T <: BlasReal, D, Link}
+  gc::GLMCopulaVCObs{T, D, Link},
+  β::Vector{T},
+  τ::T, # inverse of linear regression variance
+  Σ::Vector{T},
+  needgrad::Bool = false,
+  needhess::Bool = false
+  ) where {T <: BlasReal, D, Link}
+  n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
+  needgrad = needgrad || needhess
+  if needgrad
+      fill!(gc.∇β, 0)
+      fill!(gc.∇τ, 0)
+      fill!(gc.∇Σ, 0) 
+  end
+  needhess && fill!(gc.Hβ, 0)
+  fill!(gc.∇β, 0.0)
+  update_res!(gc, β)
+  standardize_res!(gc)
+  fill!(gc.∇resβ, 0.0) # fill gradient of residual vector with 0
+  std_res_differential!(gc) # this will compute ∇resβ
+
+  # evaluate copula loglikelihood
+  for k in 1:m
+      mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
+      if needgrad
+          BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
+      end
+      gc.q[k] = dot(gc.res, gc.storage_n) / 2
+  end
+  # loglikelihood
+  tsum = dot(Σ, gc.t)
+  logl = -log(1 + tsum)
+  qsum  = dot(Σ, gc.q)
+  logl += log(1 + qsum)
+  logl = GLMCopula.component_loglikelihood(gc, τ[1], logl)
+  
+  if needgrad
+      inv1pq = inv(1 + qsum)
+      if needhess
+          BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 1.0, gc.Hβ) # only lower triangular
+          # does adding this term to the approximation of the hessian violate negative semidefinite properties?
+          fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
+          fill!(gc.added_term2, 0.0) # fill hessian with 0
+          for k in 1:m
+              mul!(gc.added_term_numerator, gc.V[k], gc.∇resβ) # storage_n = V[k] * res
+              BLAS.gemm!('T', 'N', Σ[k], gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2)
+          end
+          gc.added_term2 .*= inv1pq
+          gc.Hβ .+= gc.added_term2
+          gc.Hβ .+= GLMCopula.glm_hessian(gc, β)
+      end
+      gc.storage_p2 .= gc.∇β .* inv1pq
+      gc.∇β .= GLMCopula.glm_gradient(gc, β, τ)
+      gc.∇β .+= gc.storage_p2
+  end
+  logl
+end
+
+function loglikelihood!(
+  gcm::GLMCopulaVCModel{T, D, Link},
+  needgrad::Bool = false,
+  needhess::Bool = false
+  ) where {T <: BlasReal, D, Link}
   logl = zero(T)
   if needgrad
-    fill!(gcm.∇β, 0.0)
-    fill!(gcm.∇Σ, 0.0)
-  end
-  if needgrad
-    gcm.∇β .= copula_gradient(gcm)
-    gcm.∇Σ .= update_∇Σ!(gcm)
+      fill!(gcm.∇β, 0)
+      fill!(gcm.∇Σ, 0)
+      gcm.∇Σ .= update_∇Σ!(gcm)
   end
   if needhess
-    gcm.Hβ .= copula_hessian(gcm)
-    gcm.HΣ .= update_HΣ!(gcm)
+      fill!(gcm.Hβ, 0)
+      fill!(gcm.HΣ, 0)
+      gcm.HΣ .= update_HΣ!(gcm)
   end
-  logl += copula_loglikelihood(gcm)
+  for i in eachindex(gcm.data)
+      logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.Σ, needgrad, needhess)
+      if needgrad
+          gcm.∇β .+= gcm.data[i].∇β
+      end
+      if needhess
+          gcm.Hβ .+= gcm.data[i].Hβ
+      end
+  end
   logl
 end
+
