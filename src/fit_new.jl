@@ -1,24 +1,78 @@
+"""
+    fit!(gcm::GLMCopulaVCModel, solver=Ipopt.IpoptSolver(print_level=5))
 
+Fit an `GLMCopulaVCModel` object by MLE using a nonlinear programming solver. Start point 
+should be provided in `gcm.β`, `gcm.Σ`.
 """
-    loglikelihood!(gcm::GLMCopulaVCModel{T, D})
-Calls the solver Ipopt to optimize over β vector, tells it we have the gradient.
-"""
-function fit2!(
-    gcm::GLMCopulaVCModel,
-    solver=Ipopt.IpoptSolver(print_level=0),
+function fit!(
+        gcm::GLMCopulaVCModel,
+        solver=Ipopt.IpoptSolver(print_level=5)
     )
+    npar = gcm.p + gcm.m
     optm = MathProgBase.NonlinearModel(solver)
-    lb = fill(-Inf, gcm.p)
-    ub = fill(Inf, gcm.p)
-    MathProgBase.loadproblem!(optm, gcm.p, 0, lb, ub, Float64[], Float64[], :Max, gcm)
-    MathProgBase.setwarmstart!(optm, gcm.β)
+    # set lower bounds and upper bounds of parameters
+    # diagonal entries of Cholesky factor L should be >= 0
+    lb   = fill(-Inf, npar)
+    ub   = fill( Inf, npar)
+    offset = gcm.p + 1
+    for k in 1:gcm.m
+        lb[offset] = 0
+        offset += 1
+    end
+    MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Max, gcm)
+    # starting point
+    par0 = zeros(npar)
+    modelpar_to_optimpar!(par0, gcm)
+    MathProgBase.setwarmstart!(optm, par0)
+    # optimize
     MathProgBase.optimize!(optm)
     optstat = MathProgBase.status(optm)
     optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
-    GLMCopula.copy_par!(gcm, MathProgBase.getsolution(optm))
-    loglikelihood3!(gcm)
+    # update parameters and refresh gradient
+    optimpar_to_modelpar!(gcm, MathProgBase.getsolution(optm))
+    loglikelihood!(gcm, true, false)
     # gcm
-    nothing
+end
+
+"""
+    modelpar_to_optimpar!(par, gcm)
+
+Translate model parameters in `gcm` to optimization variables in `par`.
+"""
+function modelpar_to_optimpar!(
+        par :: Vector,
+        gcm :: GLMCopulaVCModel
+    )
+    # β
+    copyto!(par, gcm.β)
+    # L
+    offset = gcm.p + 1
+    @inbounds for k in 1:gcm.m
+        par[offset] = gcm.Σ[k]
+        offset += 1
+    end
+    par
+end
+
+"""
+    optimpar_to_modelpar!(gcm, par)
+
+Translate optimization variables in `par` to the model parameters in `gcm`.
+"""
+function optimpar_to_modelpar!(
+        gcm :: GLMCopulaVCModel, 
+        par :: Vector
+    )
+    # β
+    copyto!(gcm.β, 1, par, 1, gcm.p)
+    # L
+    offset = gcm.p + 1
+    @inbounds for k in 1:gcm.m
+        gcm.Σ[k] = par[offset]
+        offset   += 1
+    end
+    copyto!(gcm.θ, par)
+    gcm
 end
 
 function MathProgBase.initialize(
@@ -33,72 +87,91 @@ end
 
 MathProgBase.features_available(gcm::GLMCopulaVCModel) = [:Grad, :Hess]
 
-
 function MathProgBase.eval_f(
-    gcm::GLMCopulaVCModel,
-    par::Vector)
-    copy_par!(gcm, par)
-    # maximize σ2 and τ at current β using MM
-    update_Σ!(gcm)
-    # evaluate loglikelihood
-    loglikelihood3!(gcm, false, false)
+        gcm :: GLMCopulaVCModel, 
+        par :: Vector
+    )
+    optimpar_to_modelpar!(gcm, par)
+    loglikelihood!(gcm, false, false) # don't need gradient here
 end
 
 function MathProgBase.eval_grad_f(
-    gcm::GLMCopulaVCModel,
-    grad::Vector,
-    par::Vector)
-    copy_par!(gcm, par)
-    # maximize σ2 and τ at current β using MM
-    update_Σ!(gcm)
-    @show gcm.Σ
-    # evaluate gradient
-    logl = loglikelihood3!(gcm, true, false)
+        gcm    :: GLMCopulaVCModel, 
+        grad :: Vector, 
+        par  :: Vector
+    )
+    optimpar_to_modelpar!(gcm, par) 
+    obj = loglikelihood!(gcm, true, false)
+    # gradient wrt β
     copyto!(grad, gcm.∇β)
-    #gcm = glm_score_statistic(gcm, gcm.β)
-    #copyto!(grad, gcm.∇β)
-    nothing
+    # gradient wrt L
+    offset = gcm.p + 1
+    @inbounds for k in 1:gcm.m
+        grad[offset] = gcm.∇Σ[k]
+        offset += 1
+    end
+    @show gcm.θ
+    copyto!(gcm.∇θ, grad)
+    @show gcm.∇θ
+    # return objective
+    obj
 end
 
-function copy_par!(
-    gcm::GLMCopulaVCModel,
-    par::Vector)
-    copyto!(gcm.β, par)
-    par
-end
+MathProgBase.eval_g(gcm::GLMCopulaVCModel, g, par) = nothing
+MathProgBase.jac_structure(gcm::GLMCopulaVCModel) = Int[], Int[]
+MathProgBase.eval_jac_g(gcm::GLMCopulaVCModel, J, par) = nothing
+
+"""
+    ◺(n::Integer)
+Triangular number n * (n+1) / 2
+"""
+@inline ◺(n::Integer) = (n * (n + 1)) >> 1
 
 function MathProgBase.hesslag_structure(gcm::GLMCopulaVCModel)
-    Iidx = Vector{Int}(undef, (gcm.p * (gcm.p + 1)) >> 1)
-    Jidx = similar(Iidx)
-    ct = 1
-    for j in 1:gcm.p
+    m◺ = ◺(gcm.m)
+    # we work on the upper triangular part of the Hessian
+    arr1 = Vector{Int}(undef, ◺(gcm.p) + m◺)
+    arr2 = Vector{Int}(undef, ◺(gcm.p) + m◺)
+    # Hββ block
+    idx  = 1    
+    for j in 1:gcm.p
         for i in j:gcm.p
-            Iidx[ct] = i
-            Jidx[ct] = j
-            ct += 1
+            arr1[idx] = i
+            arr2[idx] = j
+            idx += 1
         end
     end
-    Iidx, Jidx
+    # Haa block
+    for j in 1:gcm.m
+        for i in 1:j
+            arr1[idx] = gcm.p + i
+            arr2[idx] = gcm.p + j
+            idx += 1
+        end
+    end
+    return (arr1, arr2)
 end
-
+    
 function MathProgBase.eval_hesslag(
-    gcm::GLMCopulaVCModel{T, D},
-    H::Vector{T},
-    par::Vector{T},
-    σ::T,
-    μ::Vector{T}) where {T <: BlasReal, D}
-    GLMCopula.copy_par!(gcm, par)
-    # maximize σ2 and τ at current β using MM
-    update_Σ!(gcm)
-    # evaluate Hessian
-    loglikelihood3!(gcm, true, true)
-    # copy Hessian elements into H
-    ct = 1
-    for j in 1:gcm.p
-        for i in j:gcm.p
-            H[ct] = gcm.Hβ[i, j]
-            ct += 1
-        end
-    end
+        gcm   :: GLMCopulaVCModel, 
+        H   :: Vector{T},
+        par :: Vector{T}, 
+        σ   :: T, 
+        μ   :: Vector{T}
+    ) where {T}    
+    optimpar_to_modelpar!(gcm, par)
+    loglikelihood!(gcm, true, true)
+    # Hβ block
+    idx = 1    
+    @inbounds for j in 1:gcm.p, i in 1:j
+        H[idx] = gcm.Hβ[i, j]
+        idx   += 1
+    end
+    # Haa block
+    @inbounds for j in 1:gcm.m, i in 1:j
+        H[idx] = gcm.HΣ[i, j]
+        idx   += 1
+    end
+    # lmul!(σ, H)
     H .*= σ
 end

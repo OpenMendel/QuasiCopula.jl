@@ -114,7 +114,7 @@ end
 
 """
     loglikelihood!(gcm::GLMCopulaVCModel{T, D, Link})
-Calculates the loglikelihood along with the gradient and hessian with respect to β
+Calculates the loglikelihood along with the gradient and hessian with respect to β and variance component vector Σ
 using our split up functions.
 """
 function loglikelihood!(
@@ -129,92 +129,12 @@ needhess::Bool = false
   end
   if needgrad
     gcm.∇β .= copula_gradient(gcm)
+    gcm.∇Σ .= update_∇Σ!(gcm)
   end
   if needhess
     gcm.Hβ .= copula_hessian(gcm)
+    gcm.HΣ .= update_HΣ!(gcm)
   end
   logl += copula_loglikelihood(gcm)
   logl
 end
-
-#################### gradient and hessian with respect to variance component vector this should be inside of loglikelihood
-
-"""
-update_∇Σ_HΣ!(gcm)
-
-Update Σ gradient and Hessian for Newton's Algorithm, given β.
-"""
-function update_∇Σ_HΣ!(
-    gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
-    rsstotal = zero(T)
-    fill!(gcm.∇Σ, 0.0)
-    fill!(gcm.HΣ, 0.0)
-    @inbounds for i in eachindex(gcm.data)
-        update_res!(gcm.data[i], gcm.β)
-        rsstotal += abs2(norm(gcm.data[i].res))  # needed for updating τ in normal case
-        standardize_res!(gcm.data[i])            # standardize the residuals GLM variance(μ)
-        GLMCopula.update_quadform!(gcm.data[i]) # with standardized residuals
-        gcm.QF[i, :] = gcm.data[i].q
-    end
-    mul!(gcm.storage_n, gcm.QF, gcm.Σ)
-    gcm.storage_n .= inv.(1 .+ gcm.storage_n)
-    
-    mul!(gcm.storage_n2, gcm.TR, gcm.Σ)
-    gcm.storage_n2 .= inv.(1 .+ gcm.storage_n2)
-    
-    mul!(gcm.∇Σ1, transpose(gcm.QF), gcm.storage_n)
-    mul!(gcm.∇Σ2, transpose(gcm.TR), gcm.storage_n2)
-    gcm.∇Σ2 .*= -one(T)
-    
-    gcm.∇Σ .+= gcm.∇Σ1
-    gcm.∇Σ .+= gcm.∇Σ2
-    
-    # hessian
-    gcm.diagonal_n .= Diagonal(gcm.storage_n)
-    mul!(gcm.hess1, transpose(gcm.QF), gcm.diagonal_n)
-    
-    mul!(gcm.HΣ1, gcm.hess1, transpose(gcm.hess1))
-    gcm.HΣ1 .*= -one(T)
-    
-    gcm.diagonal_n .= Diagonal(gcm.storage_n2)
-    mul!(gcm.hess2, transpose(gcm.TR), gcm.diagonal_n)
-    mul!(gcm.HΣ2, gcm.hess2, transpose(gcm.hess2))
-    gcm.HΣ .+= gcm.HΣ1
-    gcm.HΣ .+= gcm.HΣ2
-end
-
-
-# # start working on this loglikelihood function, maybe we want to break apart gradient and hessian
-# # and give ipopt the gradient and hessian with respect to theta and 
-# """
-#     loglikelihood!(gcm::GLMCopulaVCModel{T, D, Link})
-# Calculates the loglikelihood along with the gradient and hessian with respect to β
-# using our split up functions.
-# """
-# function loglikelihood!(
-# gcm::GLMCopulaVCModel{T, D, Link},
-# needgrad::Bool = false,
-# needhess::Bool = false
-# ) where {T <: BlasReal, D, Link}
-#   logl = zero(T)
-#   if needgrad
-#     fill!(gcm.∇β, 0.0)
-#     fill!(gcm.∇Σ, 0.0)
-#   end
-#   if needgrad
-#     gcm.∇β .= copula_gradient(gcm)
-#   end
-#   if needhess
-#     gcm.Hβ .= copula_hessian(gcm)
-#   end
-
-#   update_∇Σ_HΣ!(gcm)
-#   gcm.∇θ[1:p] .= gcm.∇β
-#   gcm.∇θ[p+1:end] .= gcm.∇Σ
-
-#   gcm.Hθ[1:p, 1:p] .= gcm.Hβ
-#   gcm.Hθ[p+1:end, p+1:end] .= gcm.HΣ
-
-#   logl += copula_loglikelihood(gcm)
-#   logl
-# end

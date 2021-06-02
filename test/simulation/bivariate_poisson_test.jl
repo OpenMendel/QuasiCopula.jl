@@ -63,7 +63,6 @@ update_Σ!(gcm)
 @test GLMCopula.loglikelihood!(gcm, true, true) ≈ -48089.24498484653
 
 @test gcm.∇β ≈ [-3215.226525108171]
-@test gcm.data[1].∇β ≈ [0.17524618878789266]
 # with the extra hessian term
 @test gcm.Hβ ≈ [-72732.90810806138]
 @test gcm.data[1].Hβ ≈ [-5.986086848281841]
@@ -71,8 +70,9 @@ update_Σ!(gcm)
 # @time GLMCopula.fit2!(gcm, IpoptSolver(print_level = 5, derivative_test = "first-order"))
 @time fit2!(gcm, IpoptSolver(print_level = 5, max_iter = 100, hessian_approximation = "exact"))
 # 39 iterations at 7 seconds 
-# check default ipopt quasi newton 
-# then go back and check the hessian
+# 31 iterations at 117 seconds (using the mm as the initial and then newtons on joint parameter estimation)
+# @time fit2!(gcm, IpoptSolver(print_level = 5, max_iter = 100, mehrotra_algorithm="yes", warm_start_init_point="yes", hessian_approximation = "exact"))
+# 21 iterations at 13 seconds
 @test GLMCopula.loglikelihood!(gcm, true, true) ≈ -48011.648934230856
 println("estimated mean = $(exp.(gcm.β)[1]); true mean value= $mean_1")
 println("estimated variance component 1 = $(gcm.Σ[1]); true variance component 1 = $variance_component_1")

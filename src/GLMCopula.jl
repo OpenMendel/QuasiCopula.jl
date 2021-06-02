@@ -6,10 +6,10 @@ using LinearAlgebra: BlasReal, copytri!
 @reexport using Ipopt
 @reexport using NLopt
 
-export fit2!, update_Σ_jensen!, init_β!, initialize_model!, loglikelihood!, standardize_res!, std_res_differential!
+export fit2!, fit!, update_Σ_jensen!, init_β!, initialize_model!, loglikelihood!, standardize_res!, std_res_differential!
 export update_res!, update_Σ!
 
-export update_∇Σ_HΣ! # update gradient and hessian of variance components
+export update_∇Σ!, update_HΣ! # update gradient and hessian of variance components
 
 export glm_regress_jl, glm_regress_model, glm_score_statistic  # these are to initialize our model
 
@@ -270,6 +270,7 @@ struct GLMCopulaVCModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalu
     β::Vector{T}    # p-vector of mean regression coefficients
     τ::Vector{T}    # inverse of linear regression variance parameter
     Σ::Vector{T}    # m-vector: [σ12, ..., σm2]
+    θ::Vector{T}
     # working arrays
     ∇β::Vector{T}   # gradient from all observations
     ∇τ::Vector{T}
@@ -282,7 +283,6 @@ struct GLMCopulaVCModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalu
     HΣ::Matrix{T}
     HΣ1::Matrix{T}
     HΣ2::Matrix{T}
-    Hθ::Matrix{T}
     Hτ::Matrix{T}
     TR::Matrix{T}         # n-by-m matrix with tik = tr(Vi[k]) / 2
     QF::Matrix{T}         # n-by-m matrix with qik = res_i' Vi[k] res_i
@@ -302,6 +302,7 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: B
     β   = Vector{T}(undef, p)
     τ   = [1.0]
     Σ   = Vector{T}(undef, m)
+    θ   = Vector{T}(undef, m + p)
     ∇β  = Vector{T}(undef, p)
     ∇τ  = Vector{T}(undef, 1)
     ∇Σ  = Vector{T}(undef, m)
@@ -313,7 +314,6 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: B
     HΣ  = Matrix{T}(undef, m, m)
     HΣ1  = Matrix{T}(undef, m, m)
     HΣ2  = Matrix{T}(undef, m, m)
-    Hθ  = Matrix{T}(undef, m + p, m + p)
     Hτ  = Matrix{T}(undef, 1, 1)
     TR  = Matrix{T}(undef, n, m) # collect trace terms
     Ytotal = 0.0
@@ -329,15 +329,15 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: B
         link[i] = gcs[i].link
     end
     QF        = Matrix{T}(undef, n, m)
-    hess1      = Matrix{T}(undef, m, n)
+    hess1     = Matrix{T}(undef, m, n)
     hess2     = Matrix{T}(undef, m, n)
     diagonal_n = Matrix{T}(undef, n, n)
     storage_n = Vector{T}(undef, n)
     storage_n2 = Vector{T}(undef, n)
     storage_m = Vector{T}(undef, m)
     storage_Σ = Vector{T}(undef, m)
-    GLMCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, p, m, β, τ, Σ,
-        ∇β, ∇τ, ∇Σ, ∇Σ1, ∇Σ2, ∇θ, XtX, Hβ, HΣ, HΣ1, HΣ2, Hθ, Hτ, TR, QF, hess1, hess2, diagonal_n,
+    GLMCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, p, m, β, τ, Σ, θ,
+        ∇β, ∇τ, ∇Σ, ∇Σ1, ∇Σ2, ∇θ, XtX, Hβ, HΣ, HΣ1, HΣ2, Hτ, TR, QF, hess1, hess2, diagonal_n,
         storage_n, storage_n2, storage_m, storage_Σ, d, link)
 end
 

@@ -78,3 +78,26 @@ function copula_hessian(gcm::Union{GLMCopulaVCModel{T, D, Link}, GaussianCopulaV
     gcm.Hβ .*= gcm.τ[1]
     gcm.Hβ
 end
+
+#### with respect to variance component vector
+
+"""
+    update_HΣ!(gcm)
+
+Update Σ Hessian for Newton's Algorithm, given β.
+"""
+function update_HΣ!(
+    gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
+    fill!(gcm.HΣ, 0.0)
+    gcm.diagonal_n .= Diagonal(gcm.storage_n)
+    mul!(gcm.hess1, transpose(gcm.QF), gcm.diagonal_n)
+    
+    mul!(gcm.HΣ1, gcm.hess1, transpose(gcm.hess1))
+    gcm.HΣ1 .*= -one(T)
+    
+    gcm.diagonal_n .= Diagonal(gcm.storage_n2)
+    mul!(gcm.hess2, transpose(gcm.TR), gcm.diagonal_n)
+    mul!(gcm.HΣ2, gcm.hess2, transpose(gcm.hess2))
+    gcm.HΣ .+= gcm.HΣ1
+    gcm.HΣ .+= gcm.HΣ2
+end

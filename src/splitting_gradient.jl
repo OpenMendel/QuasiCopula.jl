@@ -141,3 +141,33 @@ function copula_gradient(
     gcm.∇β
 end
 
+
+#### with respect to variance component vector
+
+"""
+    update_∇Σ!(gcm)
+
+Update Σ gradient for Newton's Algorithm, given β.
+"""
+function update_∇Σ!(
+    gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
+    rsstotal = zero(T)
+    @inbounds for i in eachindex(gcm.data)
+        update_res!(gcm.data[i], gcm.β)
+        rsstotal += abs2(norm(gcm.data[i].res))  # needed for updating τ in normal case
+        standardize_res!(gcm.data[i])            # standardize the residuals GLM variance(μ)
+        GLMCopula.update_quadform!(gcm.data[i]) # with standardized residuals
+        gcm.QF[i, :] = gcm.data[i].q
+    end
+    mul!(gcm.storage_n, gcm.QF, gcm.Σ)
+    gcm.storage_n .= inv.(1 .+ gcm.storage_n)
+    
+    mul!(gcm.storage_n2, gcm.TR, gcm.Σ)
+    gcm.storage_n2 .= inv.(1 .+ gcm.storage_n2)
+    gcm.storage_n2 .*= -one(T)
+    
+    mul!(gcm.∇Σ1, transpose(gcm.QF), gcm.storage_n)
+    mul!(gcm.∇Σ2, transpose(gcm.TR), gcm.storage_n2)
+    gcm.∇Σ .+= gcm.∇Σ1
+    gcm.∇Σ .+= gcm.∇Σ2
+end

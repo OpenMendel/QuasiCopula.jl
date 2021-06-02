@@ -312,21 +312,9 @@ hessianmagictest = h(β)
 @show loglikelihood!(gcm, true, true)
 @show gcm.∇β
 
-# takes only 22 iterations
-@time fit2!(gcm, IpoptSolver(print_level = 5, max_iter = 100, derivative_test = "first-order", hessian_approximation = "limited-memory"))
-
-@show loglikelihood!(gcm, true, true)
-@show gcm.∇β
-
-gcm = GLMCopulaVCModel(gcs);
-
-initialize_model!(gcm)
-@show gcm.β
-fill!(gcm.Σ, 1.0)
-update_Σ!(gcm)
-GLMCopula.loglikelihood!(gcm, true, true)
-
-# as is in the paper it takes 39 iterations and then using the other term we get 35 iterations
+# # as is in the paper it takes 39 iterations and then using the other term we get 35 iterations
 @time fit2!(gcm, IpoptSolver(print_level = 5, max_iter = 100, hessian_approximation = "exact"))
-GLMCopula.loglikelihood!(gcm, true, true)
-# -569.1749163635732
+# GLMCopula.loglikelihood!(gcm, true, true)
+# # -569.1749163635732
+
+# @time fit2!(gcm, IpoptSolver(print_level = 5, max_iter = 100, mehrotra_algorithm="yes", warm_start_init_point="yes", hessian_approximation = "exact"))
