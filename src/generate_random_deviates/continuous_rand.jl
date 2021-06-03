@@ -49,9 +49,7 @@ function pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist::Continuous
     # first multiply Γ[1:i-1, 1:i-1] *  res[1:i-1]
     mul!(storage, Γ[1:i-1, 1:i-1], res[1:i-1])
     # then multiply to get transpose(res[1:i-1]) *  Γ[1:i-1, 1:i-1] *  res[1:i-1]
-    # dot(storage, res[1:i-1])
     c0 = 1 + 0.5 * dot(storage, res[1:i-1]) +  0.5 * tr(Γ[i+1:end, i+1:end]) + 0.5 * Γ[i, i] * c_0  - c__0
-    # c0 = 1 + 0.5 * transpose(res[1:i-1]) *  Γ[1:i-1, 1:i-1] *  res[1:i-1] +  0.5 * tr(Γ[i+1:end, i+1:end]) + 0.5 * Γ[i, i] * c_0  - c__0
     c1 = 0.5 * Γ[i, i] * c_1  + c__1
     c2 = 0.5 * Γ[i, i] * c_2
     ContinuousUnivariateCopula(dist, c0, c1, c2)
