@@ -19,9 +19,10 @@ lmm1 = LinearMixedModel(@formula(nresp ~ 1 +  normal + (1|gene)), df);
 df[!, :counts] = rand.(Poisson.(GLM.linkinv.(canonicallink(Poisson()), response(lmm1))))
 df
 
-poisson_formula = @formula(counts ~ 1 + normal + (1|gene));
-@time mdl = GeneralizedLinearMixedModel(poisson_formula, df, Poisson());
-loglikelihood(mdl)
+glmm1 = MixedModels.fit!(GeneralizedLinearMixedModel(@formula(counts ~ 1 + normal + (1|gene)), df, Poisson()))
+loglikelihood(glmm1)
+# glmm_β = [0.994235; 0.0545616]
+# logl_glmm = -1863.1043633643485
 
 groups = unique(df[!, :gene])
 n, p, m = length(groups), 1, 1
@@ -44,15 +45,16 @@ gcm = GLMCopulaVCModel(gcs);
 
 initialize_model!(gcm)
 @show gcm.β
+@show gcm.Σ
 
-fill!(gcm.Σ, 1.0)
-update_Σ!(gcm)
 GLMCopula.loglikelihood!(gcm, true, true)
 
 gc = gcm.data[1]
 β  = gcm.β
 Σ  = gcm.Σ
 τ  = gcm.τ
+update_res!(gc, β)
+standardize_res!(gc)
 
 @show β
 @show Σ
@@ -68,8 +70,8 @@ n_i  = length(gc.y)
 
 # part of loglikelihood specific to our density
 # term 1:
-trace_gamma = Σ[1]*tr(gc.V[1])
-@test trace_gamma ≈ n_i*Σ[1]
+trace_gamma = Σ[1] * tr(gc.V[1])
+@test trace_gamma ≈ n_i * Σ[1]
 
 trace_gamma_half = trace_gamma/2
 @show trace_gamma_half
@@ -84,7 +86,26 @@ quad_form_standardized_res_half = (Σ[1]*transpose(gc.res)*gc.V[1]*gc.res)/2
 term2 = log(1 + quad_form_standardized_res_half)
 @show term2
 logl_hard_coded_obs1 = term1 + term2
-copula_logl_function = GLMCopula.copula_loglikelihood_addendum(gc, Σ)
+
+"""
+    copula_loglikelihood_addendum!(gc::GLMCopulaVCObs{T, D, Link})
+Calculates the parts of the loglikelihood that is particular to our density for a single observation. These parts are an addendum to the component loglikelihood from the GLM density.
+"""
+function copula_loglikelihood_addendum(gc::GLMCopulaVCObs{T, D, Link}, Σ::Vector{T}) where {T<: BlasReal, D, Link}
+  m = length(gc.V)
+  for k in 1:m
+    mul!(gc.storage_n, gc.V[k], gc.res)
+    gc.q[k] = dot(gc.res, gc.storage_n) / 2
+  end
+  tsum = dot(Σ, gc.t)
+  logl = -log(1 + tsum)
+  qsum  = dot(Σ, gc.q)
+  inv1pq = inv(1 + qsum)
+  logl += log(1 + qsum)
+  logl
+end
+
+copula_logl_function = copula_loglikelihood_addendum(gc, Σ)
 @show logl_hard_coded_obs1
 @show copula_logl_function
 @test copula_logl_function ≈ logl_hard_coded_obs1
@@ -109,6 +130,25 @@ logl_component_logistic += component_loglikelihood(gc, τ[1], logl_component_log
 # full loglikelihood
 logl_hard = term1 + term2 + term3
 
+"""
+    copula_loglikelihood(gcm::GLMCopulaVCModel{T, D, Link})
+Calculates the full loglikelihood for our copula model for a single observation
+"""
+function copula_loglikelihood(gc::GLMCopulaVCObs{T, D, Link}, β::Vector{T}, τ::T, Σ::Vector{T}) where {T<: BlasReal, D, Link}
+#first get the loglikelihood from the component density with glm.jl
+  logl = 0.0
+  update_res!(gc, β)
+  if gc.d == Normal()
+    σinv = sqrt(τ[1])# general variance
+    standardize_res!(gc, σinv)
+  else
+    standardize_res!(gc)
+  end
+  logl += copula_loglikelihood_addendum(gc, Σ)
+  logl += GLMCopula.component_loglikelihood(gc, τ, zero(T))
+  logl
+end
+
 logl_functions = copula_loglikelihood(gc, β, τ[1], Σ)
 @test logl_hard == logl_functions
 
@@ -124,6 +164,7 @@ function poisson_gradient(y, X, dμ, σ2, μ)
 end
 
 # check if glm gradient is right
+
 term1_gradient = poisson_gradient(gc.y, gc.X, gc.dμ, gc.varμ, gc.μ)
 hardgrad1 = transpose(gc.X)*(gc.y - gc.μ)
 term1_grad_fctn = GLMCopula.glm_gradient(gc, β, τ)
@@ -190,21 +231,58 @@ grad_t2_denominator = inv(1 + quadratic_form_half)
 
 gradient_term2 = grad_t2_numerator * grad_t2_denominator
 
-gradient_term2_function = GLMCopula.copula_gradient_addendum(gc, β, τ[1], Σ)
+"""
+    copula_gradient_addendum(gc)
+Compute the part of gradient specific to copula density with respect to beta for a single observation
+"""
+function copula_gradient_addendum(
+    gc::GLMCopulaVCObs{T, D, Link},
+    β::Vector{T},
+    τ::T,
+    Σ::Vector{T}
+    ) where {T <: BlasReal, D, Link}
+    n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
+    fill!(gc.∇β, 0.0)
+    update_res!(gc, β)
+    if gc.d  ==  Normal()
+            sqrtτ = sqrt.(τ[1])
+            standardize_res!(gc, sqrtτ)
+        else
+            sqrtτ = 1.0
+            standardize_res!(gc)
+        end
+    fill!(gc.∇resβ, 0.0) # fill gradient of residual vector with 0
+    std_res_differential!(gc) # this will compute ∇resβ
+
+    # evaluate copula loglikelihood
+    for k in 1:m
+        mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
+        BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
+        gc.q[k] = dot(gc.res, gc.storage_n) / 2
+    end
+
+    qsum  = dot(Σ, gc.q)
+    # gradient
+        denom = 1 .+ qsum
+        inv1pq = inv(denom) #0.9625492359318475
+        # component_score = W1i(Yi -μi)
+        gc.storage_p2 .= gc.∇β .* inv1pq
+        gc.storage_p2 .*= sqrtτ # since we already standardized it above
+        gc.storage_p2
+end
+
+gradient_term2_function = copula_gradient_addendum(gc, β, τ[1], Σ)
 @test gradient_term2 ≈ gradient_term2_function
 
 gradient_hard_code = term1_gradient + gradient_term2
+
 function copula_gradient(gc::GLMCopulaVCObs{T, D}, β, τ, Σ)  where {T<:BlasReal, D}
     fill!(gc.∇β, 0.0)
-    gc.∇β .= GLMCopula.glm_gradient(gc, β, τ) .+ GLMCopula.copula_gradient_addendum(gc, β, τ[1], Σ)
+    gc.∇β .= GLMCopula.glm_gradient(gc, β, τ) .+ copula_gradient_addendum(gc, β, τ[1], Σ)
 end
 full_gradient_function = copula_gradient(gc, β, τ, Σ)
 
 @test full_gradient_function ≈ gradient_hard_code
-
-@show loglikelihood!(gcm, true, true)
-@show loglikelihood(mdl)
-
 
 #### now check the matrix calculus using ForwardDiff.jl
 
@@ -308,15 +386,8 @@ h = x -> ForwardDiff.hessian(full_loglikelihood, x)
 hessianmagictest = h(β)
 @show hessianmagictest
 
-@show loglikelihood!(gcm, true, true)
-@show gcm.∇β
+# using fitold.jl
+# @time GLMCopula.fit2!(gcm, IpoptSolver(print_level = 5, max_iter = 100, mehrotra_algorithm="yes", warm_start_init_point="yes", hessian_approximation = "exact"))
+# ourlogl using MM-Algorithm only # -1863.1043633723243 (42 iterations and 0.479 seconds)
 
-# @time fit2!(gcm, IpoptSolver(print_level = 5, max_iter = 100, mehrotra_algorithm="yes", warm_start_init_point="yes", hessian_approximation = "exact"))
-
-# as is in the paper it takes 39 iterations and then using the other term we get 35 iterations
-@time fit2!(gcm, IpoptSolver(print_level = 5, max_iter = 100, hessian_approximation = "exact"))
-# GLMCopula.loglikelihood!(gcm, true, true)
-# # -1863.1043633723516
-
-# 0.218887 seconds (1.08 M allocations: 101.188 MiB, 18.91% gc time)
-# using MixedModels -1891.2586221674821
+# using fitnew.jl since the variance component is roughly 0, we get some numerical issues

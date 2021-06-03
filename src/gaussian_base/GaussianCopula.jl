@@ -1,5 +1,4 @@
 export GaussianCopulaVCObs, GaussianCopulaVCModel
-
 export GaussianCopulaLMMObs, GaussianCopulaLMMModel
 
 """

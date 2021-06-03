@@ -1,11 +1,11 @@
 """
-initialize!(gcm, Normal)
+    initialize!(gcm{D}) where D<: Normal
 
 Initialize the linear regression parameters `β` and `τ=σ0^{-2}` by the least
-squares solution.
+squares solution for the Normal distribution.
 """
 function initialize_model!(
-    gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCModel{T, D}}) where {T <:BlasReal, D<:Normal}
+    gcm::GLMCopulaVCModel{T, D}) where {T <:BlasReal, D<:Normal}
     # accumulate sufficient statistics X'y
     xty = zeros(T, gcm.p)
     for i in eachindex(gcm.data)
@@ -24,32 +24,35 @@ function initialize_model!(
 end
 
 """
-initialize_model!(gcm)
+    initialize_model!(gcm{D}) where D<: Poisson, Bernoulli
 
 Initialize the linear regression parameters `β` by the weighted least
 squares solution.
 """
 function initialize_model!(
-    gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCModel{T, D}}) where {T <: BlasReal, D}
-    glm_β = glm_regress_model(gcm)
-    copyto!(gcm.β, glm_β)
+    gcm::GLMCopulaVCModel{T, D}) where {T <: BlasReal, D}
+    println("initializing β using Newton's Algorithm under Independence Assumption")
+    glm_regress_model(gcm)
     fill!(gcm.τ, 1.0)
+    println("initializing variance components using MM-Algorithm")
+    fill!(gcm.Σ, 1.0)
+    update_Σ!(gcm)
     nothing
 end
 
 """
-glm_regress_model(gcm)
+    glm_regress_model(gcm)
 
-Initialize beta for glm model
+Initialize beta for glm model.
 """
-function glm_regress_model(gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCModel{T, D}}) where {T <:BlasReal, D}
+function glm_regress_model(gcm::GLMCopulaVCModel{T, D}) where {T <:BlasReal, D}
   (n, p) = gcm.ntotal, gcm.p
-   beta = zeros(p)
+   fill!(gcm.β, 0.0)
    ybar = gcm.Ytotal / n
    for iteration = 1:20 # find the intercept by Newton's method
-     g1 = GLM.linkinv(gcm.link[1], beta[1]) #  mu
-     g2 = GLM.mueta(gcm.link[1], beta[1])  # dmu
-     beta[1] =  beta[1] - clamp((g1 - ybar) / g2, -1.0, 1.0)
+     g1 = GLM.linkinv(gcm.link[1], gcm.β[1]) #  mu
+     g2 = GLM.mueta(gcm.link[1], gcm.β[1])  # dmu
+     gcm.β[1] =  gcm.β[1] - clamp((g1 - ybar) / g2, -1.0, 1.0)
      if abs(g1 - ybar) < 1e-10
        break
      end
@@ -59,9 +62,9 @@ function glm_regress_model(gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCMo
    for iteration = 1:100 # scoring algorithm
     fill!(gcm.∇β, 0.0)
     fill!(gcm.Hβ, 0.0)
-    gcm = glm_score_statistic(gcm, beta)
+    gcm = glm_score_statistic(gcm)
     increment = gcm.Hβ \ gcm.∇β
-    BLAS.axpy!(1, increment, beta)
+    BLAS.axpy!(1, increment, gcm.β)
     steps = -1
     for step_halve = 0:3 # step halving
       obj = 0.0
@@ -70,10 +73,9 @@ function glm_regress_model(gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCMo
            for i in 1:length(gcm.data)
                gc = gcm.data[i]
                x = zeros(p)
-              mul!(gc.η, gc.X, beta) # z = X * beta
-              update_res!(gc, beta)
+              update_res!(gc, gcm.β)
               steps = steps + 1
-                  for j = 1:length(gcm.data[i].y)
+                  for j = 1:length(gc.y)
                     c = gc.res[j] * gc.w1[j]
                     copyto!(x, gc.X[j, :])
                     BLAS.axpy!(c, x, gcm.∇β) # score = score + c * x
@@ -83,61 +85,48 @@ function glm_regress_model(gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCMo
       if obj > old_obj
         break
       else
-        BLAS.axpy!(-1, increment, beta)
+        BLAS.axpy!(-1, increment, gcm.β)
         increment = 0.5 * increment
       end
     end
     println(iteration," ",old_obj," ",obj," ",steps)
     if iteration > 1 && abs(obj - old_obj) < epsilon * (abs(old_obj) + 1.0)
-      return beta
+      return gcm.β
     else
       old_obj = obj
     end
    end
-    # fill!(gcm.∇β, 0.0)
-    # fill!(gcm.Hβ, 0.0)
-    println("reach here")
-    gcm = glm_score_statistic(gcm, beta)
+    gcm = glm_score_statistic(gcm)
     increment = gcm.Hβ \ gcm.∇β
-    BLAS.axpy!(1, increment, beta)
-    return beta
+    BLAS.axpy!(1, increment, gcm.β)
+    return gcm.β
 end # function glm_regress
 
 """
-glm_regress_model(gcm)
+glm_score_statistic(gc, β, τ)
 
-Initialize beta for glm model
+Get gradient and hessian of beta to for a single independent vector of observations.
 """
-function glm_score_statistic(gc::Union{GLMCopulaVCObs{T, D}, GaussianCopulaVCObs{T, D}},
-   β::Vector{T}) where {T<: BlasReal, D}
-  (n, p) = size(gc.X)
-  x = zeros(p)
-  @assert n == length(gc.y)
-  @assert p == length(β)
-  fill!(gc.∇β, 0.0)
-  fill!(gc.Hβ, 0.0)
-  mul!(gc.η, gc.X, β) # z = X * beta
-  update_res!(gc, β)
-  for i = 1:n
-    c = gc.res[i] * gc.w1[i]
-    copyto!(x, gc.X[i, :])
-    BLAS.axpy!(c, x, gc.∇β) # gc.∇β = gc.∇β + r_ij(β) * mueta* x
-    BLAS.ger!(gc.w2[i], x, x, gc.Hβ) # gc.Hβ = gc.Hβ + r_ij(β) * x * x'
-  end
-  return gc
-end # function glm_score_statistic
+function glm_score_statistic(gc::GLMCopulaVCObs{T, D},
+  β::Vector{T}, τ::T) where {T<: BlasReal, D}
+   fill!(gc.∇β, 0.0)
+   fill!(gc.Hβ, 0.0)
+   update_res!(gc, β)
+   gc.∇β .= glm_gradient(gc, β, τ)
+   gc.Hβ .= GLMCopula.glm_hessian(gc, β)
+   gc
+end 
 
 """
 glm_score_statistic(gcm)
 
-Get score
+Get gradient and hessian of beta to do newtons method on independent glm model for all observations in gcm model object.
 """
-function glm_score_statistic(gcm::Union{GLMCopulaVCModel{T, D}, GaussianCopulaVCModel{T, D}},
-   β::Vector) where {T <: BlasReal, D}
+function glm_score_statistic(gcm::GLMCopulaVCModel{T, D}) where {T <: BlasReal, D}
   fill!(gcm.∇β, 0.0)
   fill!(gcm.Hβ, 0.0)
     for i in 1:length(gcm.data)
-        gcm.data[i] = glm_score_statistic(gcm.data[i], β)
+        gcm.data[i] = glm_score_statistic(gcm.data[i], gcm.β, gcm.τ[1])
         gcm.∇β .+= gcm.data[i].∇β
         gcm.Hβ .+= gcm.data[i].Hβ
     end

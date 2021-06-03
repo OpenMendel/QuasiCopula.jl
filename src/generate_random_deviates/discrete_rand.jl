@@ -17,8 +17,6 @@ struct DiscreteUnivariateCopula{
     maxvalue :: T
     y_sample :: Vector{T}
     pmf_vec :: Vector{T}
-    # reordered_pmf :: Vector{T}
-    # listofj :: Vector{T}
 end
 
 """
@@ -38,9 +36,7 @@ function DiscreteUnivariateCopula(
     maxvalue = quantile(Base.typename(typeof(d)).wrapper(Distributions.params(d)...), 0.999999999999)
     y_sample = collect(0:maxvalue)
     pmf_vec = zeros(length(y_sample)) # marginal pmf
-    # reordered_pmf = zeros(length(pmf_vec)) # reordered marginal pmf for faster simulation
-    # listofj = zeros(length(pmf_vec))
-    DiscreteUnivariateCopula(d, Tc(μ), Tc(σ2), Tc(c0), Tc(c1), Tc(c2), c, Tc(maxvalue), Tc.(y_sample), Tc.(pmf_vec))# Tc.(reordered_pmf), Tc.(listofj))
+    DiscreteUnivariateCopula(d, Tc(μ), Tc(σ2), Tc(c0), Tc(c1), Tc(c2), c, Tc(maxvalue), Tc.(y_sample), Tc.(pmf_vec))
 end
 
 """
@@ -59,7 +55,6 @@ function pdf_constants(Γ::Matrix{T}, res::Vector{T}, i::Int64, dist::DiscreteUn
     # first multiply Γ[1:i-1, 1:i-1] *  res[1:i-1]
     mul!(storage, Γ[1:i-1, 1:i-1], res[1:i-1])
     # then multiply to get transpose(res[1:i-1]) *  Γ[1:i-1, 1:i-1] *  res[1:i-1]
-    # dot(storage, res[1:i-1])
     c0 = 1 + 0.5 * dot(storage, res[1:i-1]) +  0.5 * tr(Γ[i+1:end, i+1:end]) + 0.5 * Γ[i, i] * c_0  - c__0
     c1 = 0.5 * Γ[i, i] * c_1  + c__1
     c2 = 0.5 * Γ[i, i] * c_2
@@ -83,9 +78,6 @@ function pdf_constants(γ::T, dist::DiscreteUnivariateDistribution) where T <: R
     DiscreteUnivariateCopula(dist, c0, c1, c2)
 end
 
-
-#### discrete specific ####
-
 """
     pmf_copula!(dist::DiscreteUnivariateCopula)
 This function will get the appropriate probability mass function, using our copula density. 
@@ -97,7 +89,6 @@ function pmf_copula!(dist::DiscreteUnivariateCopula) where T<: Real
     end
     nothing
 end
-
 
 """
     reorder_pmf(pmf::Vector{<:Real}, μ)
@@ -130,35 +121,6 @@ function reorder_pmf(pmf::Vector{T}, μ) where T <: Real
     listofj, reordered_pmf
 end
 
-# """
-#     reorder_pmf(pmf::Vector{<:Real}, μ)
-# This function will re-order the probability mass function, by sorting the vector of probabilities in decreasing order (starting with mean μ). 
-# """
-# function reorder_pmf!(dist::DiscreteUnivariateCopula) where T<: Real
-#     k = Integer(floor.(dist.μ))
-#     i = 1
-#     j = k[1]
-#     while(i < length(dist.pmf_vec) && j > 0 && j < length(dist.pmf_vec))
-#         dist.listofj[i] = j
-#         dist.reordered_pmf[i] = dist.pmf_vec[j + 1]
-#         if i%2 == 1
-#             j = j + i
-#             elseif i%2 == 0
-#             j = j - i
-#         end
-#         i = i + 1
-#     end
-#     if j == 0
-#         dist.listofj[i] = 0
-#         dist.reordered_pmf[i] = dist.pmf_vec[1]
-#         for s in i+1:length(dist.pmf_vec)
-#             dist.listofj[s] = s - 1
-#             dist.reordered_pmf[s] = dist.pmf_vec[s]
-#             end
-#         end
-#     nothing
-# end
-
 """
     rand(dist::DiscreteUnivariateCopula)
 This function will simulate the discrete random variable under our copula model. 
@@ -179,7 +141,6 @@ function rand(dist::DiscreteUnivariateCopula) where T <: Real
     end
     random_deviate
 end
-
 
 """
     rand(dist::DiscreteUnivariateCopula, n_reps::Int64)
@@ -212,7 +173,6 @@ function rand(dist::DiscreteUnivariateCopula{Bernoulli{T}, T}) where T <: Real
     random_deviate = Float64(rand(Bernoulli(GLMCopula.mean(dist))))
     random_deviate
 end
-
 
 """
     rand(dist::DiscreteUnivariateCopula, n_reps::Int64)

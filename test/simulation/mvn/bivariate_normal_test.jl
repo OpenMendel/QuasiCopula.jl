@@ -33,7 +33,7 @@ function simulate_nobs_independent_vectors(
 end
 
 nsample = 10000
-@info "sample $nsample independent vectors for the bivariate Poisson distribution"
+@info "sample $nsample independent vectors for the bivariate Normal distribution"
 # compile
 Y_nsample = simulate_nobs_independent_vectors(nonmixed_multivariate_dist, nsample)
 Random.seed!(12345)
@@ -58,18 +58,13 @@ gcm = GLMCopulaVCModel(gcs);
 initialize_model!(gcm)
 @show gcm.β
 
-fill!(gcm.Σ, 1.0)
-update_Σ!(gcm)
 initial_logl = GLMCopula.loglikelihood!(gcm, true, true)
-@time fit2!(gcm, IpoptSolver(print_level = 5, max_iter = 100, hessian_approximation = "exact"))
-
-post_fit_logl = GLMCopula.loglikelihood!(gcm, true, true) 
-@test initial_logl < post_fit_logl
+@time GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, derivative_test = "first-order", mehrotra_algorithm ="yes", warm_start_init_point="yes", max_iter = 200, hessian_approximation = "exact"))
 
 println("estimated mean = $(gcm.β[1]); true mean value= $mean_normal")
 println("estimated variance (noise) = $(inv.(gcm.τ[1])); true variance value = $(sd_normal^2)")
 println("estimated variance component 1 = $(gcm.Σ[1]); true variance component 1 = $variance_component_1")
 println("estimated variance component 1 = $(gcm.Σ[2]); true variance component 1 = $variance_component_2")
-println("gradient with respect to β = $(gcm.∇β)")
+println("gradient with respect to β = $(gcm.∇θ)")
 
 end

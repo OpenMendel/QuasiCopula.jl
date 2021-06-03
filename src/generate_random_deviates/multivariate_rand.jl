@@ -1,6 +1,6 @@
 @reexport using Distributions
 import Distributions: rand
-export MultivariateMix, NonMixedMultivariateDistribution, cov, cor, simulate_nobs_independent_vectors
+export MultivariateMix, NonMixedMultivariateDistribution, cov, cor, simulate_nobs_independent_vectors, covariance_matrix, correlation_matrix
 # ## create new type not in Distributions for multivariate mixture
 
 """
@@ -127,4 +127,38 @@ Theoretical correlation of the kth and lth element in the random vector.
 function cor(gc_vec::Union{NonMixedMultivariateDistribution, MultivariateMix}, k::Int64, l::Int64)
     cor = gc_vec.Γ[k, l] / (sqrt(1 + 0.5 * gc_vec.trΓ + gc_vec.Γ[k, k]) * sqrt(1 + 0.5 * gc_vec.trΓ + gc_vec.Γ[l, l]) )
     return cor
+end
+
+"""
+    covariance_matrix(gc_vec::Union{NonMixedMultivariateDistribution, MultivariateMix})
+Theoretical covariance matrix of a random vector.
+"""
+function covariance_matrix(gc_vec::Union{NonMixedMultivariateDistribution, MultivariateMix})
+    n = length(gc_vec.gc_obs)
+    Covariance = zeros(n, n)
+    for i in 1:n 
+        Covariance[i, i] = GLMCopula.var(gc_vec.gc_obs[i])
+        for j = i+1:n
+            Covariance[j, i] = GLMCopula.cov(gc_vec, j, i)
+            Covariance[i, j] = Covariance[j, i]
+        end
+    end
+    Covariance
+end
+
+"""
+    correlation_matrix(gc_vec::Union{NonMixedMultivariateDistribution, MultivariateMix})
+Theoretical covariance matrix of a random vector.
+"""
+function correlation_matrix(gc_vec::Union{NonMixedMultivariateDistribution, MultivariateMix})
+    n = length(gc_vec.gc_obs)
+    Corr = zeros(n, n)
+    for i in 1:n 
+        Corr[i, i] = 1.0
+        for j = i+1:n
+            Corr[j, i] = GLMCopula.cor(gc_vec, j, i)
+            Corr[i, j] = Corr[j, i]
+        end
+    end
+    Corr
 end

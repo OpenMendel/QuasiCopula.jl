@@ -27,24 +27,15 @@ for j in 1:n
 end
 Y
 
-function covariance_matrix(gc_vec)
-    n = length(gc_vec.gc_obs)
-    Covariance = zeros(n, n)
-    for i in 1:n 
-        Covariance[i, i] = GLMCopula.var(gc_vec.gc_obs[i])
-        for j = i+1:n
-            Covariance[j, i] = GLMCopula.cov(gc_vec, j, i)
-            Covariance[i, j] = Covariance[j, i]
-        end
-    end
-    Covariance
-end
+#### check the 3 by 3 covariance (Sample covariance)
+empirical_covariance = scattermat(Y) ./ nsample
 
-
-#### check the 3 by 3 covariance 
-@show empirical_covariance = scattermat(Y) ./ nsample
-
-# using ours 
-@show theoretical_covariance = covariance_matrix(gc_vec)
+# using ours covariance 
+theoretical_covariance = covariance_matrix(gc_vec)
 
 @test theoretical_covariance[1, 2] == theoretical_covariance[2, 3]
+
+# using ours correlation 
+theoretical_corr = correlation_matrix(gc_vec)
+
+@test theoretical_corr[1, 2] == theoretical_corr[2, 3]

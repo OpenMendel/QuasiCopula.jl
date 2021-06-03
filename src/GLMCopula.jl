@@ -1,19 +1,14 @@
 module GLMCopula
-
-
 using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Distributions, StatsFuns
 using LinearAlgebra: BlasReal, copytri!
 @reexport using Ipopt
 @reexport using NLopt
 
-export fit!, update_Σ_jensen!, init_β!, initialize_model!, loglikelihood!, standardize_res!, std_res_differential!
+export fit!, fit2!, update_Σ_jensen!, init_β!, initialize_model!, loglikelihood!, standardize_res!, std_res_differential!
 export update_res!, update_Σ!
-
 export update_∇Σ!, update_HΣ! # update gradient and hessian of variance components
-
-export glm_regress_jl, glm_regress_model, glm_score_statistic  # these are to initialize our model
+export glm_regress_jl, glm_regress_model, glm_score_statistic!  # these are to initialize our model
 export component_loglikelihood, glm_gradient, hessian_glm
-# export copula_loglikelihood, copula_loglikelihood_addendum, component_loglikelihood
 export GLMCopulaVCObs, GLMCopulaVCModel
 
 struct GLMCopulaVCObs{T <: BlasReal, D, Link}
@@ -191,15 +186,13 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: B
         storage_n, storage_n2, storage_m, storage_Σ, d, link)
 end
 
-include("GaussianCopula.jl")
-include("initialize_model.jl")
-include("splitting_loglikelihood.jl")
-include("gradient_hessian.jl")
-include("fit_new.jl")
-# include("fit_old.jl")
-include("update_sigma_and_residuals.jl")
-include("discrete_rand.jl")
-include("continuous_rand.jl")
-include("multivariate_rand.jl")
-include("gaussian_lmm.jl")
+include("generate_random_deviates/discrete_rand.jl")
+include("generate_random_deviates/continuous_rand.jl")
+include("generate_random_deviates/multivariate_rand.jl")
+include("parameter_estimation/initialize_model.jl")
+include("parameter_estimation/splitting_loglikelihood.jl")
+include("parameter_estimation/gradient_hessian.jl")
+include("parameter_estimation/update_sigma_and_residuals.jl")
+include("parameter_estimation/fit_new.jl") # only initializes using MM-algorithm does joint estimation using newton after
+# include("parameter_estimation/fit_old.jl") # only uses MM-algorithm
 end # module
