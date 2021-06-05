@@ -10,23 +10,45 @@ loglik_obs(::Gamma, y, μ, wt, ϕ) = wt*GLM.logpdf(Gamma(inv(ϕ), μ*ϕ), y)
 loglik_obs(::InverseGaussian, y, μ, wt, ϕ) = wt*GLM.logpdf(InverseGaussian(μ, inv(ϕ)), y)
 loglik_obs(::Normal, y, μ, wt, ϕ) = wt*GLM.logpdf(Normal(μ, sqrt(ϕ)), y)
 loglik_obs(d::NegativeBinomial, y, μ, wt, ϕ) = wt*GLM.logpdf(NegativeBinomial(d.r, d.r/(μ+d.r)), y)
-loglik_obs(::Poisson, y, μ, wt, ϕ) = wt*logpdf(Poisson(μ), y)
+loglik_obs(::Poisson, y, μ, wt, ϕ) = logpdf(Poisson(μ), y)
 
 # this gets the loglikelihood from the glm.jl package for the component density
+# """
+#     component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link}, τ, logl)
+# Calculates the loglikelihood of observing `y` given mean `μ`, a distribution
+# `d` using the GLM.jl package.
+# """
+# function component_loglikelihood(gc::GLMCopulaVCObs{T, D, Link}, τ::T) where {T <: BlasReal, D, Link}
+#   logl = zero(T)
+#     @inbounds for j in eachindex(gc.y)
+#       logl += GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], gc.wt[j], one(T))
+#   end
+#   logl
+# end
+
 """
     component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link})
-Calculates the loglikelihood of observing `y` given mean `μ`, a distribution
-`d` using the GLM.jl package.
+Calculates the loglikelihood of observing `y` given mean `μ`, Bernoulli or Poisson distribution using the GLM.jl package.
 """
-function component_loglikelihood(gc::GLMCopulaVCObs{T, D, Link}, τ::T, logl::T) where {T <: BlasReal, D, Link}
-  if GLM.dispersion_parameter(gc.d) == false
-    τ = one(T)
-  end
-  ϕ = inv(τ)
-  @inbounds for j in eachindex(gc.y)
-      logl += GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], gc.wt[j], ϕ)
-  end
-  logl
+function component_loglikelihood(gc::GLMCopulaVCObs{T, D, Link}) where {T <: BlasReal, D<:Union{Bernoulli{T}, Poisson{T}}, Link}
+    logl = zero(T)
+    @inbounds for j in 1:length(gc.y)
+        logl += logpdf(D(gc.μ[j]), gc.y[j])
+    end
+    logl
+end
+
+"""
+    component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link})
+Calculates the loglikelihood of observing `y` given mean `μ`, Negative Binomial distribution using the GLM.jl package.
+"""
+function component_loglikelihood(gc::GLMCopulaVCObs{T, D, Link}) where {T <: BlasReal, D<:NegativeBinomial{T}, Link}
+    logl = zero(T)
+    r = gc.d.r
+    @inbounds for j in 1:length(gc.y)
+        logl += logpdf(D(r, r/(gc.μ[j] + r)), gc.y[j])
+    end
+    logl
 end
 
 function loglikelihood!(
@@ -60,11 +82,11 @@ function loglikelihood!(
       gc.q[k] = dot(gc.res, gc.storage_n) / 2
   end
   # loglikelihood
+  logl = GLMCopula.component_loglikelihood(gc)
   tsum = dot(Σ, gc.t)
-  logl = -log(1 + tsum)
+  logl += -log(1 + tsum)
   qsum  = dot(Σ, gc.q)
   logl += log(1 + qsum)
-  logl = GLMCopula.component_loglikelihood(gc, τ[1], logl)
   
   if needgrad
       inv1pq = inv(1 + qsum)
@@ -97,12 +119,10 @@ function loglikelihood!(
   if needgrad
       fill!(gcm.∇β, 0)
       fill!(gcm.∇Σ, 0)
-      gcm.∇Σ .= update_∇Σ!(gcm)
   end
   if needhess
       fill!(gcm.Hβ, 0)
       fill!(gcm.HΣ, 0)
-      gcm.HΣ .= update_HΣ!(gcm)
   end
   for i in eachindex(gcm.data)
       logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.Σ, needgrad, needhess)
@@ -113,6 +133,12 @@ function loglikelihood!(
           gcm.Hβ .+= gcm.data[i].Hβ
       end
   end
+    if needgrad
+        gcm.∇Σ .= update_∇Σ!(gcm)
+    end
+    if needhess
+        gcm.HΣ .= update_HΣ!(gcm)
+    end
   logl
 end
 

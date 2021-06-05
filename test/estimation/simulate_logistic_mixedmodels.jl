@@ -122,8 +122,7 @@ end
 
 term3 = logistic_density(gc.y, gc.μ)
 
-logl_component_logistic = 0.0
-logl_component_logistic += component_loglikelihood(gc, τ[1], logl_component_logistic)
+logl_component_logistic = component_loglikelihood(gc)
 
 
 @test logl_component_logistic == term3
@@ -143,7 +142,7 @@ function copula_loglikelihood(gc::GLMCopulaVCObs{T, D, Link}, β::Vector{T}, τ:
     standardize_res!(gc)
   end
   logl += copula_loglikelihood_addendum(gc, Σ)
-  logl += GLMCopula.component_loglikelihood(gc, τ, zero(T))
+  logl += GLMCopula.component_loglikelihood(gc)
   logl
 end
 

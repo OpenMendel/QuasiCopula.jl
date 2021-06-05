@@ -110,9 +110,9 @@ function MathProgBase.eval_grad_f(
         grad[offset] = gcm.∇Σ[k]
         offset += 1
     end
-    @show gcm.θ
+    # @show gcm.θ
     copyto!(gcm.∇θ, grad)
-    @show gcm.∇θ
+    # @show gcm.∇θ
     # return objective
     obj
 end

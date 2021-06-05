@@ -13,9 +13,9 @@ end
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Poisson.
 """
 function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:Poisson{T}}
-    @inbounds for j in 1:length(gc.y)
-        gc.∇μβ[j, :] .= gc.dμ[j] .* gc.X[j, :]
-        gc.∇resβ[j, :] .= -(inv(sqrt(gc.varμ[j])) + (0.5 * inv(gc.varμ[j])) * gc.res[j]) .* gc.∇μβ[j, :]
+    for j in 1:length(gc.y)
+        gc.∇μβ[j, :] .= gc.dμ[j] .* @view(gc.X[j, :])
+        gc.∇resβ[j, :] .= -(inv(sqrt(gc.varμ[j])) + (0.5 * inv(gc.varμ[j])) * gc.res[j]) .* @view(gc.∇μβ[j, :])
     end
     nothing
 end
@@ -26,9 +26,9 @@ compute the gradient of residual vector ∇resβ (standardized residual) with re
 """
 function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:NegativeBinomial{T}}
     for j in 1:length(gc.y)
-        gc.∇μβ[j, :] = gc.dμ[j] .* gc.X[j, :]
-        gc.∇σ2β[j, :] = (gc.μ[j] * inv(gc.d.r) + (1 + inv(gc.d.r) * gc.μ[j])) * gc.∇μβ[j, :]
-        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * gc.∇μβ[j, :] - (0.5 * inv(gc.varμ[j])) * gc.res[j] * gc.∇σ2β[j, :]
+        gc.∇μβ[j, :] = gc.dμ[j] .* @view(gc.X[j, :])
+        gc.∇σ2β[j, :] = (gc.μ[j] * inv(gc.d.r) + (1 + inv(gc.d.r) * gc.μ[j])) * @view(gc.∇μβ[j, :])
+        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * @view(gc.∇μβ[j, :]) - (0.5 * inv(gc.varμ[j])) * gc.res[j] * @view(gc.∇σ2β[j, :])
     end
     nothing
 end
@@ -39,8 +39,8 @@ compute the gradient of residual vector ∇resβ (standardized residual) with re
 """
 function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:Bernoulli{T}}
     for j in 1:length(gc.y)
-        gc.∇σ2β[j, :] = (1 - 2 * gc.μ[j]) * gc.dμ[j] .* gc.X[j, :]
-        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * gc.dμ[j] .* gc.X[j, :] - (1 / 2gc.varμ[j]) * gc.res[j] .* gc.∇σ2β[j, :]
+        gc.∇σ2β[j, :] = (1 - 2 * gc.μ[j]) * gc.dμ[j] .* @view(gc.X[j, :])
+        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * gc.dμ[j] .* @view(gc.X[j, :]) - (0.5 * inv(gc.varμ[j])) * gc.res[j] .* @view(gc.∇σ2β[j, :])
     end
     nothing
 end
@@ -51,9 +51,9 @@ compute the gradient of residual vector ∇resβ (standardized residual) with re
 """
 function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:Binomial{T}}
     for j in 1:length(gc.y)
-        gc.∇μβ[j, :] = gc.varμ[j] .* gc.X[j, :]
-        gc.∇σ2β[j, :] = (1 - 2*gc.μ[j]) * gc.dμ[j] .* gc.X[j, :]
-        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * gc.∇μβ[j, :] - (1 / 2gc.varμ[j]) * gc.res[j] .* gc.∇σ2β[j, :]
+        gc.∇μβ[j, :] = gc.varμ[j] .* @view(gc.X[j, :])
+        gc.∇σ2β[j, :] = (1 - 2*gc.μ[j]) * gc.dμ[j] .* @view(gc.X[j, :])
+        gc.∇resβ[j, :] = -inv(sqrt(gc.varμ[j])) * gc.∇μβ[j, :] - (1 / 2gc.varμ[j]) * gc.res[j] .* @view(gc.∇σ2β[j, :])
     end
     nothing
 end
@@ -91,23 +91,18 @@ function update_∇Σ!(
     gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
     rsstotal = zero(T)
     @inbounds for i in eachindex(gcm.data)
-        update_res!(gcm.data[i], gcm.β)
-        rsstotal += abs2(norm(gcm.data[i].res))  # needed for updating τ in normal case
-        standardize_res!(gcm.data[i])            # standardize the residuals GLM variance(μ)
-        GLMCopula.update_quadform!(gcm.data[i]) # with standardized residuals
-        gcm.QF[i, :] = gcm.data[i].q
-    end
-    mul!(gcm.storage_n, gcm.QF, gcm.Σ)
+            update_res!(gcm.data[i], gcm.β)
+            rsstotal += abs2(norm(gcm.data[i].res))  # needed for updating τ in normal case
+            standardize_res!(gcm.data[i])            # standardize the residuals GLM variance(μ)
+            GLMCopula.update_quadform!(gcm.data[i]) # with standardized residuals
+            gcm.QF[i, :] = gcm.data[i].q
+        end
+    BLAS.gemv!('N', T(1), gcm.QF,  gcm.Σ, T(0), gcm.storage_n)
     gcm.storage_n .= inv.(1 .+ gcm.storage_n)
-    
-    mul!(gcm.storage_n2, gcm.TR, gcm.Σ)
+    BLAS.gemv!('N', T(1), gcm.TR,  gcm.Σ, T(0), gcm.storage_n2)
     gcm.storage_n2 .= inv.(1 .+ gcm.storage_n2)
-    gcm.storage_n2 .*= -one(T)
-    
-    mul!(gcm.∇Σ1, transpose(gcm.QF), gcm.storage_n)
-    mul!(gcm.∇Σ2, transpose(gcm.TR), gcm.storage_n2)
-    gcm.∇Σ .+= gcm.∇Σ1
-    gcm.∇Σ .+= gcm.∇Σ2
+    BLAS.gemv!('T', T(1), gcm.QF, gcm.storage_n, T(0), gcm.∇Σ)
+    BLAS.gemv!('T', -T(1), gcm.TR, gcm.storage_n2, T(1), gcm.∇Σ)
 end
 
 """
@@ -118,15 +113,10 @@ Update Σ Hessian for Newton's Algorithm, given β.
 function update_HΣ!(
     gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
     fill!(gcm.HΣ, 0.0)
-    gcm.diagonal_n .= Diagonal(gcm.storage_n)
-    mul!(gcm.hess1, transpose(gcm.QF), gcm.diagonal_n)
-    
-    mul!(gcm.HΣ1, gcm.hess1, transpose(gcm.hess1))
-    gcm.HΣ1 .*= -one(T)
-    
-    gcm.diagonal_n .= Diagonal(gcm.storage_n2)
-    mul!(gcm.hess2, transpose(gcm.TR), gcm.diagonal_n)
-    mul!(gcm.HΣ2, gcm.hess2, transpose(gcm.hess2))
-    gcm.HΣ .+= gcm.HΣ1
-    gcm.HΣ .+= gcm.HΣ2
+    copyto!(gcm.diagonal_n, Diagonal(gcm.storage_n))
+    BLAS.gemm!('T', 'N', T(1), gcm.QF, gcm.diagonal_n, T(0), gcm.hess1)
+    BLAS.gemm!('N', 'T', -T(1), gcm.hess1, gcm.hess1, T(1), gcm.HΣ)
+    copyto!(gcm.diagonal_n, Diagonal(gcm.storage_n2))
+    BLAS.gemm!('T', 'N', T(1), gcm.TR, gcm.diagonal_n, T(0), gcm.hess2)
+    BLAS.gemm!('N', 'T', T(1), gcm.hess2, gcm.hess2, T(1), gcm.HΣ)
 end

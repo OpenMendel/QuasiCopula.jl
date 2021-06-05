@@ -122,35 +122,15 @@ end
 
 term3 = poisson_density(gc.y, gc.μ)
 
-logl_component_logistic = 0.0
-logl_component_logistic += component_loglikelihood(gc, τ[1], logl_component_logistic)
+logl_component_logistic = component_loglikelihood(gc)
 
 @test logl_component_logistic == term3
 
 # full loglikelihood
 logl_hard = term1 + term2 + term3
 
-"""
-    copula_loglikelihood(gcm::GLMCopulaVCModel{T, D, Link})
-Calculates the full loglikelihood for our copula model for a single observation
-"""
-function copula_loglikelihood(gc::GLMCopulaVCObs{T, D, Link}, β::Vector{T}, τ::T, Σ::Vector{T}) where {T<: BlasReal, D, Link}
-#first get the loglikelihood from the component density with glm.jl
-  logl = 0.0
-  update_res!(gc, β)
-  if gc.d == Normal()
-    σinv = sqrt(τ[1])# general variance
-    standardize_res!(gc, σinv)
-  else
-    standardize_res!(gc)
-  end
-  logl += copula_loglikelihood_addendum(gc, Σ)
-  logl += GLMCopula.component_loglikelihood(gc, τ, zero(T))
-  logl
-end
-
-logl_functions = copula_loglikelihood(gc, β, τ[1], Σ)
-@test logl_hard == logl_functions
+logl_functions = loglikelihood!(gc, β, τ[1], Σ)
+@test logl_hard ≈ logl_functions
 
 ####
 # these are slightly off by small decimals
