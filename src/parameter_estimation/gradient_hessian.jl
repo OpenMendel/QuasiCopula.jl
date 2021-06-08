@@ -89,10 +89,8 @@ Update Σ gradient for Newton's Algorithm, given β.
 """
 function update_∇Σ!(
     gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
-    rsstotal = zero(T)
     @inbounds for i in eachindex(gcm.data)
             update_res!(gcm.data[i], gcm.β)
-            rsstotal += abs2(norm(gcm.data[i].res))  # needed for updating τ in normal case
             standardize_res!(gcm.data[i])            # standardize the residuals GLM variance(μ)
             GLMCopula.update_quadform!(gcm.data[i]) # with standardized residuals
             gcm.QF[i, :] = gcm.data[i].q
@@ -113,8 +111,8 @@ Update Σ Hessian for Newton's Algorithm, given β.
 function update_HΣ!(
     gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
     fill!(gcm.HΣ, 0.0)
-    for j in 1:gcm.m
-        for i in 1:length(gcm.storage_n)
+    @simd for j in 1:gcm.m
+        @inbounds for i in 1:length(gcm.storage_n)
             gcm.hess1[j, i] = gcm.QF[i, j] * gcm.storage_n[i]
             gcm.hess2[j, i] = gcm.TR[i, j] * gcm.storage_n2[i]
         end
