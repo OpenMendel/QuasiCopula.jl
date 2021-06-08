@@ -113,10 +113,12 @@ Update Σ Hessian for Newton's Algorithm, given β.
 function update_HΣ!(
     gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
     fill!(gcm.HΣ, 0.0)
-    copyto!(gcm.diagonal_n, Diagonal(gcm.storage_n))
-    BLAS.gemm!('T', 'N', T(1), gcm.QF, gcm.diagonal_n, T(0), gcm.hess1)
-    BLAS.gemm!('N', 'T', -T(1), gcm.hess1, gcm.hess1, T(1), gcm.HΣ)
-    copyto!(gcm.diagonal_n, Diagonal(gcm.storage_n2))
-    BLAS.gemm!('T', 'N', T(1), gcm.TR, gcm.diagonal_n, T(0), gcm.hess2)
+    for j in 1:gcm.m
+        for i in 1:length(gcm.storage_n)
+            gcm.hess1[j, i] = gcm.QF[i, j] * gcm.storage_n[i]
+            gcm.hess2[j, i] = gcm.TR[i, j] * gcm.storage_n2[i]
+        end
+    end
+    BLAS.gemm!('N', 'T', -T(1), gcm.hess1, gcm.hess1, T(0), gcm.HΣ)
     BLAS.gemm!('N', 'T', T(1), gcm.hess2, gcm.hess2, T(1), gcm.HΣ)
 end
