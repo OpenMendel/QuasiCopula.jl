@@ -74,7 +74,7 @@ function loglikelihood!(
   std_res_differential!(gc) # this will compute ∇resβ
 
   # evaluate copula loglikelihood
-  for k in 1:m
+  @inbounds for k in 1:m
       mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
       if needgrad
           BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
@@ -95,7 +95,7 @@ function loglikelihood!(
           # does adding this term to the approximation of the hessian violate negative semidefinite properties?
           fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
           fill!(gc.added_term2, 0.0) # fill hessian with 0
-          for k in 1:m
+          @inbounds for k in 1:m
               mul!(gc.added_term_numerator, gc.V[k], gc.∇resβ) # storage_n = V[k] * res
               BLAS.gemm!('T', 'N', Σ[k], gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2)
           end
@@ -124,7 +124,7 @@ function loglikelihood!(
       fill!(gcm.Hβ, 0)
       fill!(gcm.HΣ, 0)
   end
-  for i in eachindex(gcm.data)
+  @inbounds for i in eachindex(gcm.data)
       logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.Σ, needgrad, needhess)
       if needgrad
           gcm.∇β .+= gcm.data[i].∇β

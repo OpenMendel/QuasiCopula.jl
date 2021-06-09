@@ -23,12 +23,8 @@ struct GLMCopulaVCObs{T <: BlasReal, D, Link}
     ∇resβ::Matrix{T}# residual gradient matrix d/dβ_p res_ij (each observation has a gradient of residual is px1)
     ∇τ::Vector{T}   # gradient wrt τ
     ∇Σ::Vector{T}   # gradient wrt σ2
-    ∇Σ1::Vector{T}   # gradient wrt σ2
-    ∇Σ2::Vector{T}   # gradient wrt σ2
     Hβ::Matrix{T}   # Hessian wrt β
     HΣ::Matrix{T}   # Hessian wrt variance components Σ
-    HΣ1::Matrix{T}   # Hessian wrt variance components Σ term 1
-    HΣ2::Matrix{T}   # Hessian wrt variance components Σ term 2
     Hτ::Matrix{T}   # Hessian wrt τ
     res::Vector{T}  # residual vector res_i
     t::Vector{T}    # t[k] = tr(V_i[k]) / 2
@@ -67,12 +63,8 @@ function GLMCopulaVCObs(
     ∇resβ  = Matrix{T}(undef, n, p)
     ∇τ  = Vector{T}(undef, 1)
     ∇Σ  = Vector{T}(undef, m)
-    ∇Σ1  = Vector{T}(undef, m)
-    ∇Σ2  = Vector{T}(undef, m)
     Hβ  = Matrix{T}(undef, p, p)
     HΣ  = Matrix{T}(undef, m, m)
-    HΣ1  = Matrix{T}(undef, m, m)
-    HΣ2  = Matrix{T}(undef, m, m)
     Hτ  = Matrix{T}(undef, 1, 1)
     res = Vector{T}(undef, n)
     t   = [tr(V[k])/2 for k in 1:m]
@@ -94,7 +86,7 @@ function GLMCopulaVCObs(
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
-    GLMCopulaVCObs{T, D, Link}(y, X, V, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇τ, ∇Σ, ∇Σ1, ∇Σ2, Hβ, HΣ, HΣ1, HΣ2,
+    GLMCopulaVCObs{T, D, Link}(y, X, V, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇τ, ∇Σ, Hβ, HΣ,
         Hτ, res, t, q, xtx, storage_n, storage_p1, storage_p2, storage_np, storage_pp, added_term_numerator, added_term2, η, μ, varμ, dμ, d, link, wt, w1, w2)
 end
 
@@ -120,20 +112,15 @@ struct GLMCopulaVCModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalu
     ∇β::Vector{T}   # gradient from all observations
     ∇τ::Vector{T}
     ∇Σ::Vector{T}
-    ∇Σ1::Vector{T}  # gradient term 1
-    ∇Σ2::Vector{T}  # gradient term 2
     ∇θ::Vector{T}   # overall gradient for beta and variance components vector Σ
     XtX::Matrix{T}  # X'X = sum_i Xi'Xi
     Hβ::Matrix{T}    # Hessian from all observations
     HΣ::Matrix{T}
-    HΣ1::Matrix{T}
-    HΣ2::Matrix{T}
     Hτ::Matrix{T}
     TR::Matrix{T}         # n-by-m matrix with tik = tr(Vi[k]) / 2
     QF::Matrix{T}         # n-by-m matrix with qik = res_i' Vi[k] res_i
     hess1::Matrix{T}      # holds transpose(gcm.QF) * Diagonal(gcm.storage_n) required for outer product in hessian term 1 
     hess2::Matrix{T}      # holds transpose(gcm.TR) * Diagonal(gcm.storage_n2) required for outer product in hessian term 2 
-    diagonal_n::Matrix{T} # holds the diagonal elements of storage_n or storage_n2 for hessian
     storage_n::Vector{T}
     storage_n2::Vector{T}
     storage_m::Vector{T}
@@ -151,14 +138,10 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: B
     ∇β  = Vector{T}(undef, p)
     ∇τ  = Vector{T}(undef, 1)
     ∇Σ  = Vector{T}(undef, m)
-    ∇Σ1  = Vector{T}(undef, m)
-    ∇Σ2  = Vector{T}(undef, m)
     ∇θ  = Vector{T}(undef, m + p)
     XtX = zeros(T, p, p) # sum_i xi'xi
     Hβ  = Matrix{T}(undef, p, p)
     HΣ  = Matrix{T}(undef, m, m)
-    HΣ1  = Matrix{T}(undef, m, m)
-    HΣ2  = Matrix{T}(undef, m, m)
     Hτ  = Matrix{T}(undef, 1, 1)
     TR  = Matrix{T}(undef, n, m) # collect trace terms
     Ytotal = 0.0
@@ -176,13 +159,12 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: B
     QF        = Matrix{T}(undef, n, m)
     hess1     = Matrix{T}(undef, m, n)
     hess2     = Matrix{T}(undef, m, n)
-    diagonal_n = Matrix{T}(undef, n, n)
     storage_n = Vector{T}(undef, n)
     storage_n2 = Vector{T}(undef, n)
     storage_m = Vector{T}(undef, m)
     storage_Σ = Vector{T}(undef, m)
     GLMCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, p, m, β, τ, Σ, θ,
-        ∇β, ∇τ, ∇Σ, ∇Σ1, ∇Σ2, ∇θ, XtX, Hβ, HΣ, HΣ1, HΣ2, Hτ, TR, QF, hess1, hess2, diagonal_n,
+        ∇β, ∇τ, ∇Σ, ∇θ, XtX, Hβ, HΣ, Hτ, TR, QF, hess1, hess2,
         storage_n, storage_n2, storage_m, storage_Σ, d, link)
 end
 
