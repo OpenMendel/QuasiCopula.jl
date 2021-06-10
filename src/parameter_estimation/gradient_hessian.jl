@@ -13,13 +13,14 @@ end
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Poisson.
 """
 function std_res_differential!(gc::GLMCopulaVCObs{T, D}) where {T<: BlasReal, D<:Poisson{T}}
-    @inbounds for j in 1:length(gc.y)
-        gc.∇μβ[j, :] .= gc.dμ[j] .* @view(gc.X[j, :])
-        gc.∇resβ[j, :] .= -(inv(sqrt(gc.varμ[j])) + (0.5 * inv(gc.varμ[j])) * gc.res[j]) .* @view(gc.∇μβ[j, :])
+    @inbounds for i in 1:size(gc.X, 2)
+        @simd for j in 1:length(gc.y)
+            gc.∇resβ[j, i] = gc.X[j, i]
+            gc.∇resβ[j, i] *= -(inv(sqrt(gc.varμ[j])) + (0.5 * inv(gc.varμ[j])) * gc.res[j]) * gc.dμ[j]
+        end
     end
     nothing
 end
-
 """
     std_res_differential!(gc)
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Negative Binomial.
@@ -112,8 +113,8 @@ Update Σ Hessian for Newton's Algorithm, given β.
 function update_HΣ!(
     gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
     fill!(gcm.HΣ, 0.0)
-    @simd for j in 1:gcm.m
-        @inbounds for i in 1:length(gcm.storage_n)
+    @inbounds for j in 1:gcm.m
+        @simd for i in 1:length(gcm.storage_n)
             gcm.hess1[j, i] = gcm.QF[i, j] * gcm.storage_n[i]
             gcm.hess2[j, i] = gcm.TR[i, j] * gcm.storage_n2[i]
         end
