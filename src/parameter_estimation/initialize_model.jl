@@ -5,7 +5,7 @@ Initialize the linear regression parameters `β` and `τ=σ0^{-2}` by the least
 squares solution for the Normal distribution.
 """
 function initialize_model!(
-    gcm::GLMCopulaVCModel{T, D}) where {T <:BlasReal, D<:Normal}
+    gcm::Union{GLMCopulaVCModel{T, D, Link},GLMCopulaARModel{T, D, Link}}) where {T <:BlasReal, D<:Normal, Link}
     # accumulate sufficient statistics X'y
     xty = zeros(T, gcm.p)
     for i in eachindex(gcm.data)
@@ -30,14 +30,24 @@ Initialize the linear regression parameters `β` by the weighted least
 squares solution.
 """
 function initialize_model!(
-    gcm::GLMCopulaVCModel{T, D}) where {T <: BlasReal, D}
+    gcm::GLMCopulaARModel{T, D}) where {T <: BlasReal, D}
     println("initializing β using Newton's Algorithm under Independence Assumption")
     glm_regress_model(gcm)
     fill!(gcm.τ, 1.0)
-    println("initializing variance components using MM-Algorithm")
-    fill!(gcm.Σ, 1.0)
-    update_Σ!(gcm)
+    fill!(gcm.ρ, 1.0)
+    fill!(gcm.σ2, 1.0)
     nothing
+end
+
+function initialize_model!(
+  gcm::GLMCopulaVCModel{T, D}) where {T <: BlasReal, D}
+  println("initializing β using Newton's Algorithm under Independence Assumption")
+  glm_regress_model(gcm)
+  fill!(gcm.τ, 1.0)
+  println("initializing variance components using MM-Algorithm")
+  fill!(gcm.Σ, 1.0)
+  update_Σ!(gcm)
+  nothing
 end
 
 """
@@ -45,7 +55,7 @@ end
 
 Initialize beta for glm model.
 """
-function glm_regress_model(gcm::GLMCopulaVCModel{T, D}) where {T <:BlasReal, D}
+function glm_regress_model(gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}})  where {T <:BlasReal, D, Link}
   (n, p) = gcm.ntotal, gcm.p
    fill!(gcm.β, 0.0)
    ybar = gcm.Ytotal / n
@@ -107,8 +117,8 @@ glm_score_statistic(gc, β, τ)
 
 Get gradient and hessian of beta to for a single independent vector of observations.
 """
-function glm_score_statistic(gc::GLMCopulaVCObs{T, D},
-  β::Vector{T}, τ::T) where {T<: BlasReal, D}
+function glm_score_statistic(gc::Union{GLMCopulaVCObs{T, D, Link},GLMCopulaARObs{T, D, Link}},
+  β::Vector{T}, τ::T) where {T<: BlasReal, D, Link}
    fill!(gc.∇β, 0.0)
    fill!(gc.Hβ, 0.0)
    update_res!(gc, β)
@@ -122,7 +132,7 @@ glm_score_statistic(gcm)
 
 Get gradient and hessian of beta to do newtons method on independent glm model for all observations in gcm model object.
 """
-function glm_score_statistic(gcm::GLMCopulaVCModel{T, D}) where {T <: BlasReal, D}
+function glm_score_statistic(gcm::Union{GLMCopulaVCModel{T, D},GLMCopulaARModel{T, D}}) where {T <: BlasReal, D}
   fill!(gcm.∇β, 0.0)
   fill!(gcm.Hβ, 0.0)
     for i in 1:length(gcm.data)

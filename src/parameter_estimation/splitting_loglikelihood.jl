@@ -30,7 +30,7 @@ loglik_obs(::Poisson, y, μ, wt, ϕ) = logpdf(Poisson(μ), y)
     component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link})
 Calculates the loglikelihood of observing `y` given mean `μ`, Bernoulli or Poisson distribution using the GLM.jl package.
 """
-function component_loglikelihood(gc::GLMCopulaVCObs{T, D, Link}) where {T <: BlasReal, D<:Union{Bernoulli{T}, Poisson{T}}, Link}
+function component_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link},GLMCopulaARObs{T, D, Link}}) where {T <: BlasReal, D<:Union{Bernoulli{T}, Poisson{T}}, Link}
     logl = zero(T)
     @inbounds for j in 1:length(gc.y)
         logl += logpdf(D(gc.μ[j]), gc.y[j])
@@ -42,7 +42,7 @@ end
     component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link})
 Calculates the loglikelihood of observing `y` given mean `μ`, Negative Binomial distribution using the GLM.jl package.
 """
-function component_loglikelihood(gc::GLMCopulaVCObs{T, D, Link}) where {T <: BlasReal, D<:NegativeBinomial{T}, Link}
+function component_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link},GLMCopulaARObs{T, D, Link}}) where {T <: BlasReal, D<:NegativeBinomial{T}, Link}
     logl = zero(T)
     r = gc.d.r
     @inbounds for j in 1:length(gc.y)
@@ -51,6 +51,10 @@ function component_loglikelihood(gc::GLMCopulaVCObs{T, D, Link}) where {T <: Bla
     logl
 end
 
+"""
+    loglikelihood!(gc::GLMCopulaVCObs{T, D, Link}, β, τ, Σ)
+Calculates the loglikelihood of observing `y` given mean `μ`, Negative Binomial distribution using the GLM.jl package.
+"""
 function loglikelihood!(
   gc::GLMCopulaVCObs{T, D, Link},
   β::Vector{T},

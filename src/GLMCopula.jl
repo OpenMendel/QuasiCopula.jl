@@ -168,6 +168,7 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: B
         storage_n, storage_n2, storage_m, storage_Σ, d, link)
 end
 
+include("parameter_estimation/autoregressive.jl")
 include("generate_random_deviates/discrete_rand.jl")
 include("generate_random_deviates/continuous_rand.jl")
 include("generate_random_deviates/multivariate_rand.jl")

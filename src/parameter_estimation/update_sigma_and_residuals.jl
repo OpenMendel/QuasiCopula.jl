@@ -74,7 +74,7 @@ update_res!(gc, β)
 Update the residual vector according to `β` given link function and distribution.
 """
 function update_res!(
-   gc::GLMCopulaVCObs{T, D, Link},
+   gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}},
    β::Vector{T}) where {T <: BlasReal, D, Link}
    mul!(gc.η, gc.X, β)
    for i in 1:length(gc.y)
@@ -107,7 +107,7 @@ function standardize_res!(
 end
 
 function standardize_res!(
-    gc::GLMCopulaVCObs{T, D, Link}
+    gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}}
     ) where {T <: BlasReal, D, Link}
     for j in eachindex(gc.y)
         σinv = inv(sqrt(gc.varμ[j]))
