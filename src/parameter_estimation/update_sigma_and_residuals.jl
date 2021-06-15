@@ -169,3 +169,130 @@ function update_τ(
     end
     τ
 end
+
+"""
+    update_r!(gc::GLMCopulaVCObs{T, D, Link})
+
+Performs maximum loglikelihood estimation of the nuisance paramter for negative 
+binomial model using Newton's algorithm. Will run a maximum of `maxIter` and
+convergence is defaulted to `convTol`.
+"""
+function update_r_newton!(gcm::GLMCopulaVCModel; maxIter=100, convTol=1e-6)
+    
+    T = typeof(gcm.β)
+    r = gcm.data[1].d.r # estimated r in previous iteration
+
+    function first_derivative(gcm, r)
+        s = zero(T)
+        tmp(yi, μi) = -(yi+r)/(μi+r) - log(μi+r) + 1 + log(r) + digamma(r+yi) - digamma(r)
+        for i in eachindex(gcm.data)
+            # 2nd term of logl
+            for j in eachindex(gcm.data[i].y)
+                s += tmp(gcm.data[i].y[j], gcm.data[i].μ[j])
+            end
+            # 3rd term of logl
+            resid = gcm.data[i].res
+            Γ = dot(gcm.Σ, gcm.data[i].gc.t) # Γ = a1*V1 + ... + am*Vm
+            η = gcm.data[i].η
+            D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
+            dD = Diagonal([-exp(2η[i]) / (2r^1.5 * sqrt(exp(η[i])*(exp(η[i])+r))) for i in 1:length(η)])
+            dresid = -inv(D)*dD*inv(D)*(y - μ)
+            s += resid'*Γ*dresid / (1 + 0.5resid'*Γ*resid)
+        end
+        return s
+    end
+
+    function second_derivative(gcm, r)
+        tmp(yi, μi) = (yi+r)/(μi+r)^2 - 2/(μi+r) + 1/r + trigamma(r+yi) - trigamma(r)
+        s = zero(T)
+        for i in eachindex(gcm.data)
+            # 2nd term of logl
+            for j in eachindex(gcm.data[i].y)
+                s += tmp(gcm.data[i].y[j], gcm.data[i].μ[j])
+            end
+            # 3rd term of logl
+            Γ = dot(gcm.Σ, gcm.data[i].gc.t) # Γ = a1*V1 + ... + am*Vm
+            η = gcm.data[i].η
+            D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
+            dD = Diagonal([-exp(2η[i]) / (2r^1.5 * sqrt(exp(η[i])*(exp(η[i])+r))) for i in 1:length(η)])
+            d2D = Diagonal([(exp(3η[i]) / (4r^1.5 * (exp(η[i])*(exp(η[i])+r))^(1.5))) + 
+                (3exp(2η[i]) / (r^(2.5)*sqrt(exp(η[i])*(exp(η[i])+r)))) for i in 1:length(η)])
+            resid = gcm.data[i].res
+            dresid = -inv(D)*dD*inv(D)*(y - μ)
+            d2resid = (2inv(D)*dD*inv(D)*dD*inv(D) - inv(D)*d2D*inv(D))*(y - μ)
+            denom = 1 + 0.5resid'*Σ*resid
+            term1 = (resid'*Γ*dresid / denom)^2
+            term2 = dresid'*Γ*dresid / denom
+            term3 = resid'*Γ*d2resid / denom
+            s += -term1 + term2 + term3
+        end
+        return s
+    end
+
+    function negbin_component_loglikelihood(gcm, r)
+        logl = zero(T)
+        for (i, gc) in enumerate(gcm.data)
+            gc.d = NegativeBinomial(r, T(0.5))
+            # 2nd term of logl
+            logl += component_loglikelihood(gc, zero(T), zero(T))
+            # 3rd term of logl
+            resid = gcm.data[i].res
+            Γ = dot(gcm.Σ, gc.t) #Γ = a1*V1 + ... + am*Vm
+            logl += log(1 + 0.5resid'*Γ*resid)
+        end
+        return logl
+    end
+
+    function newton_increment(gcm, r)
+        dx = first_derivative(gcm, r)
+        dx2 = second_derivative(gcm, r)
+        if dx2 < 0
+            increment = dx / dx2
+        else 
+            increment = dx # use gradient ascent if hessian not negative definite
+        end
+        return increment
+    end
+
+    new_r = one(T)
+    stepsize = one(T)
+    for i in 1:maxIter
+        # run 1 iteration of Newton's algorithm
+        increment = newton_increment(gcm, r)
+        new_r = r - stepsize * increment
+
+        # linesearch
+        old_logl = negbin_component_loglikelihood(gcm, r)
+        for j in 1:20
+            if new_r <= 0
+                stepsize = stepsize / 2
+                new_r = r - stepsize * increment
+            else 
+                new_logl = negbin_component_loglikelihood(gcm, new_r)
+                if old_logl >= new_logl
+                    stepsize = stepsize / 2
+                    new_r = r - stepsize * increment
+                else
+                    break
+                end
+            end
+        end
+
+        #check convergence
+        if abs(r - new_r) <= convTol
+            return NegativeBinomial(new_r, T(0.5))
+        else
+            r = new_r
+        end
+    end
+
+    return NegativeBinomial(r, T(0.5))
+end
+
+function update_r!(gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
+    new_d = update_r_newton!(gcm)
+    for gc in gcm.data
+        gc.d = new_d
+    end
+    return new_d
+end

@@ -87,9 +87,9 @@ function loglikelihood!(
   end
   # loglikelihood
   logl = GLMCopula.component_loglikelihood(gc)
-  tsum = dot(Σ, gc.t)
+  tsum = dot(Σ, gc.t) # tsum = Γ = a1*V1 + ... + am*Vm (note Σ = [a1,...,am])
   logl += -log(1 + tsum)
-  qsum  = dot(Σ, gc.q)
+  qsum  = dot(Σ, gc.q) # q[k] = res_i' * V_i[k] * res_i / 2, so qsum = 0.5r(β)*Γ*r(β)
   logl += log(1 + qsum)
   
   if needgrad

@@ -34,6 +34,11 @@ function MathProgBase.eval_f(
     copy_par!(gcm, par)
     # maximize σ2 and τ at current β using MM
     update_Σ!(gcm)
+    # update nuisance parameter
+    # if typeof(gcm.data[1].d) <: NegativeBinomial
+    #     new_d = update_r!(gcm)
+    #     @show new_d
+    # end
     # evaluate loglikelihood
     loglikelihood!(gcm, false, false)
 end
@@ -47,6 +52,11 @@ function MathProgBase.eval_grad_f(
     @show gcm.β
     update_Σ!(gcm)
     @show gcm.Σ
+    # update nuisance parameter
+    if typeof(gcm.data[1].d) <: NegativeBinomial
+        new_d = update_r!(gcm)
+        @show new_d
+    end
     # evaluate gradient
     logl = loglikelihood!(gcm, true, false)
     copyto!(grad, gcm.∇β)

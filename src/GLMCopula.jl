@@ -1,6 +1,7 @@
 module GLMCopula
 using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Distributions, StatsFuns
 using LinearAlgebra: BlasReal, copytri!
+using SpecialFunctions
 @reexport using Ipopt
 @reexport using NLopt
 
@@ -11,7 +12,7 @@ export glm_regress_jl, glm_regress_model, glm_score_statistic!  # these are to i
 export component_loglikelihood, glm_gradient, hessian_glm
 export GLMCopulaVCObs, GLMCopulaVCModel
 
-struct GLMCopulaVCObs{T <: BlasReal, D, Link}
+mutable struct GLMCopulaVCObs{T <: BlasReal, D, Link}
     # data
     y::Vector{T}
     X::Matrix{T}
@@ -176,6 +177,6 @@ include("parameter_estimation/initialize_model.jl")
 include("parameter_estimation/splitting_loglikelihood.jl")
 include("parameter_estimation/gradient_hessian.jl")
 include("parameter_estimation/update_sigma_and_residuals.jl")
-include("parameter_estimation/fit_new.jl") # only initializes using MM-algorithm does joint estimation using newton after
-# include("parameter_estimation/fit_old.jl") # only uses MM-algorithm
+# include("parameter_estimation/fit_new.jl") # only initializes using MM-algorithm does joint estimation using newton after
+include("parameter_estimation/fit_old.jl") # only uses MM-algorithm
 end # module
