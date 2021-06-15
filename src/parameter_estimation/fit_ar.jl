@@ -17,6 +17,7 @@ function fit!(
     offset = gcm.p + 1
     for k in 1:2
         lb[offset] = 0
+        ub[offset] = 1
         offset += 1
     end
     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Max, gcm)
@@ -102,9 +103,9 @@ function MathProgBase.eval_grad_f(
     grad[gcm.p + 1] = gcm.∇ρ[1]
     # gradient wrt σ2
     grad[gcm.p + 2] = gcm.∇σ2[1]
-    # @show gcm.θ
+    @show gcm.θ
     copyto!(gcm.∇θ, grad)
-    # @show gcm.∇θ
+    @show gcm.∇θ
     # return objective
     obj
 end

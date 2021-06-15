@@ -240,10 +240,10 @@ function loglikelihood!(
             mul!(gc.storage_n, gc.∇2ARV, gc.res) # storage_n = ∇ARV * res
             q3 = dot(gc.res, gc.storage_n) # 
             # hessian for rho
-            gc.Hρ .= inv(c2) * 0.5 * σ2 * q3 .- inv(c2)^2 * 0.5 * σ2 * q2
+            gc.Hρ .= 0.5 * σ2 * (inv(c2) * q3 - inv(c2)^2 * 0.5 * σ2 * q2^2)
             
             # hessian for sigma2
-            gc.Hσ2 .= 0.25 * n^2 * inv(c1)^2 .- inv(c2)^2 * (0.5 * q)^2
+            gc.Hσ2 .= 0.25 * n^2 * inv(c1)^2 - inv(c2)^2 * (0.25 * q^2)
             
             BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 0.0, gc.Hβ) # only lower triangular
             fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
