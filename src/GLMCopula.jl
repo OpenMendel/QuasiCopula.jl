@@ -176,6 +176,7 @@ include("parameter_estimation/initialize_model.jl")
 include("parameter_estimation/splitting_loglikelihood.jl")
 include("parameter_estimation/gradient_hessian.jl")
 include("parameter_estimation/update_sigma_and_residuals.jl")
-include("parameter_estimation/fit_new.jl") # only initializes using MM-algorithm does joint estimation using newton after
+include("parameter_estimation/fit_ar.jl")
+# include("parameter_estimation/fit_new.jl") # only initializes using MM-algorithm does joint estimation using newton after
 # include("parameter_estimation/fit_old.jl") # only uses MM-algorithm
 end # module
