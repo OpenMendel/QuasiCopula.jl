@@ -179,7 +179,7 @@ convergence is defaulted to `convTol`.
 """
 function update_r_newton!(gcm::GLMCopulaVCModel; maxIter=100, convTol=1e-6)
     
-    T = typeof(gcm.β)
+    T = eltype(gcm.β)
     r = gcm.data[1].d.r # estimated r in previous iteration
 
     function first_derivative(gcm, r)
@@ -192,11 +192,11 @@ function update_r_newton!(gcm::GLMCopulaVCModel; maxIter=100, convTol=1e-6)
             end
             # 3rd term of logl
             resid = gcm.data[i].res
-            Γ = dot(gcm.Σ, gcm.data[i].gc.t) # Γ = a1*V1 + ... + am*Vm
+            Γ = gcm.Σ' * gcm.data[i].V # Γ = a1*V1 + ... + am*Vm
             η = gcm.data[i].η
             D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
             dD = Diagonal([-exp(2η[i]) / (2r^1.5 * sqrt(exp(η[i])*(exp(η[i])+r))) for i in 1:length(η)])
-            dresid = -inv(D)*dD*inv(D)*(y - μ)
+            dresid = -inv(D)*dD*resid
             s += resid'*Γ*dresid / (1 + 0.5resid'*Γ*resid)
         end
         return s
@@ -211,16 +211,16 @@ function update_r_newton!(gcm::GLMCopulaVCModel; maxIter=100, convTol=1e-6)
                 s += tmp(gcm.data[i].y[j], gcm.data[i].μ[j])
             end
             # 3rd term of logl
-            Γ = dot(gcm.Σ, gcm.data[i].gc.t) # Γ = a1*V1 + ... + am*Vm
+            Γ = gcm.Σ' * gcm.data[i].V # Γ = a1*V1 + ... + am*Vm
             η = gcm.data[i].η
             D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
             dD = Diagonal([-exp(2η[i]) / (2r^1.5 * sqrt(exp(η[i])*(exp(η[i])+r))) for i in 1:length(η)])
             d2D = Diagonal([(exp(3η[i]) / (4r^1.5 * (exp(η[i])*(exp(η[i])+r))^(1.5))) + 
                 (3exp(2η[i]) / (r^(2.5)*sqrt(exp(η[i])*(exp(η[i])+r)))) for i in 1:length(η)])
             resid = gcm.data[i].res
-            dresid = -inv(D)*dD*inv(D)*(y - μ)
-            d2resid = (2inv(D)*dD*inv(D)*dD*inv(D) - inv(D)*d2D*inv(D))*(y - μ)
-            denom = 1 + 0.5resid'*Σ*resid
+            dresid = -inv(D)*dD*resid
+            d2resid = (2inv(D)*dD*inv(D)*dD - inv(D)*d2D)*resid
+            denom = 1 + 0.5resid'*Γ*resid
             term1 = (resid'*Γ*dresid / denom)^2
             term2 = dresid'*Γ*dresid / denom
             term3 = resid'*Γ*d2resid / denom
@@ -234,10 +234,10 @@ function update_r_newton!(gcm::GLMCopulaVCModel; maxIter=100, convTol=1e-6)
         for (i, gc) in enumerate(gcm.data)
             gc.d = NegativeBinomial(r, T(0.5))
             # 2nd term of logl
-            logl += component_loglikelihood(gc, zero(T), zero(T))
+            logl += component_loglikelihood(gc)
             # 3rd term of logl
             resid = gcm.data[i].res
-            Γ = dot(gcm.Σ, gc.t) #Γ = a1*V1 + ... + am*Vm
+            Γ = gcm.Σ' * gc.V # Γ = a1*V1 + ... + am*Vm
             logl += log(1 + 0.5resid'*Γ*resid)
         end
         return logl
@@ -289,7 +289,7 @@ function update_r_newton!(gcm::GLMCopulaVCModel; maxIter=100, convTol=1e-6)
     return NegativeBinomial(r, T(0.5))
 end
 
-function update_r!(gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
+function update_r!(gcm::GLMCopulaVCModel)
     new_d = update_r_newton!(gcm)
     for gc in gcm.data
         gc.d = new_d
