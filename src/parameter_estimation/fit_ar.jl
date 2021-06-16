@@ -15,9 +15,9 @@ function fit!(
     lb   = fill(-Inf, npar)
     ub   = fill( Inf, npar)
     offset = gcm.p + 1
+    ub[offset] = 1
     for k in 1:2
         lb[offset] = 0
-        ub[offset] = 1
         offset += 1
     end
     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Max, gcm)
