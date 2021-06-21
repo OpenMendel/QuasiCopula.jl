@@ -19,6 +19,7 @@ struct GLMCopulaARObs{T <: BlasReal, D, Link}
     Hρ::Matrix{T}   # Hessian wrt ρ
     Hσ2::Matrix{T}   # Hessian wrt ρ
     Hρσ2::Matrix{T}  # Hessian wrt ρ, σ2
+    Hβσ2::Vector{T}  # Hessian wrt β and σ2
     res::Vector{T}  # residual vector res_i
     xtx::Matrix{T}  # Xi'Xi
     storage_n::Vector{T}
@@ -59,6 +60,7 @@ function GLMCopulaARObs(
     Hρ  = Matrix{T}(undef, 1, 1)
     Hσ2  = Matrix{T}(undef, 1, 1)
     Hρσ2 = Matrix{T}(undef, 1, 1)
+    Hβσ2 = Vector{T}(undef, p)
     res = Vector{T}(undef, n)
     xtx = transpose(X) * X
     storage_n = Vector{T}(undef, n)
@@ -76,7 +78,7 @@ function GLMCopulaARObs(
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
-    GLMCopulaARObs{T, D, Link}(y, X, V, ∇ARV, ∇2ARV, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇ρ, ∇σ2, Hβ, Hρ, Hσ2, Hρσ2,
+    GLMCopulaARObs{T, D, Link}(y, X, V, ∇ARV, ∇2ARV, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇ρ, ∇σ2, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2,
        res, xtx, storage_n, storage_p1, storage_np, storage_pp, added_term_numerator, added_term2,
         η, μ, varμ, dμ, d, link, wt, w1, w2)
 end
@@ -109,6 +111,7 @@ struct GLMCopulaARModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalu
     Hρ::Matrix{T}    # Hessian from all observations
     Hσ2::Matrix{T}    # Hessian from all observations
     Hρσ2::Matrix{T}
+    Hβσ2::Vector{T}
     storage_n::Vector{T}
     d::Vector{D}
     link::Vector{Link}
@@ -130,6 +133,7 @@ function GLMCopulaARModel(gcs::Vector{GLMCopulaARObs{T, D, Link}}) where {T <: B
     Hρ  = Matrix{T}(undef, 1, 1)
     Hσ2  = Matrix{T}(undef, 1, 1)
     Hρσ2 = Matrix{T}(undef, 1, 1)
+    Hβσ2 = Vector{T}(undef, p)
     Ytotal = 0.0
     ntotal = 0.0
     d = Vector{D}(undef, n)
@@ -143,7 +147,7 @@ function GLMCopulaARModel(gcs::Vector{GLMCopulaARObs{T, D, Link}}) where {T <: B
     end
     storage_n = Vector{T}(undef, n)
     GLMCopulaARModel{T, D, Link}(gcs, Ytotal, ntotal, p, β, τ, ρ, σ2, θ,
-        ∇β, ∇ρ, ∇σ2, ∇θ, XtX, Hβ, Hρ, Hσ2, Hρσ2,
+        ∇β, ∇ρ, ∇σ2, ∇θ, XtX, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2,
         storage_n, d, link)
 end
 
@@ -450,6 +454,9 @@ function loglikelihood!(
 
             # hessian cross term for rho and sigma2
             gc.Hρσ2 .= 0.5 * q2 * inv1pq - 0.25 * σ2 * q * q2 * inv1pq^2
+
+            # hessian cross term for beta and sigma2
+            gc.Hβσ2 .= inv1pq * gc.∇β - 0.5 * q * inv1pq^2 * σ2 * gc.∇β
             
             BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 0.0, gc.Hβ) # only lower triangular
             fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
@@ -482,6 +489,7 @@ function loglikelihood!(
         fill!(gcm.Hρ, 0)
         fill!(gcm.Hσ2, 0)
         fill!(gcm.Hρσ2, 0)
+        fill!(gcm.Hβσ2, 0)
     end
     @inbounds for i in eachindex(gcm.data)
         logl += loglikelihood!(gcm.data[i], gcm.β, gcm.ρ[1], gcm.σ2[1], needgrad, needhess)
@@ -495,6 +503,7 @@ function loglikelihood!(
             gcm.Hρ .+= gcm.data[i].Hρ
             gcm.Hσ2 .+= gcm.data[i].Hσ2
             gcm.Hρσ2 .+= gcm.data[i].Hρσ2
+            gcm.Hβσ2 .+= gcm.data[i].Hβσ2
         end
     end
     logl
