@@ -147,6 +147,11 @@ function MathProgBase.hesslag_structure(gcm::GLMCopulaARModel)
         arr2[idx] = k
         idx += 1
     end
+    # for k in 1:gcm.p
+    #     arr1[idx] = gcm.p + 1
+    #     arr2[idx] = k
+    #     idx += 1
+    # end
     return (arr1, arr2)
 end
     
@@ -176,6 +181,10 @@ function MathProgBase.eval_hesslag(
         H[idx] = gcm.Hβσ2[k]
         idx += 1
     end
+    # for k in 1:gcm.p
+    #     H[idx] = gcm.Hβρ[k]
+    #     idx += 1
+    # end
     # lmul!(σ, H)
     H .*= σ
 end
