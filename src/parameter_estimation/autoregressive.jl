@@ -322,7 +322,7 @@ function loglikelihood!(
         fill!(gcm.Hρ, 0.0)
         fill!(gcm.Hσ2, 0.0)
         fill!(gcm.Hρσ2, 0.0)
-        # fill!(gcm.Hβσ2, 0.0)
+        fill!(gcm.Hβσ2, 0.0)
         # @show gcm.Hβσ2
         # fill!(gcm.Hβρ, 0)
     end
