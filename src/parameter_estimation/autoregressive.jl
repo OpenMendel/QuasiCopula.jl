@@ -1,6 +1,4 @@
 export GLMCopulaARObs, GLMCopulaARModel, get_AR_cov, get_∇ARV, get_∇2ARV
-export residualx, residualx2, residualx3
-export qf, qf2, qf3, storage_n!
 struct GLMCopulaARObs{T <: BlasReal, D, Link}
     # data
     y::Vector{T}
@@ -61,7 +59,7 @@ function GLMCopulaARObs(
     Hρ  = Matrix{T}(undef, 1, 1)
     Hσ2  = Matrix{T}(undef, 1, 1)
     Hρσ2 = Matrix{T}(undef, 1, 1)
-    Hβσ2 = Vector{T}(undef, p)
+    Hβσ2 = zeros(T, p)
     # Hβρ = Vector{T}(undef, p)
     res = Vector{T}(undef, n)
     xtx = transpose(X) * X
@@ -136,7 +134,7 @@ function GLMCopulaARModel(gcs::Vector{GLMCopulaARObs{T, D, Link}}) where {T <: B
     Hρ  = Matrix{T}(undef, 1, 1)
     Hσ2  = Matrix{T}(undef, 1, 1)
     Hρσ2 = Matrix{T}(undef, 1, 1)
-    Hβσ2 = Vector{T}(undef, p)
+    Hβσ2 = zeros(T, p)
     # Hβρ = Vector{T}(undef, p)
     Ytotal = 0.0
     ntotal = 0.0
@@ -160,10 +158,13 @@ end
 Forms the AR(1) covariance structure given n (size of cluster), ρ (correlation parameter), σ2 (noise parameter)
 """
 function get_AR_cov(n, ρ, σ2, V)
+    fill!(V, 1.0)
     @inbounds for i in 1:n
-        V[i, i] = 1.0
         @inbounds for j in i+1:n
-            V[i, j] = ρ^(j-i)
+            power = j - i
+            @inbounds for k in 1:power
+                V[i, j] *= ρ
+            end
             V[j, i] = V[i, j]
         end
     end
@@ -178,7 +179,11 @@ function get_∇ARV(n, ρ, σ2, ∇ARV)
     @inbounds for i in 1:n
         ∇ARV[i, i] = 0.0
         @inbounds for j in i+1:n
-            ∇ARV[i, j] = (j-i)* ρ^(j-i-1)
+            power = j - i - 1
+            ∇ARV[i, j] = (j-i)
+            @inbounds for k in 1:power
+                ∇ARV[i, j] *= ρ
+            end
             ∇ARV[j, i] = ∇ARV[i, j]
         end
     end
@@ -193,210 +198,22 @@ function get_∇2ARV(n, ρ, σ2, ∇2ARV)
     @inbounds for i in 1:n
         ∇2ARV[i, i] = 0.0
         @inbounds for j in i+1:n
-            ∇2ARV[i, j] = (j-i)*(j-i-1)* ρ^(j-i-2)
+            pw = (j-i-1)
+            if pw == 0
+                ∇2ARV[i, j] = 0.0
+            else
+                ∇2ARV[i, j] = (pw + 1)*(pw)
+                @inbounds for k in 1:pw - 1
+                    ∇2ARV[i, j] *= ρ
+                end
+            end
             ∇2ARV[j, i] = ∇2ARV[i, j]
         end
     end
     ∇2ARV
 end
 
-# function loglikelihood!(
-#     gc::GLMCopulaARObs{T, D, Link},
-#     β::Vector{T},
-#     ρ::T,
-#     σ2::T,
-#     needgrad::Bool = false,
-#     needhess::Bool = false
-#     ) where {T <: BlasReal, D, Link}
-#     n, p = size(gc.X, 1), size(gc.X, 2)
-#     needgrad = needgrad || needhess
-#     if needgrad
-#         fill!(gc.∇β, 0)
-#         gc.∇ARV .= get_∇ARV(n, ρ, σ2, gc.∇ARV)
-#     end
-#     needhess && fill!(gc.Hβ, 0)
-#     fill!(gc.∇β, 0.0)
-#     update_res!(gc, β)
-#     standardize_res!(gc)
-#     fill!(gc.∇resβ, 0.0) # fill gradient of residual vector with 0
-#     std_res_differential!(gc) # this will compute ∇resβ
-
-#     # form V
-#     gc.V .= get_AR_cov(n, ρ, σ2, gc.V)
-
-#     #evaluate copula loglikelihood
-#     mul!(gc.storage_n, gc.V, gc.res) # storage_n = V[k] * res
-
-#     if needgrad
-#         BLAS.gemv!('T', σ2, gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
-#     end
-#     q = dot(gc.res, gc.storage_n)
-    
-#     # @show q
-#     c1 = 1 + 0.5 * n * σ2
-#     c2 = 1 + 0.5 * σ2 * q
-#     # loglikelihood
-#     logl = GLMCopula.component_loglikelihood(gc)
-#     logl += -log(c1)
-#     logl += log(c2)
-#     if needgrad
-#         inv1pq = inv(c2)
-#         # gradient with respect to rho
-#         mul!(gc.storage_n, gc.∇ARV, gc.res) # storage_n = ∇ARV * res
-#         q2 = dot(gc.res, gc.storage_n) # 
-#         # gc.∇ρ .= inv(c2) * 0.5 * σ2 * transpose(gc.res) * gc.∇ARV * gc.res
-#         gc.∇ρ .= inv(c2) * 0.5 * σ2 * q2
-
-#         # gradient with respect to sigma2
-#         gc.∇σ2 .= -0.5 * n * inv(c1) .+ inv(c2) * 0.5 * q
-#       if needhess
-#             gc.∇2ARV .= get_∇2ARV(n, ρ, σ2, gc.∇2ARV)
-#             mul!(gc.storage_n, gc.∇2ARV, gc.res) # storage_n = ∇ARV * res
-#             q3 = dot(gc.res, gc.storage_n) # 
-#             # hessian for rho
-#             gc.Hρ .= 0.5 * σ2 * (inv(c2) * q3 - inv(c2)^2 * 0.5 * σ2 * q2^2)
-            
-#             # hessian for sigma2
-#             gc.Hσ2 .= 0.25 * n^2 * inv(c1)^2 - inv(c2)^2 * (0.25 * q^2)
-            
-#             BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 0.0, gc.Hβ) # only lower triangular
-#             fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
-#             fill!(gc.added_term2, 0.0) # fill hessian with 0
-#             mul!(gc.added_term_numerator, gc.V, gc.∇resβ) # storage_n = V[k] * res
-#             BLAS.gemm!('T', 'N', σ2, gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2)
-#             gc.added_term2 .*= inv1pq
-#             gc.Hβ .+= gc.added_term2
-#             gc.Hβ .+= GLMCopula.glm_hessian(gc, β)
-#       end
-#       gc.∇β .= gc.∇β .* inv1pq
-#       gc.∇β .+= GLMCopula.glm_gradient(gc, β, 1.0)
-#     end
-#     logl
-# end
-
-function qf(gc::GLMCopulaARObs{T, D, Link}, β::Vector{T}, ρ::T, σ2::T, n::Integer) where {T <: BlasReal, D, Link}
-    q = 0.0
-    @inbounds for j in 1:n - 1
-        q += residualx(gc.res, j, ρ, n) * σ2^2
-    end
-    q += σ2 * dot(gc.res, gc.res)
-    0.5 * q
-end
-
-function residualx(res::Vector{T}, j::Int64, ρ::T, n::Integer) where T <: BlasReal
-    term = 0.0
-    @inbounds for k in 1:n-j
-        term += res[k] * res[k + j]
-    end
-    ρ^j * term
-end
-
-function qf2(gc::GLMCopulaARObs{T, D, Link}, β::Vector{T}, ρ::T, σ2::T, n::Integer) where {T <: BlasReal, D, Link}
-    q = 0.0
-    @inbounds for j in 1:n - 1
-        q += residualx2(gc.res, j, ρ, n) * σ2^2
-    end
-    0.5 * q
-end
-
-function residualx2(res::Vector{T}, j::Int64, ρ::T, n::Integer) where T <: BlasReal
-    term = 0.0
-    @inbounds for k in 1:n-j
-        term += res[k] * res[k + j]
-    end
-    j * ρ^(j-1) * term
-end
-
-function qf3(gc::GLMCopulaARObs{T, D, Link}, β::Vector{T}, ρ::T, σ2::T, n::Integer) where {T <: BlasReal, D, Link}
-    q = 0.0
-    @inbounds for j in 1:n - 1
-        q += residualx3(gc.res, j, ρ, n) * σ2^2
-    end
-    0.5 * q
-end
-
-function residualx3(res::Vector{T}, j::Int64, ρ::T, n::Integer) where T <: BlasReal
-    term = 0.0
-    @inbounds for k in 1:n-j
-        term += res[k] * res[k + j]
-    end
-    j * (j-1) * ρ^(j-2) * term
-end
-
-function storage_n!(gc::GLMCopulaARObs{T, D, Link}, ρ::T, n::Integer) where {T <: BlasReal, D, Link}
-    fill!(gc.storage_n, 0.0)
-    for i in 1:n
-        for j in 1:n
-            power = abs(i-j)
-            gc.storage_n[i] += ρ^power * gc.res[j]
-        end
-    end
-end
-
-# function loglikelihood!(
-#     gc::GLMCopulaARObs{T, D, Link},
-#     β::Vector{T},
-#     ρ::T,
-#     σ2::T,
-#     needgrad::Bool = false,
-#     needhess::Bool = false
-#     ) where {T <: BlasReal, D, Link}
-#     n, p = size(gc.X, 1), size(gc.X, 2)
-#     needgrad = needgrad || needhess
-#     if needgrad
-#         fill!(gc.∇β, 0)
-#     end
-#     needhess && fill!(gc.Hβ, 0)
-#     fill!(gc.∇β, 0.0)
-#     update_res!(gc, β)
-#     standardize_res!(gc)
-#     fill!(gc.∇resβ, 0.0) # fill gradient of residual vector with 0
-#     std_res_differential!(gc) # this will compute ∇resβ
-#     storage_n!(gc, ρ, n)
-#     if needgrad
-#         BLAS.gemv!('T', σ2, gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
-#     end
-#     q = qf(gc, β, ρ, σ2, n)
-#     # 4.265815533980583
-#     # @show q
-#     c1 = 1 + 0.5 * n * σ2
-#     c2 = 1 + 0.5 * σ2 * q
-#     # loglikelihood
-#     logl = GLMCopula.component_loglikelihood(gc)
-#     logl += -log(c1)
-#     logl += log(c2)
-#     if needgrad
-#         inv1pq = inv(c2)
-#         # gradient with respect to rho
-#         q2 = qf2(gc, β, ρ, σ2, n)
-#         # gc.∇ρ .= inv(c2) * 0.5 * σ2 * transpose(gc.res) * gc.∇ARV * gc.res
-#         gc.∇ρ .= inv(c2) * 0.5 * σ2 * q2
-
-#         # gradient with respect to sigma2
-#         gc.∇σ2 .= -0.5 * n * inv(c1) .+ inv(c2) * 0.5 * q
-#       if needhess
-#             q3 = qf3(gc, β, ρ, σ2, n)
-#             # hessian for rho
-#             gc.Hρ .= 0.5 * σ2 * (inv(c2) * q3 - inv(c2)^2 * 0.5 * σ2 * q2^2)
-            
-#             # hessian for sigma2
-#             gc.Hσ2 .= 0.25 * n^2 * inv(c1)^2 - inv(c2)^2 * (0.25 * q^2)
-            
-#             BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 0.0, gc.Hβ) # only lower triangular
-#             fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
-#             fill!(gc.added_term2, 0.0) # fill hessian with 0
-#             mul!(gc.added_term_numerator, gc.V, gc.∇resβ) # storage_n = V[k] * res
-#             BLAS.gemm!('T', 'N', σ2, gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2)
-#             gc.added_term2 .*= inv1pq
-#             gc.Hβ .+= gc.added_term2
-#             gc.Hβ .+= GLMCopula.glm_hessian(gc, β)
-#       end
-#       gc.∇β .= gc.∇β .* inv1pq
-#       gc.∇β .+= GLMCopula.glm_gradient(gc, β, 1.0)
-#     end
-#     logl
-# end
-
+# one that works but is slow
 function loglikelihood!(
     gc::GLMCopulaARObs{T, D, Link},
     β::Vector{T},
@@ -428,6 +245,12 @@ function loglikelihood!(
         BLAS.gemv!('T', σ2, gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
     end
     q = dot(gc.res, gc.storage_n)
+
+    # GLMCopula.storage_n!(gc, ρ, n)
+    # if needgrad
+    #     BLAS.gemv!('T', σ2, gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
+    # end
+    # q = dot(gc.res, gc.storage_n)
     
     # @show q
     c1 = 1 + 0.5 * n * σ2
@@ -435,7 +258,9 @@ function loglikelihood!(
     # loglikelihood
     logl = GLMCopula.component_loglikelihood(gc)
     logl += -log(c1)
+    # @show logl
     logl += log(c2)
+    # @show logl
     if needgrad
         inv1pq = inv(c2)
         # gradient with respect to rho
@@ -468,6 +293,7 @@ function loglikelihood!(
             BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 0.0, gc.Hβ) # only lower triangular
             fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
             fill!(gc.added_term2, 0.0) # fill hessian with 0
+            # gc.V .= get_AR_cov(n, ρ, σ2, gc.V)
             mul!(gc.added_term_numerator, gc.V, gc.∇resβ) # storage_n = V[k] * res
             BLAS.gemm!('T', 'N', σ2, gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2)
             gc.added_term2 .*= inv1pq
