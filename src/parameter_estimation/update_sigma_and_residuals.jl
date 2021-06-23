@@ -5,7 +5,7 @@ update_Σ!(gcm)
 Update variance components `Σ` according to the current value of
 `β` by an MM algorithm. `gcm.QF` now needs to hold qudratic forms calculated from standardized residuals.
 """
-function update_Σ!(gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
+function update_Σ!(gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}}) where {T <: BlasReal, D, Link}
     update_Σ_jensen!(gcm)
 end
 
@@ -15,7 +15,7 @@ update_Σ_jensen!(gcm)
 Update Σ using the MM algorithm and Jensens inequality, given β.
 """
 function update_Σ_jensen!(
-    gcm::GLMCopulaVCModel{T, D, Link},
+    gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}},
     maxiter::Integer=50000,
     reltol::Number=1e-6,
     verbose::Bool=false) where {T <: BlasReal, D, Link}
@@ -133,7 +133,7 @@ function standardize_res!(
 end
 
 """
-update_quadform!(gc)
+    update_quadform!(gc)
 Update the quadratic forms `(r^T V[k] r) / 2` according to the current residual `r`.
 """
 function update_quadform!(gc::GLMCopulaVCObs{T, D, Link}) where {T<:Real, D, Link}
@@ -144,8 +144,16 @@ function update_quadform!(gc::GLMCopulaVCObs{T, D, Link}) where {T<:Real, D, Lin
 end
 
 """
+    update_quadform!(gc)
+Update the quadratic forms `(r^T V[k] r) / 2` according to the current residual `r`.
+"""
+function update_quadform!(gc::GLMCopulaARObs{T, D, Link}) where {T<:Real, D, Link}
+    gc.q .= dot(gc.res, mul!(gc.storage_n, gc.V, gc.res)) / 2
+    gc.q
+end
 
-MM update to minimize ``n \\log (\\tau) - rss / 2 \\ln (\\tau) +
+"""
+    MM update to minimize ``n \\log (\\tau) - rss / 2 \\ln (\\tau) +
 \\sum_i \\log (1 + \\tau * q_i)``.
 """
 function update_τ(

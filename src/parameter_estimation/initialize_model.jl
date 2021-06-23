@@ -35,7 +35,9 @@ function initialize_model!(
     glm_regress_model(gcm)
     fill!(gcm.τ, 1.0)
     fill!(gcm.ρ, 1.0)
-    fill!(gcm.σ2, 1.0)
+    fill!(gcm.Σ, 1.0)
+    update_Σ!(gcm)
+    copyto!(gcm.σ2, gcm.Σ)
     nothing
 end
 
