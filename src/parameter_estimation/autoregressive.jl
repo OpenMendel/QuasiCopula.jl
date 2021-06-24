@@ -1,4 +1,5 @@
 export GLMCopulaARObs, GLMCopulaARModel, get_AR_cov, get_∇ARV, get_∇2ARV
+export update_rho!
 struct GLMCopulaARObs{T <: BlasReal, D, Link}
     # data
     y::Vector{T}

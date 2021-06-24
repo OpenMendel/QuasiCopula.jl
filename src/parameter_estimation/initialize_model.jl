@@ -24,6 +24,20 @@ function initialize_model!(
 end
 
 """
+    update_rho!(gcm, empirical_covariance_mat)
+
+Given initial estimates for 'σ2' and 'β', initialize the AR parameter 'ρ' using empirical covariance matrix of Y_1 and Y_2.
+"""
+function update_rho!(gcm, Y_1, Y_2)
+    N = length(gcm.data)
+    empirical_covariance_mat = scattermat(hcat(Y_1, Y_2))/N
+    n1 = length(gcm.data[1].y)
+    ρhat = empirical_covariance_mat[1, 2] /(inv(1 + 0.5 * n1 * gcm.σ2[1]) * sqrt(Statistics.mean(Y_1)) * sqrt(Statistics.mean(Y_2)) * gcm.σ2[1])
+    copyto!(gcm.ρ, ρhat)
+    nothing
+end
+
+"""
     initialize_model!(gcm{D}) where D<: Poisson, Bernoulli
 
 Initialize the linear regression parameters `β` by the weighted least

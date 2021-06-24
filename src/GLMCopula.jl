@@ -1,5 +1,5 @@
 module GLMCopula
-using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Distributions, StatsFuns
+using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Distributions, StatsFuns, Statistics, StatsBase
 using LinearAlgebra: BlasReal, copytri!
 @reexport using Ipopt
 @reexport using NLopt
