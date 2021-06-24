@@ -216,7 +216,7 @@ function update_r_newton!(gcm::GLMCopulaVCModel; maxIter=100, convTol=1e-6)
             D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
             dD = Diagonal([-exp(2η[i]) / (2r^1.5 * sqrt(exp(η[i])*(exp(η[i])+r))) for i in 1:length(η)])
             d2D = Diagonal([(exp(3η[i]) / (4r^1.5 * (exp(η[i])*(exp(η[i])+r))^(1.5))) + 
-                (3exp(2η[i]) / (r^(2.5)*sqrt(exp(η[i])*(exp(η[i])+r)))) for i in 1:length(η)])
+                (3exp(2η[i]) / (4r^(2.5)*sqrt(exp(η[i])*(exp(η[i])+r)))) for i in 1:length(η)])
             resid = gcm.data[i].res
             dresid = -inv(D)*dD*resid
             d2resid = (2inv(D)*dD*inv(D)*dD - inv(D)*d2D)*resid

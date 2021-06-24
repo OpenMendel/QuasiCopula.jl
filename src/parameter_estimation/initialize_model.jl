@@ -89,7 +89,12 @@ function glm_regress_model(gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARM
                     c = gc.res[j] * gc.w1[j]
                     copyto!(x, gc.X[j, :])
                     BLAS.axpy!(c, x, gcm.∇β) # score = score + c * x
-                    obj = obj + GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], gc.wt[j], 1)
+                    if typeof(gc.d) <: NegativeBinomial
+                      r = gc.d.r
+                      obj = obj + logpdf(D(r, r/(gc.μ[j] + r)), gc.y[j])
+                    else
+                      obj = obj + GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], gc.wt[j], 1)
+                    end
                    end
            end
       if obj > old_obj
