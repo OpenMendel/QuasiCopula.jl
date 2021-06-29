@@ -1,3 +1,4 @@
+export ◺
 """
     fit!(gcm::GLMCopulaARModel, solver=Ipopt.IpoptSolver(print_level=5))
 
