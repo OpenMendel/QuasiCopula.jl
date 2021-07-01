@@ -188,6 +188,7 @@ function update_r_newton!(gcm::GLMCopulaVCModel; maxIter=100, convTol=1e-6)
         for i in eachindex(gcm.data)
             # 2nd term of logl
             for j in eachindex(gcm.data[i].y)
+                gcm.data[i].μ[j] < 0 && println(gcm.data[i].μ[j])
                 s += tmp(gcm.data[i].y[j], gcm.data[i].μ[j])
             end
             # 3rd term of logl
@@ -267,7 +268,7 @@ function update_r_newton!(gcm::GLMCopulaVCModel; maxIter=100, convTol=1e-6)
             if new_r <= 0
                 stepsize = stepsize / 2
                 new_r = r - stepsize * increment
-            else 
+            else
                 new_logl = negbin_component_loglikelihood(gcm, new_r)
                 if old_logl >= new_logl
                     stepsize = stepsize / 2
@@ -279,6 +280,7 @@ function update_r_newton!(gcm::GLMCopulaVCModel; maxIter=100, convTol=1e-6)
         end
 
         #check convergence
+        i == maxIter && error("reached max iter in newton")
         if abs(r - new_r) <= convTol
             return NegativeBinomial(new_r, T(0.5))
         else

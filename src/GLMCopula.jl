@@ -16,7 +16,7 @@ mutable struct GLMCopulaVCObs{T <: BlasReal, D, Link}
     # data
     y::Vector{T}
     X::Matrix{T}
-    V::Vector{Matrix{T}} ### WEIRD: why every observation have their own VC?
+    V::Vector{Matrix{T}}
     # working arrays
     ∇β::Vector{T}   # gradient wrt β
     ∇μβ::Matrix{T}

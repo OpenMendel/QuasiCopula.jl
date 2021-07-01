@@ -41,12 +41,41 @@ end
 
 function initialize_model!(
   gcm::GLMCopulaVCModel{T, D}) where {T <: BlasReal, D}
-  println("initializing β using Newton's Algorithm under Independence Assumption")
-  glm_regress_model(gcm)
+  println("initializing β using Newton's Algorithm under Independence Assumption")  
+
+  if typeof(gcm.data[1].d) <: NegativeBinomial
+    # for gc in gcm.data
+    #   fill!(gc.μ, 1)
+    #   fill!(gc.η, 0)
+    # end
+    # new_d = update_r!(gcm)
+    for gc in gcm.data
+      gc.d = NegativeBinomial(8)
+    end
+  end
+
+  glm_regress_model(gcm) # this calls update_res which uses r = 1
+  # update_res!(gcm)
+  # standardize_res!(gcm)
+
+
+  if typeof(gcm.data[1].d) <: NegativeBinomial
+    # for gc in gcm.data
+    #   fill!(gc.μ, 1)
+    #   fill!(gc.η, 0)
+    # end
+    new_d = update_r!(gcm)
+    for gc in gcm.data
+      gc.d = new_d
+    end
+  end
+
   fill!(gcm.τ, 1.0)
   println("initializing variance components using MM-Algorithm")
   fill!(gcm.Σ, 1.0)
   update_Σ!(gcm)
+  @show gcm.Σ
+
   nothing
 end
 
