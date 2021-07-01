@@ -38,18 +38,18 @@ function component_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link},GLMCopulaA
     logl
 end
 
-"""
-    component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link})
-Calculates the loglikelihood of observing `y` given mean `μ`, Negative Binomial distribution using the GLM.jl package.
-"""
-function component_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link},GLMCopulaARObs{T, D, Link}}) where {T <: BlasReal, D<:NegativeBinomial{T}, Link}
-    logl = zero(T)
-    r = gc.d.r
-    @inbounds for j in 1:length(gc.y)
-        logl += logpdf(D(r, r/(gc.μ[j] + r)), gc.y[j])
-    end
-    logl
-end
+# """
+#     component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link})
+# Calculates the loglikelihood of observing `y` given mean `μ`, Negative Binomial distribution using the GLM.jl package.
+# """
+# function component_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}}) where {T <: BlasReal, D<:NegativeBinomial{T}, Link}
+#     logl = zero(T)
+#     r = gc.d.r # this needs to change
+#     @inbounds for j in 1:length(gc.y)
+#         logl += logpdf(D(r, r/(gc.μ[j] + r)), gc.y[j])
+#     end
+#     logl
+# end
 
 """
     loglikelihood!(gc::GLMCopulaVCObs{T, D, Link}, β, τ, Σ)

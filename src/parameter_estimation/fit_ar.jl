@@ -1,21 +1,23 @@
+export ◺
 """
-    fit!(gcm::GLMCopulaVCModel, solver=Ipopt.IpoptSolver(print_level=5))
+    fit!(gcm::GLMCopulaARModel, solver=Ipopt.IpoptSolver(print_level=5))
 
 Fit an `GLMCopulaVCModel` object by MLE using a nonlinear programming solver. Start point 
 should be provided in `gcm.β`, `gcm.Σ`.
 """
 function fit!(
-        gcm::GLMCopulaVCModel,
+        gcm::GLMCopulaARModel,
         solver=Ipopt.IpoptSolver(print_level=5)
     )
-    npar = gcm.p + gcm.m
+    npar = gcm.p + 2 # rho and sigma squared
     optm = MathProgBase.NonlinearModel(solver)
     # set lower bounds and upper bounds of parameters
     # diagonal entries of Cholesky factor L should be >= 0
     lb   = fill(-Inf, npar)
     ub   = fill( Inf, npar)
     offset = gcm.p + 1
-    for k in 1:gcm.m
+    ub[offset] = 1
+    for k in 1:2
         lb[offset] = 0
         offset += 1
     end
@@ -41,16 +43,13 @@ Translate model parameters in `gcm` to optimization variables in `par`.
 """
 function modelpar_to_optimpar!(
         par :: Vector,
-        gcm :: GLMCopulaVCModel
+        gcm :: GLMCopulaARModel
     )
     # β
     copyto!(par, gcm.β)
-    # L
-    offset = gcm.p + 1
-    @inbounds for k in 1:gcm.m
-        par[offset] = gcm.Σ[k]
-        offset += 1
-    end
+    # ρ, σ2
+    par[end - 1] = gcm.ρ[1]
+    par[end] = gcm.σ2[1]
     par
 end
 
@@ -60,23 +59,20 @@ end
 Translate optimization variables in `par` to the model parameters in `gcm`.
 """
 function optimpar_to_modelpar!(
-        gcm :: GLMCopulaVCModel, 
+        gcm :: GLMCopulaARModel, 
         par :: Vector
     )
     # β
     copyto!(gcm.β, 1, par, 1, gcm.p)
-    # L
-    offset = gcm.p + 1
-    @inbounds for k in 1:gcm.m
-        gcm.Σ[k] = par[offset]
-        offset   += 1
-    end
+    # ρ, σ2
+    gcm.ρ[1] = par[gcm.p + 1]
+    gcm.σ2[1] = par[gcm.p + 2]
     copyto!(gcm.θ, par)
     gcm
 end
 
 function MathProgBase.initialize(
-    gcm::GLMCopulaVCModel,
+    gcm::GLMCopulaARModel,
     requested_features::Vector{Symbol})
     for feat in requested_features
         if !(feat in [:Grad, :Hess])
@@ -85,10 +81,10 @@ function MathProgBase.initialize(
     end
 end
 
-MathProgBase.features_available(gcm::GLMCopulaVCModel) = [:Grad, :Hess]
+MathProgBase.features_available(gcm::GLMCopulaARModel) = [:Grad, :Hess]
 
 function MathProgBase.eval_f(
-        gcm :: GLMCopulaVCModel, 
+        gcm :: GLMCopulaARModel, 
         par :: Vector
     )
     optimpar_to_modelpar!(gcm, par)
@@ -96,7 +92,7 @@ function MathProgBase.eval_f(
 end
 
 function MathProgBase.eval_grad_f(
-        gcm    :: GLMCopulaVCModel, 
+        gcm    :: GLMCopulaARModel, 
         grad :: Vector, 
         par  :: Vector
     )
@@ -104,33 +100,32 @@ function MathProgBase.eval_grad_f(
     obj = loglikelihood!(gcm, true, false)
     # gradient wrt β
     copyto!(grad, gcm.∇β)
-    # gradient wrt L
-    offset = gcm.p + 1
-    @inbounds for k in 1:gcm.m
-        grad[offset] = gcm.∇Σ[k]
-        offset += 1
-    end
-    # update nuisance parameter
-    # if typeof(gcm.data[1].d) <: NegativeBinomial
-    #     new_d = update_r!(gcm)
-    #     @show new_d
-    # end
+    # gradient wrt ρ
+    grad[gcm.p + 1] = gcm.∇ρ[1]
+    # gradient wrt σ2
+    grad[gcm.p + 2] = gcm.∇σ2[1]
     @show gcm.θ
+    # @show gcm.θ
     copyto!(gcm.∇θ, grad)
     # @show gcm.∇θ
     # return objective
     obj
 end
 
-MathProgBase.eval_g(gcm::GLMCopulaVCModel, g, par) = nothing
-MathProgBase.jac_structure(gcm::GLMCopulaVCModel) = Int[], Int[]
-MathProgBase.eval_jac_g(gcm::GLMCopulaVCModel, J, par) = nothing
+MathProgBase.eval_g(gcm::GLMCopulaARModel, g, par) = nothing
+MathProgBase.jac_structure(gcm::GLMCopulaARModel) = Int[], Int[]
+MathProgBase.eval_jac_g(gcm::GLMCopulaARModel, J, par) = nothing
 
-function MathProgBase.hesslag_structure(gcm::GLMCopulaVCModel)
-    m◺ = ◺(gcm.m)
+"""
+    ◺(n::Integer)
+Triangular number n * (n+1) / 2
+"""
+@inline ◺(n::Integer) = (n * (n + 1)) >> 1
+
+function MathProgBase.hesslag_structure(gcm::GLMCopulaARModel)
     # we work on the upper triangular part of the Hessian
-    arr1 = Vector{Int}(undef, ◺(gcm.p) + m◺)
-    arr2 = Vector{Int}(undef, ◺(gcm.p) + m◺)
+    arr1 = Vector{Int}(undef, ◺(gcm.p) + ◺(2) + gcm.p)
+    arr2 = Vector{Int}(undef, ◺(gcm.p) + ◺(2) + gcm.p)
     # Hββ block
     idx  = 1    
     for j in 1:gcm.p
@@ -140,19 +135,30 @@ function MathProgBase.hesslag_structure(gcm::GLMCopulaVCModel)
             idx += 1
         end
     end
-    # Haa block
-    for j in 1:gcm.m
-        for i in 1:j
-            arr1[idx] = gcm.p + i
-            arr2[idx] = gcm.p + j
-            idx += 1
-        end
+    # rho and sigma2 
+    for j in 1:2
+        arr1[idx] = gcm.p + j
+        arr2[idx] = gcm.p + j
+        idx += 1
     end
+    arr1[idx] = gcm.p + 1
+    arr2[idx] = gcm.p + 2
+    idx += 1
+    for k in 1:gcm.p
+        arr1[idx] = gcm.p + 2
+        arr2[idx] = k
+        idx += 1
+    end
+    # for k in 1:gcm.p
+    #     arr1[idx] = gcm.p + 1
+    #     arr2[idx] = k
+    #     idx += 1
+    # end
     return (arr1, arr2)
 end
     
 function MathProgBase.eval_hesslag(
-        gcm   :: GLMCopulaVCModel, 
+        gcm   :: GLMCopulaARModel, 
         H   :: Vector{T},
         par :: Vector{T}, 
         σ   :: T, 
@@ -167,10 +173,20 @@ function MathProgBase.eval_hesslag(
         idx   += 1
     end
     # Haa block
-    @inbounds for j in 1:gcm.m, i in 1:j
-        H[idx] = gcm.HΣ[i, j]
-        idx   += 1
-    end
+    H[idx] = gcm.Hρ[1, 1]
+    idx += 1
+    H[idx] = gcm.Hσ2[1, 1]
+    idx += 1
+    H[idx] = gcm.Hρσ2[1, 1]
+    idx += 1
+    for k in 1:gcm.p
+        H[idx] = gcm.Hβσ2[k]
+        idx += 1
+    end
+    # for k in 1:gcm.p
+    #     H[idx] = gcm.Hβρ[k]
+    #     idx += 1
+    # end
     # lmul!(σ, H)
     H .*= σ
 end

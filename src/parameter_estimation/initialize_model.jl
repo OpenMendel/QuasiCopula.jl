@@ -5,7 +5,7 @@ Initialize the linear regression parameters `β` and `τ=σ0^{-2}` by the least
 squares solution for the Normal distribution.
 """
 function initialize_model!(
-    gcm::Union{GLMCopulaVCModel{T, D, Link},GLMCopulaARModel{T, D, Link}}) where {T <:BlasReal, D<:Normal, Link}
+    gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}}) where {T <:BlasReal, D<:Normal, Link}
     # accumulate sufficient statistics X'y
     xty = zeros(T, gcm.p)
     for i in eachindex(gcm.data)
@@ -24,6 +24,20 @@ function initialize_model!(
 end
 
 """
+    update_rho!(gcm, empirical_covariance_mat)
+
+Given initial estimates for 'σ2' and 'β', initialize the AR parameter 'ρ' using empirical covariance matrix of Y_1 and Y_2.
+"""
+function update_rho!(gcm, Y_1, Y_2)
+    N = length(gcm.data)
+    empirical_covariance_mat = scattermat(hcat(Y_1, Y_2))/N
+    n1 = length(gcm.data[1].y)
+    ρhat = empirical_covariance_mat[1, 2] /(inv(1 + 0.5 * n1 * gcm.σ2[1]) * sqrt(Statistics.mean(Y_1)) * sqrt(Statistics.mean(Y_2)) * gcm.σ2[1])
+    copyto!(gcm.ρ, ρhat)
+    nothing
+end
+
+"""
     initialize_model!(gcm{D}) where D<: Poisson, Bernoulli
 
 Initialize the linear regression parameters `β` by the weighted least
@@ -35,41 +49,16 @@ function initialize_model!(
     glm_regress_model(gcm)
     fill!(gcm.τ, 1.0)
     fill!(gcm.ρ, 1.0)
-    fill!(gcm.σ2, 1.0)
+    fill!(gcm.Σ, 1.0)
+    update_Σ!(gcm)
+    copyto!(gcm.σ2, gcm.Σ)
     nothing
 end
 
 function initialize_model!(
-  gcm::GLMCopulaVCModel{T, D}) where {T <: BlasReal, D}
-  println("initializing β using Newton's Algorithm under Independence Assumption")  
-
-  if typeof(gcm.data[1].d) <: NegativeBinomial
-    # for gc in gcm.data
-    #   fill!(gc.μ, 1)
-    #   fill!(gc.η, 0)
-    # end
-    # new_d = update_r!(gcm)
-    for gc in gcm.data
-      gc.d = NegativeBinomial(8)
-    end
-  end
-
-  glm_regress_model(gcm) # this calls update_res which uses r = 1
-  # update_res!(gcm)
-  # standardize_res!(gcm)
-
-
-  if typeof(gcm.data[1].d) <: NegativeBinomial
-    # for gc in gcm.data
-    #   fill!(gc.μ, 1)
-    #   fill!(gc.η, 0)
-    # end
-    new_d = update_r!(gcm)
-    for gc in gcm.data
-      gc.d = new_d
-    end
-  end
-
+  gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}}) where {T <: BlasReal, D, Link}
+  println("initializing β using Newton's Algorithm under Independence Assumption")
+  glm_regress_model(gcm)
   fill!(gcm.τ, 1.0)
   println("initializing variance components using MM-Algorithm")
   fill!(gcm.Σ, 1.0)
@@ -84,7 +73,7 @@ end
 
 Initialize beta for glm model.
 """
-function glm_regress_model(gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}})  where {T <:BlasReal, D, Link}
+function glm_regress_model(gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, NBCopulaVCModel{T, D, Link}})  where {T <:BlasReal, D, Link}
   (n, p) = gcm.ntotal, gcm.p
    fill!(gcm.β, 0.0)
    ybar = gcm.Ytotal / n
@@ -151,7 +140,7 @@ glm_score_statistic(gc, β, τ)
 
 Get gradient and hessian of beta to for a single independent vector of observations.
 """
-function glm_score_statistic(gc::Union{GLMCopulaVCObs{T, D, Link},GLMCopulaARObs{T, D, Link}},
+function glm_score_statistic(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaVCObs{T, D, Link}},
   β::Vector{T}, τ::T) where {T<: BlasReal, D, Link}
    fill!(gc.∇β, 0.0)
    fill!(gc.Hβ, 0.0)
@@ -166,7 +155,7 @@ glm_score_statistic(gcm)
 
 Get gradient and hessian of beta to do newtons method on independent glm model for all observations in gcm model object.
 """
-function glm_score_statistic(gcm::Union{GLMCopulaVCModel{T, D},GLMCopulaARModel{T, D}}) where {T <: BlasReal, D}
+function glm_score_statistic(gcm::Union{GLMCopulaVCModel{T, D}, GLMCopulaARModel{T, D}, NBCopulaVCModel{T, D, Link}}) where {T <: BlasReal, D, Link}
   fill!(gcm.∇β, 0.0)
   fill!(gcm.Hβ, 0.0)
     for i in 1:length(gcm.data)
