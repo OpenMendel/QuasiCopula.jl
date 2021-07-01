@@ -227,7 +227,7 @@ function loglikelihood!(
       inv1pq = inv(1 + qsum)
 
        # add gradient with respect to r
-       # gc.∇r .= 
+       gc.∇r .= nb_first_derivative(gc, Σ, r)
 
       if needhess
           BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 1.0, gc.Hβ) # only lower triangular
@@ -243,7 +243,7 @@ function loglikelihood!(
           gc.Hβ .+= GLMCopula.glm_hessian(gc, β)
 
           # add hessian for r
-          # gc.Hr .= 
+          gc.Hr .= nb_second_derivative(gc, Σ, r)
       end
       gc.storage_p2 .= gc.∇β .* inv1pq
       gc.∇β .= GLMCopula.glm_gradient(gc, β, τ)
@@ -272,13 +272,11 @@ function loglikelihood!(
       logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.Σ, gcm.r[1], needgrad, needhess)
       if needgrad
           gcm.∇β .+= gcm.data[i].∇β
-          # uncomment this
-          # gcm.∇r .+= gcm.data[i].∇r
+          gcm.∇r .+= gcm.data[i].∇r
       end
       if needhess
           gcm.Hβ .+= gcm.data[i].Hβ
-          # uncomment this
-          # gcm.Hr .+= gcm.data[i].Hr
+          gcm.Hr .+= gcm.data[i].Hr
       end
   end
     if needgrad
@@ -288,4 +286,54 @@ function loglikelihood!(
         gcm.HΣ .= update_HΣ!(gcm)
     end
   logl
+end
+
+"""
+# 1st derivative of loglikelihood of a sample with Σ being the variance components
+# """
+function nb_first_derivative(gc::NBCopulaVCObs, Σ::Vector{T}, r::Number) where T <: BlasReal
+    s = zero(T)
+    # 2nd term of logl
+    for j in eachindex(gc.y)
+        yi, μi = gc.y[j], gc.μ[j]
+        s += -(yi+r)/(μi+r) - log(μi+r) + 1 + log(r) + digamma(r+yi) - digamma(r)
+    end
+    # 3rd term of logl
+    resid = gc.res
+    Γ = Σ' * gc.V # Γ = a1*V1 + ... + am*Vm
+    η = gc.η
+    D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
+    dD = Diagonal([-exp(2η[i]) / (2r^1.5 * sqrt(exp(η[i])*(exp(η[i])+r))) for i in 1:length(η)])
+    dresid = -inv(D)*dD*resid
+    s += resid'*Γ*dresid / (1 + 0.5resid'*Γ*resid)
+    return s
+end
+
+"""
+2nd derivative of loglikelihood of a sample with Σ being the variance components
+"""
+function nb_second_derivative(gc::NBCopulaVCObs, Σ::Vector{T}, r::Number) where T <: BlasReal
+    s = zero(T)
+    # 2nd term of logl
+    for j in eachindex(gc.y)
+        yi, μi = gc.y[j], gc.μ[j]
+        s += (yi+r)/(μi+r)^2 - 2/(μi+r) + 1/r + trigamma(r+yi) - trigamma(r)
+    end
+    # 3rd term of logl
+    Γ = Σ' * gc.V # Γ = a1*V1 + ... + am*Vm
+    η = gc.η
+    D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
+    dD = Diagonal([-exp(2η[i]) / (2r^1.5 * sqrt(exp(η[i])*(exp(η[i])+r))) for i in 1:length(η)])
+    d2D = Diagonal([(exp(3η[i]) / (4r^1.5 * (exp(η[i])*(exp(η[i])+r))^(1.5))) + 
+        (3exp(2η[i]) / (4r^(2.5)*sqrt(exp(η[i])*(exp(η[i])+r)))) for i in 1:length(η)])
+    resid = gc.res
+    dresid = -inv(D)*dD*resid
+    d2resid = (2inv(D)*dD*inv(D)*dD - inv(D)*d2D)*resid
+    denom = 1 + 0.5resid'*Γ*resid
+    term1 = (resid'*Γ*dresid / denom)^2
+    term2 = dresid'*Γ*dresid / denom
+    term3 = resid'*Γ*d2resid / denom
+    s += -term1 + term2 + term3
+
+    return s
 end
