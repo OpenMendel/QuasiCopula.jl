@@ -80,9 +80,9 @@ function update_res!(
    for i in 1:length(gc.y)
        gc.μ[i] = GLM.linkinv(gc.link, gc.η[i])
        gc.varμ[i] = GLM.glmvar(gc.d, gc.μ[i])
-       gc.dμ[i] = GLM.mueta(gc.link, gc.η[i])
+       gc.dμ[i] = gc.link == GLM.LogLink() ? gc.μ[i] : GLM.mueta(gc.link, gc.η[i])
        gc.w1[i] = gc.dμ[i] / gc.varμ[i]
-       gc.w2[i] = gc.dμ[i]^2 / gc.varμ[i]
+       gc.w2[i] = gc.w1[i] * gc.dμ[i]
        gc.res[i] = gc.y[i] - gc.μ[i]
    end
    return gc.res

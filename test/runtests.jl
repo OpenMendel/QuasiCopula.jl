@@ -20,6 +20,8 @@ module PkgTest
 # include("estimation/vcm/simulate_poisson_mixedmodels.jl")
 
 # autoregressive covariance structure developing
-include("estimation/ar/ar_utilities.jl")
+# include("estimation/ar/ar_utilities.jl")
+
+include("perf.jl")
 
 end
