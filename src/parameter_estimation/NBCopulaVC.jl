@@ -131,12 +131,12 @@ function NBCopulaVCModel(gcs::Vector{NBCopulaVCObs{T, D, Link}}) where {T <: Bla
     τ   = [1.0]
     Σ   = Vector{T}(undef, m)
     r   = [1.0]
-    θ   = Vector{T}(undef, m + p)
+    θ   = Vector{T}(undef, m + p + 1) # should this +1 ??
     ∇β  = Vector{T}(undef, p)
     ∇τ  = Vector{T}(undef, 1)
     ∇Σ  = Vector{T}(undef, m)
     ∇r  = Vector{T}(undef, 1)
-    ∇θ  = Vector{T}(undef, m + p)
+    ∇θ  = Vector{T}(undef, m + p + 1) # should this +1 ??
     XtX = zeros(T, p, p) # sum_i xi'xi
     Hβ  = Matrix{T}(undef, p, p)
     HΣ  = Matrix{T}(undef, m, m)
