@@ -71,9 +71,10 @@ function loglikelihood!(
       fill!(gc.∇Σ, 0) 
   end
   needhess && fill!(gc.Hβ, 0)
-  fill!(gc.∇β, 0.0)
   update_res!(gc, β)
+  # @show gc.res
   standardize_res!(gc)
+  # @show gc.res
   fill!(gc.∇resβ, 0.0) # fill gradient of residual vector with 0
   std_res_differential!(gc) # this will compute ∇resβ
 
@@ -108,7 +109,10 @@ function loglikelihood!(
           gc.Hβ .+= GLMCopula.glm_hessian(gc, β)
       end
       gc.storage_p2 .= gc.∇β .* inv1pq
+      # @show gc.res
+      gc.res .= gc.y .- gc.μ
       gc.∇β .= GLMCopula.glm_gradient(gc, β, τ)
+      # @show gc.res
       gc.∇β .+= gc.storage_p2
   end
   logl

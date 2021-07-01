@@ -77,10 +77,11 @@ function update_res!(
    gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}},
    β::Vector{T}) where {T <: BlasReal, D, Link}
    mul!(gc.η, gc.X, β)
-   for i in 1:length(gc.y)
+   @inbounds for i in 1:length(gc.y)
        gc.μ[i] = GLM.linkinv(gc.link, gc.η[i])
        gc.varμ[i] = GLM.glmvar(gc.d, gc.μ[i])
-       gc.dμ[i] = gc.link == GLM.LogLink() ? gc.μ[i] : GLM.mueta(gc.link, gc.η[i])
+       # gc.dμ[i] = GLM.mueta(gc.link, gc.η[i])
+       gc.dμ[i] = (gc.link == GLM.LogLink() ? gc.μ[i] : GLM.mueta(gc.link, gc.η[i]))
        gc.w1[i] = gc.dμ[i] / gc.varμ[i]
        gc.w2[i] = gc.w1[i] * gc.dμ[i]
        gc.res[i] = gc.y[i] - gc.μ[i]
@@ -91,7 +92,7 @@ end
 function update_res!(
     gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}}
     ) where {T <: BlasReal, D, Link}
-    for i in eachindex(gcm.data)
+    @inbounds for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
     end
     nothing
@@ -101,7 +102,7 @@ function standardize_res!(
     gc::GLMCopulaVCObs{T, D, Link},
     σinv::T
     ) where {T <: BlasReal, D, Link}
-    for j in eachindex(gc.y)
+    @inbounds for j in eachindex(gc.y)
         gc.res[j] *= σinv
     end
 end
@@ -109,7 +110,7 @@ end
 function standardize_res!(
     gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}}
     ) where {T <: BlasReal, D, Link}
-    for j in eachindex(gc.y)
+    @inbounds for j in eachindex(gc.y)
         σinv = inv(sqrt(gc.varμ[j]))
         gc.res[j] *= σinv
     end
@@ -121,11 +122,11 @@ function standardize_res!(
     # standardize residual
     if gcm.d[1] == Normal()
         σinv = sqrt(gcm.τ[1])# general variance
-        for i in eachindex(gcm.data)
+        @inbounds for i in eachindex(gcm.data)
             standardize_res!(gcm.data[i], σinv)
         end
     else
-        for i in eachindex(gcm.data)
+        @inbounds for i in eachindex(gcm.data)
             standardize_res!(gcm.data[i])
         end
     end

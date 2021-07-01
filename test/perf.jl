@@ -33,8 +33,13 @@ gcm = GLMCopulaVCModel(gcs)
 initialize_model!(gcm)
 @show gcm.β
 @show gcm.Σ
-@test loglikelihood!(gcm, true, true) ≈ -1.1093040785410171e6
-
+# @test loglikelihood!(gcm, true, true) ≈ -1.1093040785410171e6
+gcm2 = deepcopy(gcm)
+@time GLMCopula.fit!(gcm2, IpoptSolver(print_level = 1, max_iter = 100, mehrotra_algorithm = "yes", warm_start_init_point = "yes", hessian_approximation = "exact"))
+@time GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, mehrotra_algorithm = "yes", warm_start_init_point = "yes", hessian_approximation = "exact"))
+println("estimated mean = $(exp(gcm.β[1])); true mean value= $mean")
+println("estimated variance component 1 = $(gcm.Σ[1]); true variance component 1 = $variance_component_1")
+println("estimated variance component 2 = $(gcm.Σ[2]); true variance component 2 = $variance_component_2");
 @info "benchmarking..."
 gcm.β[1] = log(5)
 gcm.Σ[1] = gcm.Σ[2] = 0.1
