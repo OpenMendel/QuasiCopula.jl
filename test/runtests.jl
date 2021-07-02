@@ -21,7 +21,9 @@ module PkgTest
 
 # autoregressive covariance structure developing
 # include("estimation/ar/ar_utilities.jl")
+include("estimation/ar/testar.jl")
 
+# profiling and benchmarking
 include("perf.jl")
 
 end

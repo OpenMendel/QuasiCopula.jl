@@ -1,10 +1,14 @@
 export GLMCopulaARObs, GLMCopulaARModel, get_AR_cov, get_∇ARV, get_∇2ARV
+export get_V!, get_∇V!, get_∇2V!
 export update_rho!
 struct GLMCopulaARObs{T <: BlasReal, D, Link}
     # data
+    n::T
+    p::T
     y::Vector{T}
     X::Matrix{T}
     V::Matrix{T}
+    vec::Vector{T}
     # working arrays
     ∇ARV::Matrix{T}
     ∇2ARV::Matrix{T}
@@ -50,6 +54,7 @@ function GLMCopulaARObs(
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
     V = Matrix{T}(I, n, n)
+    vec = Vector{T}(undef, n)
     ∇ARV = Matrix{T}(undef, n, n)
     ∇2ARV = Matrix{T}(undef, n, n)
     ∇β  = Vector{T}(undef, p)
@@ -83,7 +88,7 @@ function GLMCopulaARObs(
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
-    GLMCopulaARObs{T, D, Link}(y, X, V, ∇ARV, ∇2ARV, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇ρ, ∇σ2, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2,# Hβρ,
+    GLMCopulaARObs{T, D, Link}(n, p, y, X, V, vec, ∇ARV, ∇2ARV, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇ρ, ∇σ2, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2,# Hβρ,
        res, t, q, xtx, storage_n, storage_p1, storage_np, storage_pp, added_term_numerator, added_term2,
         η, μ, varμ, dμ, d, link, wt, w1, w2)
 end
@@ -169,67 +174,50 @@ function GLMCopulaARModel(gcs::Vector{GLMCopulaARObs{T, D, Link}}) where {T <: B
         TR, QF, storage_n, storage_m, storage_Σ, d, link)
 end
 
+# use ToeplitzMatrices
 """
-    get_AR_cov(n, ρ, σ2, V)
-Forms the AR(1) covariance structure given n (size of cluster), ρ (correlation parameter), σ2 (noise parameter)
+    get_V!(ρ, gc)
+Forms the AR(1) covariance structure given ρ (correlation parameter), gc (single cluster observation) object. 
 """
-function get_AR_cov(n, ρ, σ2, V)
-    fill!(V, 1.0)
-    @inbounds for i in 1:n
-        @inbounds for j in i+1:n
-            power = j - i
-            @inbounds for k in 1:power
-                V[i, j] *= ρ
-            end
-            V[j, i] = V[i, j]
-        end
+function get_V!(ρ, gc)
+    gc.vec[1] = 1.0
+    for i in 2:Integer(gc.n)
+        gc.vec[i] = gc.vec[i-1] * ρ
     end
-    V
+    # gc.vec .= [ρ^i for i in 0:gc.n-1]
+    gc.V .= ToeplitzMatrices.SymmetricToeplitz(gc.vec)
+    nothing
 end
 
 """
-    get_∇ARV(n, ρ, σ2, V)
-Forms the first derivative of AR(1) covariance structure wrt to ρ, given n (size of cluster), ρ (correlation parameter), σ2 (noise parameter)
+    get_∇V!(ρ, gc)
+Forms the first derivative of AR(1) covariance structure wrt to ρ, given ρ (correlation parameter)
 """
-function get_∇ARV(n, ρ, σ2, ∇ARV)
-    @inbounds for i in 1:n
-        ∇ARV[i, i] = 0.0
-        @inbounds for j in i+1:n
-            power = j - i - 1
-            ∇ARV[i, j] = (j-i)
-            @inbounds for k in 1:power
-                ∇ARV[i, j] *= ρ
-            end
-            ∇ARV[j, i] = ∇ARV[i, j]
-        end
+function get_∇V!(ρ, gc)
+    gc.vec[1] = 0.0
+    gc.vec[2] = 1.0
+    for i in 3:Integer(gc.n)
+        gc.vec[i] = (i-1) * inv(i-2) * gc.vec[i-1] * ρ
     end
-    ∇ARV
+    gc.∇ARV .= ToeplitzMatrices.SymmetricToeplitz(gc.vec)
+    nothing
 end
 
 """
-    get_∇A2RV(n, ρ, σ2, V)
+    get_∇2V!(n, ρ, σ2, V)
 Forms the second derivative of AR(1) covariance structure wrt to ρ, given n (size of cluster), ρ (correlation parameter), σ2 (noise parameter)
 """
-function get_∇2ARV(n, ρ, σ2, ∇2ARV)
-    @inbounds for i in 1:n
-        ∇2ARV[i, i] = 0.0
-        @inbounds for j in i+1:n
-            pw = (j-i-1)
-            if pw == 0
-                ∇2ARV[i, j] = 0.0
-            else
-                ∇2ARV[i, j] = (pw + 1)*(pw)
-                @inbounds for k in 1:pw - 1
-                    ∇2ARV[i, j] *= ρ
-                end
-            end
-            ∇2ARV[j, i] = ∇2ARV[i, j]
-        end
+function get_∇2V!(ρ, gc)
+    gc.vec[1] = 0.0
+    gc.vec[2] = 0.0
+    gc.vec[3] = 2.0
+    for i in 4:Integer(gc.n)
+        gc.vec[i] = (i - 1) * inv(i - 3) * gc.vec[i-1] * ρ
     end
-    ∇2ARV
+    gc.∇2ARV .= ToeplitzMatrices.SymmetricToeplitz(gc.vec)
+    nothing
 end
 
-# one that works but is slow
 function loglikelihood!(
     gc::GLMCopulaARObs{T, D, Link},
     β::Vector{T},
@@ -242,7 +230,8 @@ function loglikelihood!(
     needgrad = needgrad || needhess
     if needgrad
         fill!(gc.∇β, 0)
-        gc.∇ARV .= get_∇ARV(n, ρ, σ2, gc.∇ARV)
+        # gc.∇ARV .= get_∇ARV(n, ρ, σ2, gc.∇ARV)
+        get_∇V!(ρ, gc)
     end
     needhess && fill!(gc.Hβ, 0)
     fill!(gc.∇β, 0.0)
@@ -252,7 +241,8 @@ function loglikelihood!(
     std_res_differential!(gc) # this will compute ∇resβ
 
     # form V
-    gc.V .= get_AR_cov(n, ρ, σ2, gc.V)
+    # gc.V .= get_AR_cov(n, ρ, σ2, gc.V)
+    get_V!(ρ, gc)
 
     #evaluate copula loglikelihood
     mul!(gc.storage_n, gc.V, gc.res) # storage_n = V[k] * res
@@ -288,7 +278,8 @@ function loglikelihood!(
         # gradient with respect to sigma2
         gc.∇σ2 .= -0.5 * n * inv(c1) .+ inv(c2) * 0.5 * q
       if needhess
-            gc.∇2ARV .= get_∇2ARV(n, ρ, σ2, gc.∇2ARV)
+            # gc.∇2ARV .= get_∇2ARV(n, ρ, σ2, gc.∇2ARV)
+            get_∇2V!(ρ, gc)
             mul!(gc.storage_n, gc.∇2ARV, gc.res) # storage_n = ∇ARV * res
             q3 = dot(gc.res, gc.storage_n) # 
             # hessian for rho
@@ -317,6 +308,7 @@ function loglikelihood!(
             gc.Hβ .+= GLMCopula.glm_hessian(gc, β)
       end
       gc.∇β .= gc.∇β .* inv1pq
+      gc.res .= gc.y .- gc.μ
       gc.∇β .+= GLMCopula.glm_gradient(gc, β, 1.0)
     end
     logl
