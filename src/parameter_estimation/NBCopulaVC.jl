@@ -299,7 +299,7 @@ function nb_first_derivative(gc::NBCopulaVCObs, Σ::Vector{T}, r::Number) where 
         s += -(yi+r)/(μi+r) - log(μi+r) + 1 + log(r) + digamma(r+yi) - digamma(r)
     end
     # 3rd term of logl
-    resid = gc.res
+    resid = gc.res # res = inv(D)(y - μ)
     Γ = Σ' * gc.V # Γ = a1*V1 + ... + am*Vm
     η = gc.η
     D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
