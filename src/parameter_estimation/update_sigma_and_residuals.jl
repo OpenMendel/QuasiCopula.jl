@@ -196,7 +196,6 @@ function update_r_newton!(gcm::GLMCopulaVCModel; maxIter=100, convTol=1e-6)
         for i in eachindex(gcm.data)
             # 2nd term of logl
             for j in eachindex(gcm.data[i].y)
-                gcm.data[i].μ[j] < 0 && println(gcm.data[i].μ[j])
                 s += tmp(gcm.data[i].y[j], gcm.data[i].μ[j])
             end
             # 3rd term of logl
