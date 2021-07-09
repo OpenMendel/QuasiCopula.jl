@@ -1,6 +1,6 @@
 export NBCopulaVCObs, NBCopulaVCModel
 ### first structures
-struct NBCopulaVCObs{T <: BlasReal, D, Link}
+mutable struct NBCopulaVCObs{T <: BlasReal, D, Link} # d changes, so must be mutable
     # data
     y::Vector{T}
     X::Matrix{T}
@@ -180,7 +180,6 @@ function component_loglikelihood(gc::NBCopulaVCObs{T, D, Link}, r::T) where {T <
     logl
 end
 
-
 """
     loglikelihood!(gc::NBCopulaVCObs{T, D, Link}, β, τ, Σ, r)
 Calculates the loglikelihood of observing `y` given parameters for `β`, `τ = 1`, `Σ`, and `r`for Negative Binomial distribution.
@@ -212,14 +211,16 @@ function loglikelihood!(
   @inbounds for k in 1:m
       mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
       if needgrad
-          BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
+          BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual) SHOULDNT THIS BE res^t*Γ*res? NOT ∇resβ*Γ*res 
       end
       gc.q[k] = dot(gc.res, gc.storage_n) / 2
   end
-  # loglikelihood
+  # 2nd term of loglikelihood
   logl = GLMCopula.component_loglikelihood(gc, r)
+  # 1st term of loglikelihood
   tsum = dot(Σ, gc.t)
   logl += -log(1 + tsum)
+  # 3rd term of loglikelihood
   qsum  = dot(Σ, gc.q)
   logl += log(1 + qsum)
   

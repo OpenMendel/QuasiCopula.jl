@@ -59,6 +59,9 @@ function initialize_model!(
   gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}}) where {T <: BlasReal, D, Link}
   println("initializing β using Newton's Algorithm under Independence Assumption")
   glm_regress_model(gcm)
+  if typeof(gcm) <: NBCopulaVCModel
+    update_r!(gcm) # maximum likelihood using Newton
+  end
   fill!(gcm.τ, 1.0)
   println("initializing variance components using MM-Algorithm")
   fill!(gcm.Σ, 1.0)

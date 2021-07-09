@@ -36,7 +36,7 @@ function update_Σ_jensen!(
         mul!(gcm.storage_n, gcm.QF, gcm.Σ) # gcm.storage_n[i] = sum_k^m qi[k] sigmai_[k] # denom of numerator
         if gcm.d[1] == Normal()
             gcm.τ[1] = GLMCopula.update_τ(gcm.τ[1], gcm.storage_n, gcm.ntotal, rsstotal, 1)
-            else
+        else
             fill!(gcm.τ, 1.0)
         end
 
@@ -79,7 +79,7 @@ function update_res!(
    mul!(gc.η, gc.X, β)
    for i in 1:length(gc.y)
        gc.μ[i] = GLM.linkinv(gc.link, gc.η[i])
-       gc.varμ[i] = GLM.glmvar(gc.d, gc.μ[i])
+       gc.varμ[i] = GLM.glmvar(gc.d, gc.μ[i]) # Note: for negative binomial, d.r is used
        gc.dμ[i] = GLM.mueta(gc.link, gc.η[i])
        gc.w1[i] = gc.dμ[i] / gc.varμ[i]
        gc.w2[i] = gc.dμ[i]^2 / gc.varμ[i]
@@ -185,10 +185,10 @@ Performs maximum loglikelihood estimation of the nuisance paramter for negative
 binomial model using Newton's algorithm. Will run a maximum of `maxIter` and
 convergence is defaulted to `convTol`.
 """
-function update_r_newton!(gcm::GLMCopulaVCModel; maxIter=100, convTol=1e-6)
-    
+function update_r_newton!(gcm::NBCopulaVCModel; maxIter=100, convTol=1e-6)
+
     T = eltype(gcm.β)
-    r = gcm.data[1].d.r # estimated r in previous iteration
+    r = gcm.r[1] # estimated r in previous iteration
 
     function first_derivative(gcm, r)
         s = zero(T)
@@ -239,14 +239,23 @@ function update_r_newton!(gcm::GLMCopulaVCModel; maxIter=100, convTol=1e-6)
 
     function negbin_component_loglikelihood(gcm, r)
         logl = zero(T)
-        for (i, gc) in enumerate(gcm.data)
-            gc.d = NegativeBinomial(r, T(0.5))
+        for gc in gcm.data
+            n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
+            # fill!(gc.∇β, 0.0)
+            update_res!(gc, gcm.β)
+            standardize_res!(gc)
+            # fill!(gc.∇resβ, 0.0) # fill gradient of residual vector with 0
+            std_res_differential!(gc) # this will compute ∇resβ
+            @inbounds for k in 1:m
+                mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
+                # BLAS.gemv!('T', gcm.Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # gc.∇β += ∇resβ*Γ*res (standardized residual) 
+                gc.q[k] = dot(gc.res, gc.storage_n) / 2 # gc.q[k] = 0.5res' * V[k] * res
+            end
             # 2nd term of logl
-            logl += component_loglikelihood(gc)
+            logl += component_loglikelihood(gc, r)
             # 3rd term of logl
-            resid = gcm.data[i].res
-            Γ = gcm.Σ' * gc.V # Γ = a1*V1 + ... + am*Vm
-            logl += log(1 + 0.5resid'*Γ*resid)
+            qsum  = dot(gcm.Σ, gc.q)
+            logl += log(1 + qsum)
         end
         return logl
     end
@@ -265,12 +274,13 @@ function update_r_newton!(gcm::GLMCopulaVCModel; maxIter=100, convTol=1e-6)
     new_r = one(T)
     stepsize = one(T)
     for i in 1:maxIter
+        old_logl = negbin_component_loglikelihood(gcm, r)
+
         # run 1 iteration of Newton's algorithm
         increment = newton_increment(gcm, r)
         new_r = r - stepsize * increment
 
         # linesearch
-        old_logl = negbin_component_loglikelihood(gcm, r)
         for j in 1:20
             if new_r <= 0
                 stepsize = stepsize / 2
@@ -287,21 +297,31 @@ function update_r_newton!(gcm::GLMCopulaVCModel; maxIter=100, convTol=1e-6)
         end
 
         #check convergence
-        i == maxIter && error("reached max iter in newton")
-        if abs(r - new_r) <= convTol
-            return NegativeBinomial(new_r, T(0.5))
+        if abs(r - new_r) ≤ convTol
+            break
         else
             r = new_r
         end
     end
 
-    return NegativeBinomial(r, T(0.5))
+    return new_r
 end
 
-function update_r!(gcm::GLMCopulaVCModel)
-    new_d = update_r_newton!(gcm)
+function update_r!(gcm::NBCopulaVCModel)
+    fill!(gcm.Σ, 1)
+    fill!(gcm.τ, 1)
     for gc in gcm.data
-        gc.d = new_d
+        fill!(gc.μ, 0)
+        fill!(gc.η, 0)
+        fill!(gc.∇β, 0)
+        fill!(gc.∇τ, 0)
+        fill!(gc.∇Σ, 0)
+        fill!(gc.Hβ, 0)
     end
-    return new_d
+    new_r = update_r_newton!(gcm)
+    gcm.r[1] = new_r
+    for gc in gcm.data
+        gc.d = NegativeBinomial(new_r)
+    end
+    return nothing
 end
