@@ -31,6 +31,8 @@ struct GLMCopulaVCObs{T <: BlasReal, D, Link}
     q::Vector{T}    # q[k] = res_i' * V_i[k] * res_i / 2
     xtx::Matrix{T}  # Xi'Xi
     storage_n::Vector{T}
+    m1::Vector{T}
+    m2::Vector{T}
     storage_p1::Vector{T}
     storage_p2::Vector{T}
     storage_np::Matrix{T}
@@ -71,6 +73,8 @@ function GLMCopulaVCObs(
     q   = Vector{T}(undef, m)
     xtx = transpose(X) * X
     storage_n = Vector{T}(undef, n)
+    m1        = Vector{T}(undef, m)
+    m2        = Vector{T}(undef, m)
     storage_p1 = Vector{T}(undef, p)
     storage_p2 = Vector{T}(undef, p)
     storage_np = Matrix{T}(undef, n, p)
@@ -87,7 +91,7 @@ function GLMCopulaVCObs(
     w2 = Vector{T}(undef, n)
     # constructor
     GLMCopulaVCObs{T, D, Link}(y, X, V, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇τ, ∇Σ, Hβ, HΣ,
-        Hτ, res, t, q, xtx, storage_n, storage_p1, storage_p2, storage_np, storage_pp, added_term_numerator, added_term2, η, μ, varμ, dμ, d, link, wt, w1, w2)
+        Hτ, res, t, q, xtx, storage_n, m1, m2, storage_p1, storage_p2, storage_np, storage_pp, added_term_numerator, added_term2, η, μ, varμ, dμ, d, link, wt, w1, w2)
 end
 
 """
@@ -117,12 +121,14 @@ struct GLMCopulaVCModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalu
     Hβ::Matrix{T}    # Hessian from all observations
     HΣ::Matrix{T}
     Hτ::Matrix{T}
+    Ainv::Matrix{T}
+    Aevec::Matrix{T}
+    M::Matrix{T}
+    vcov::Matrix{T}
+    ψ::Vector{T}
     TR::Matrix{T}         # n-by-m matrix with tik = tr(Vi[k]) / 2
     QF::Matrix{T}         # n-by-m matrix with qik = res_i' Vi[k] res_i
-    hess1::Matrix{T}      # holds transpose(gcm.QF) * Diagonal(gcm.storage_n) required for outer product in hessian term 1 
-    hess2::Matrix{T}      # holds transpose(gcm.TR) * Diagonal(gcm.storage_n2) required for outer product in hessian term 2 
     storage_n::Vector{T}
-    storage_n2::Vector{T}
     storage_m::Vector{T}
     storage_Σ::Vector{T}
     d::Vector{D}
@@ -131,23 +137,28 @@ end
 
 function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: BlasReal, D, Link}
     n, p, m = length(gcs), size(gcs[1].X, 2), length(gcs[1].V)
-    β   = Vector{T}(undef, p)
-    τ   = [1.0]
-    Σ   = Vector{T}(undef, m)
-    θ   = Vector{T}(undef, m + p)
-    ∇β  = Vector{T}(undef, p)
-    ∇τ  = Vector{T}(undef, 1)
-    ∇Σ  = Vector{T}(undef, m)
-    ∇θ  = Vector{T}(undef, m + p)
-    XtX = zeros(T, p, p) # sum_i xi'xi
-    Hβ  = Matrix{T}(undef, p, p)
-    HΣ  = Matrix{T}(undef, m, m)
-    Hτ  = Matrix{T}(undef, 1, 1)
-    TR  = Matrix{T}(undef, n, m) # collect trace terms
-    Ytotal = 0.0
-    ntotal = 0.0
-    d = Vector{D}(undef, n)
-    link = Vector{Link}(undef, n)
+    β       = Vector{T}(undef, p)
+    τ       = [1.0]
+    Σ       = Vector{T}(undef, m)
+    θ       = Vector{T}(undef, m + p)
+    ∇β      = Vector{T}(undef, p)
+    ∇τ      = Vector{T}(undef, 1)
+    ∇Σ      = Vector{T}(undef, m)
+    ∇θ      = Vector{T}(undef, m + p)
+    XtX     = zeros(T, p, p) # sum_i xi'xi
+    Hβ      = Matrix{T}(undef, p, p)
+    HΣ      = Matrix{T}(undef, m, m)
+    Hτ      = Matrix{T}(undef, 1, 1)
+    Ainv    = zeros(T, p + m, p + m)
+    Aevec   = zeros(T, p + m, p + m)
+    M       = zeros(T, p + m, p + m)
+    vcov    = zeros(T, p + m, p + m)
+    ψ       = Vector{T}(undef, p + m)
+    TR      = Matrix{T}(undef, n, m) # collect trace terms
+    Ytotal  = 0.0
+    ntotal  = 0.0
+    d       = Vector{D}(undef, n)
+    link    = Vector{Link}(undef, n)
     for i in eachindex(gcs)
         ntotal  += length(gcs[i].y)
         Ytotal  += sum(gcs[i].y)
@@ -157,15 +168,12 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: B
         link[i] = gcs[i].link
     end
     QF        = Matrix{T}(undef, n, m)
-    hess1     = Matrix{T}(undef, m, n)
-    hess2     = Matrix{T}(undef, m, n)
     storage_n = Vector{T}(undef, n)
-    storage_n2 = Vector{T}(undef, n)
     storage_m = Vector{T}(undef, m)
     storage_Σ = Vector{T}(undef, m)
     GLMCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, p, m, β, τ, Σ, θ,
-        ∇β, ∇τ, ∇Σ, ∇θ, XtX, Hβ, HΣ, Hτ, TR, QF, hess1, hess2,
-        storage_n, storage_n2, storage_m, storage_Σ, d, link)
+        ∇β, ∇τ, ∇Σ, ∇θ, XtX, Hβ, HΣ, Hτ, Ainv, Aevec, M, vcov, ψ, TR, QF,
+        storage_n, storage_m, storage_Σ, d, link)
 end
 
 include("parameter_estimation/autoregressive.jl")
@@ -180,5 +188,6 @@ include("parameter_estimation/update_sigma_and_residuals.jl")
 include("parameter_estimation/fit_ar.jl")
 include("parameter_estimation/fit_new.jl") # only initializes using MM-algorithm does joint estimation using newton after
 include("parameter_estimation/fit_nb.jl")
+include("parameter_estimation/inference_ci.jl")
 # include("parameter_estimation/fit_old.jl") # only uses MM-algorithm
 end # module    
