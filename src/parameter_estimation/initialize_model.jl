@@ -56,19 +56,65 @@ function initialize_model!(
 end
 
 function initialize_model!(
-  gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}}) where {T <: BlasReal, D, Link}
-  println("initializing β using Newton's Algorithm under Independence Assumption")
-  glm_regress_model(gcm)
-  if typeof(gcm) <: NBCopulaVCModel
-    update_r!(gcm) # maximum likelihood using Newton
-  end
-  fill!(gcm.τ, 1.0)
-  println("initializing variance components using MM-Algorithm")
-  fill!(gcm.Σ, 1.0)
-  update_Σ!(gcm)
-  @show gcm.Σ
+    gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
+    println("initializing β using Newton's Algorithm under Independence Assumption")
+    glm_regress_model(gcm)
+    fill!(gcm.τ, 1.0)
+    println("initializing variance components using MM-Algorithm")
+    fill!(gcm.Σ, 1.0)
+    update_Σ!(gcm)
+    @show gcm.Σ
 
-  nothing
+    nothing
+end
+
+# code inspired from https://github.com/JuliaStats/GLM.jl/blob/master/src/negbinfit.jl
+function initialize_model!(
+    gcm::NBCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
+
+    # fit a Poisson regression model if the user does not specify an initial r
+    if gcm.d[1].r == 1
+        println("Initializing NegBin r to Poisson regression values")
+        nsample = length(gcm.data)
+        gcsPoisson = Vector{GLMCopulaVCObs{T, Poisson{T}, LogLink}}(undef, nsample)
+        for (i, gc) in enumerate(gcm.data)
+            gcsPoisson[i] = GLMCopulaVCObs(gc.y, gc.X, gc.V, Poisson(), LogLink())
+        end
+        gcmPoisson = GLMCopulaVCModel(gcsPoisson)
+        initialize_model!(gcmPoisson)
+
+        println("hiiii gcmPoisson.Σ = $(gcmPoisson.Σ)")
+
+        GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 5, derivative_test = "first-order", 
+            mehrotra_algorithm ="yes", warm_start_init_point="yes", max_iter = 200,
+            hessian_approximation = "exact"))
+
+        println("byeee gcmPoisson.Σ = $(gcmPoisson.Σ)")
+        println("byeee gcmPoisson.τ = $(gcmPoisson.τ)")
+        println("byeee gcmPoisson.β = $(gcmPoisson.β)")
+        println("byeee gcmPoisson.θ = $(gcmPoisson.θ)")
+        
+        for i in 1:nsample
+            copyto!(gcm.data[i].μ, gcmPoisson.data[i].μ)
+            copyto!(gcm.data[i].η, gcmPoisson.data[i].η)
+        end
+        copyto!(gcm.τ, gcmPoisson.τ)
+        copyto!(gcm.β, gcmPoisson.β)
+        update_r!(gcm) # maximum likelihood using Newton
+    else
+        fill!(gcm.τ, 1)
+        glm_regress_model(gcm) # uses initial_r
+        update_r!(gcm) # maximum likelihood using Newton
+    end
+
+    println("initializing variance components using MM-Algorithm")
+    fill!(gcm.Σ, 1)
+    update_Σ!(gcm)
+
+    println("r initialized to be $(gcm.r[1])")
+    println("huehuehue gcm.Σ = $(gcm.Σ)")
+
+    nothing
 end
 
 """

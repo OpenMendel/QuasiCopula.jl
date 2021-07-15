@@ -263,11 +263,12 @@ function update_r_newton!(gcm::NBCopulaVCModel; maxIter=100, convTol=1e-6)
     function newton_increment(gcm, r)
         dx = first_derivative(gcm, r)
         dx2 = second_derivative(gcm, r)
-        if dx2 < 0
-            increment = dx / dx2
-        else 
-            increment = dx # use gradient ascent if hessian not negative definite
-        end
+        increment = dx / dx2
+        # if dx2 < 0
+        #     increment = dx / dx2
+        # else 
+        #     increment = dx # use gradient ascent if hessian not negative definite
+        # end
         return increment
     end
 
@@ -279,22 +280,23 @@ function update_r_newton!(gcm::NBCopulaVCModel; maxIter=100, convTol=1e-6)
         # run 1 iteration of Newton's algorithm
         increment = newton_increment(gcm, r)
         new_r = r - stepsize * increment
+        println("new_r = $new_r")
 
         # linesearch
-        for j in 1:20
-            if new_r <= 0
-                stepsize = stepsize / 2
-                new_r = r - stepsize * increment
-            else
-                new_logl = negbin_component_loglikelihood(gcm, new_r)
-                if old_logl >= new_logl
-                    stepsize = stepsize / 2
-                    new_r = r - stepsize * increment
-                else
-                    break
-                end
-            end
-        end
+        # for j in 1:20
+        #     if new_r <= 0
+        #         stepsize = stepsize / 2
+        #         new_r = r - stepsize * increment
+        #     else
+        #         new_logl = negbin_component_loglikelihood(gcm, new_r)
+        #         if old_logl >= new_logl
+        #             stepsize = stepsize / 2
+        #             new_r = r - stepsize * increment
+        #         else
+        #             break
+        #         end
+        #     end
+        # end
 
         #check convergence
         if abs(r - new_r) ≤ convTol
@@ -308,11 +310,9 @@ function update_r_newton!(gcm::NBCopulaVCModel; maxIter=100, convTol=1e-6)
 end
 
 function update_r!(gcm::NBCopulaVCModel)
-    fill!(gcm.Σ, 1)
-    fill!(gcm.τ, 1)
     for gc in gcm.data
-        fill!(gc.μ, 0)
-        fill!(gc.η, 0)
+        # fill!(gc.μ, 0)
+        # fill!(gc.η, 0)
         fill!(gc.∇β, 0)
         fill!(gc.∇τ, 0)
         fill!(gc.∇Σ, 0)
