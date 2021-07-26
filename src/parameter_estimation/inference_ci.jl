@@ -43,13 +43,13 @@ coef(gcm::GLMCopulaVCModel) = [gcm.β; gcm.Σ]
     stderror(gcm::GLMCopulaVCModel)
 Get the estimated standard errors from the asymptotic variance covariance matrix of the parameters.
 """
-stderror(gcm::GLMCopulaVCModel) = [sqrt(gcm.vcov[i, i]) for i in 1:(gcm.p + gcm.m)]
+stderror(gcm::GLMCopulaVCModel) = [sqrt(abs(gcm.vcov[i, i])) for i in 1:(gcm.p + gcm.m)]
 
 """
     confint(gcm::GLMCopulaVCModel, level::Real) 
 Get the confidence interval for each of the estimated parameters at level (default level = 95%).
 """
-confint(gcm::GLMCopulaVCModel, level::Real) = hcat(coef(gcm) + stderror(gcm) * quantile(Normal(), (1. - level) / 2.), coef(gcm) - stderror(gcm) * quantile(Normal(), (1. - level) / 2.))
+confint(gcm::GLMCopulaVCModel, level::Real) = hcat(GLMCopula.coef(gcm) + GLMCopula.stderror(gcm) * quantile(Normal(), (1. - level) / 2.), GLMCopula.coef(gcm) - GLMCopula.stderror(gcm) * quantile(Normal(), (1. - level) / 2.))
 
 confint(gcm::GLMCopulaVCModel) = confint(gcm, 0.95)
 
@@ -58,8 +58,8 @@ confint(gcm::GLMCopulaVCModel) = confint(gcm, 0.95)
 Get the mean squared error of the parameters `β` and `Σ`.
 """
 function MSE(gcm::GLMCopulaVCModel, β::Vector, Σ::Vector)
-    mseβ = sum(abs2, gcm.β - β) / gcm.p
-    mseΣ = sum(abs2, gcm.Σ - Σ) / gcm.m
+    mseβ = sum(abs2, gcm.β .- β) / gcm.p
+    mseΣ = sum(abs2, gcm.Σ .- Σ) / gcm.m
     return mseβ, mseΣ
 end
 
