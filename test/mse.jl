@@ -14,10 +14,10 @@ curcoverage = zeros(p + m) #hold current coverage resutls
 trueparams = [βtrue; Σtrue] #hold true parameters
 
 #simulation parameters
-samplesizes = [10000; 100000]
+samplesizes = [10000; 50000; 100000]
 # samplesizes = collect(10000:20000:100000)
 ns = [5; 10; 20; 50]
-nsims = 5
+nsims = 10
 
 #storage for results
 βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -57,7 +57,7 @@ for t in 1:length(samplesizes)
             Random.seed!(j + 100000i)
             Γ = Σtrue[1] * ones(ni, ni) + Σtrue[2] * Matrix(I, ni, ni)
             nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
-            @time Y_nsample = simulate_nobs_independent_vectors(nonmixed_multivariate_dist, samplesizes[i])
+            @time Y_nsample = simulate_nobs_independent_vectors(nonmixed_multivariate_dist, m)
     
             gcs = Vector{GLMCopulaVCObs{T, D, Link}}(undef, m)
             for i in 1:m
@@ -73,7 +73,7 @@ for t in 1:length(samplesizes)
             @show gcm.β
             @show gcm.Σ
             try 
-                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 1, max_iter = 100, hessian_approximation = "limited-memory"))
+                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 1, max_iter = 300, tol = 10^-6, hessian_approximation = "exact"))
                 @show gcm.θ
                 @show gcm.∇θ
                 loglikelihood!(gcm, true, true)
@@ -144,8 +144,8 @@ using RCall
 
 R"""
 library(ggplot2)
-timedf$obssize = factor(timedf$obssize, levels = c('5', '10'))
-timedf$samplesize = factor(timedf$samplesize, levels = c('10000', '100000'))
+timedf$obssize = factor(timedf$obssize, levels = c('5', '10', '20', '50'))
+timedf$samplesize = factor(timedf$samplesize, levels = c('10000', '50000'))
 
 fittime_1 = ggplot(timedf, aes(x=samplesize, y=fittime, group=obssize, color=obssize)) + 
   geom_line() +
@@ -172,8 +172,8 @@ using RCall
 R"""
 library(scales)
 library(ggplot2)
-timedf$obssize <- factor(timedf$obssize, levels = c('5', '10'))
-timedf$samplesize <- factor(timedf$samplesize, levels = c('10000', '100000'))
+timedf$obssize <- factor(timedf$obssize, levels = c('5', '10', '20', '50'))
+timedf$samplesize <- factor(timedf$samplesize, levels = c('10000', '50000'))
 
 fancy_scientific <- function(l) {
      # turn in to character string in scientific notation
@@ -329,8 +329,8 @@ msedfR[parameters == "Sigma",y_max := 10^1]
 #msedfR[parameters == "Sigma",y_max := 10^-2]
 
 
-msedfR$obssize = factor(msedfR$obssize, levels = c('5', '10'))
-msedfR$samplesize = factor(msedfR$samplesize, levels = c('10000', '100000'))
+msedfR$obssize = factor(msedfR$obssize, levels = c('5', '10', '20', '50'))
+msedfR$samplesize = factor(msedfR$samplesize, levels = c('10000', '50000'))
 msedfR$parameters = factor(msedfR$parameters, levels = c('beta', 'Sigma'), labels = c(beta = expression(hat(bold(beta))), Sigma = expression(hat(bold(Sigma))[bold(gamma)])))
 msedfR$robust = factor(msedfR$robust, levels = c('Poisson with LogLink'),
     labels = c(expression(paste("Poisson with LogLink")))) # , expression(paste("MvT Gamma Inverse-Gamma"))))
