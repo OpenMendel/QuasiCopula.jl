@@ -264,10 +264,11 @@ function update_r_newton!(gcm::NBCopulaVCModel; maxIter=100, convTol=1e-6)
         dx = first_derivative(gcm, r)
         dx2 = second_derivative(gcm, r)
         increment = dx / dx2
+        # use gradient ascent if hessian not negative definite
         # if dx2 < 0
         #     increment = dx / dx2
         # else 
-        #     increment = dx # use gradient ascent if hessian not negative definite
+        #     increment = dx
         # end
         return increment
     end

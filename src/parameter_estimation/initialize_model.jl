@@ -83,16 +83,9 @@ function initialize_model!(
         gcmPoisson = GLMCopulaVCModel(gcsPoisson)
         initialize_model!(gcmPoisson)
 
-        println("hiiii gcmPoisson.Σ = $(gcmPoisson.Σ)")
-
         GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 5, derivative_test = "first-order", 
             mehrotra_algorithm ="yes", warm_start_init_point="yes", max_iter = 200,
             hessian_approximation = "exact"))
-
-        println("byeee gcmPoisson.Σ = $(gcmPoisson.Σ)")
-        println("byeee gcmPoisson.τ = $(gcmPoisson.τ)")
-        println("byeee gcmPoisson.β = $(gcmPoisson.β)")
-        println("byeee gcmPoisson.θ = $(gcmPoisson.θ)")
 
         for i in 1:nsample
             copyto!(gcm.data[i].μ, gcmPoisson.data[i].μ)

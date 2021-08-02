@@ -8,7 +8,7 @@ function fit!(
         gcm::NBCopulaVCModel,
         solver=Ipopt.IpoptSolver(print_level=5)
     )
-    npar = gcm.p + gcm.m + 1 # add one for r
+    npar = gcm.p + gcm.m
     optm = MathProgBase.NonlinearModel(solver)
     # set lower bounds and upper bounds of parameters
     lb   = fill(-Inf, npar)
@@ -18,7 +18,6 @@ function fit!(
         lb[offset] = 0
         offset += 1
     end
-    lb[offset] = 1 # lower bound of r is 1, upper bound is Inf
     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Max, gcm)
     # starting point
     par0 = zeros(npar)
@@ -51,7 +50,6 @@ function modelpar_to_optimpar!(
         par[offset] = gcm.Σ[k]
         offset += 1
     end
-    par[end] = gcm.r[1]
     par
 end
 
@@ -72,7 +70,6 @@ function optimpar_to_modelpar!(
         gcm.Σ[k] = par[offset]
         offset   += 1
     end
-    gcm.r[1] = par[offset]
     copyto!(gcm.θ, par)
     gcm
 end
@@ -112,7 +109,6 @@ function MathProgBase.eval_grad_f(
         grad[offset] = gcm.∇Σ[k]
         offset += 1
     end
-    grad[end] = gcm.∇r[1]  # add gradient with respect to r
     copyto!(gcm.∇θ, grad)
     # @show gcm.∇θ
     # return objective
@@ -132,8 +128,8 @@ MathProgBase.eval_jac_g(gcm::NBCopulaVCModel, J, par) = nothing
 function MathProgBase.hesslag_structure(gcm::NBCopulaVCModel)
     m◺ = ◺(gcm.m)
     # we work on the upper triangular part of the Hessian
-    arr1 = Vector{Int}(undef, ◺(gcm.p) + m◺ + 1)
-    arr2 = Vector{Int}(undef, ◺(gcm.p) + m◺ + 1)
+    arr1 = Vector{Int}(undef, ◺(gcm.p) + m◺)
+    arr2 = Vector{Int}(undef, ◺(gcm.p) + m◺)
     # Hββ block
     idx  = 1    
     for j in 1:gcm.p
@@ -151,8 +147,6 @@ function MathProgBase.hesslag_structure(gcm::NBCopulaVCModel)
             idx += 1
         end
     end
-    arr1[idx] = gcm.p + gcm.m + 1 # without hessian cross terms, add diagonal block in hessian for r
-    arr2[idx] = gcm.p + gcm.m + 1 
     return (arr1, arr2)
 end
     
@@ -176,8 +170,6 @@ function MathProgBase.eval_hesslag(
         H[idx] = gcm.HΣ[i, j]
         idx   += 1
     end
-    # Hrr block
-    H[idx] = gcm.Hr[1, 1]
     # lmul!(σ, H)
     H .*= σ
 end
