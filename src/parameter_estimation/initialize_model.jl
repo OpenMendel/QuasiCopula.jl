@@ -93,19 +93,19 @@ function initialize_model!(
         println("byeee gcmPoisson.τ = $(gcmPoisson.τ)")
         println("byeee gcmPoisson.β = $(gcmPoisson.β)")
         println("byeee gcmPoisson.θ = $(gcmPoisson.θ)")
-        
+
         for i in 1:nsample
             copyto!(gcm.data[i].μ, gcmPoisson.data[i].μ)
             copyto!(gcm.data[i].η, gcmPoisson.data[i].η)
         end
         copyto!(gcm.τ, gcmPoisson.τ)
         copyto!(gcm.β, gcmPoisson.β)
-        update_r!(gcm) # maximum likelihood using Newton
     else
         fill!(gcm.τ, 1)
         glm_regress_model(gcm) # uses initial_r
-        update_r!(gcm) # maximum likelihood using Newton
     end
+
+    update_r!(gcm) # maximum likelihood using Newton
 
     println("initializing variance components using MM-Algorithm")
     fill!(gcm.Σ, 1)
