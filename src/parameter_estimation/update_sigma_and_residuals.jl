@@ -282,7 +282,6 @@ function update_r_newton!(gcm::NBCopulaVCModel; maxIter=100, convTol=1e-6)
         # run 1 iteration of Newton's algorithm
         increment = newton_increment(gcm, r)
         new_r = r - stepsize * increment
-        println("new_r = $new_r")
 
         # linesearch
         # for j in 1:20

@@ -115,9 +115,6 @@ function initialize_model!(
     fill!(gcm.Σ, 1)
     update_Σ!(gcm)
 
-    println("r initialized to be $(gcm.r[1])")
-    println("huehuehue gcm.Σ = $(gcm.Σ)")
-
     nothing
 end
 

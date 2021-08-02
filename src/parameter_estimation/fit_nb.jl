@@ -6,7 +6,8 @@ should be provided in `gcm.β`, `gcm.Σ`, `gcm.r`
 """
 function fit!(
         gcm::NBCopulaVCModel,
-        solver=Ipopt.IpoptSolver(print_level=5)
+        solver=Ipopt.IpoptSolver(print_level=5),
+        maxIter::Int=30
     )
     npar = gcm.p + gcm.m
     optm = MathProgBase.NonlinearModel(solver)
@@ -24,13 +25,17 @@ function fit!(
     modelpar_to_optimpar!(par0, gcm)
     MathProgBase.setwarmstart!(optm, par0)
     # optimize
-    for i in 1:10
+    r_diff = Inf
+    curr_r = gcm.r[1]
+    for i in 1:maxIter
         MathProgBase.optimize!(optm)
         optstat = MathProgBase.status(optm)
         optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
-
-        println("iter $i r = $(gcm.r[1])")
+        println("huehuehuehueheuheuheu iter $i r = $(gcm.r[1])")
         update_r!(gcm)
+        new_r = gcm.r[1]
+        r_diff = new_r - curr_r
+        r_diff ≤ 1 ? break : (curr_r = new_r)
     end
     # update parameters and refresh gradient
     optimpar_to_modelpar!(gcm, MathProgBase.getsolution(optm))
