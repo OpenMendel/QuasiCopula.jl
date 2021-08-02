@@ -98,7 +98,18 @@ function initialize_model!(
         glm_regress_model(gcm) # uses initial_r
     end
 
-    update_r!(gcm) # maximum likelihood using Newton
+    # update r using maximum likelihood with Newton's method
+    for gc in gcm.data
+      fill!(gcm.τ, 1.0)
+      fill!(gcm.Σ, 1.0)
+      fill!(gc.∇β, 0)
+      fill!(gc.∇τ, 0)
+      fill!(gc.∇Σ, 0)
+      fill!(gc.Hβ, 0)
+      fill!(gc.Hτ, 0)
+      fill!(gc.HΣ, 0)
+    end
+    update_r!(gcm)
 
     println("initializing variance components using MM-Algorithm")
     fill!(gcm.Σ, 1)

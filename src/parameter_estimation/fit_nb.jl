@@ -24,9 +24,14 @@ function fit!(
     modelpar_to_optimpar!(par0, gcm)
     MathProgBase.setwarmstart!(optm, par0)
     # optimize
-    MathProgBase.optimize!(optm)
-    optstat = MathProgBase.status(optm)
-    optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
+    for i in 1:10
+        MathProgBase.optimize!(optm)
+        optstat = MathProgBase.status(optm)
+        optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
+
+        println("iter $i r = $(gcm.r[1])")
+        update_r!(gcm)
+    end
     # update parameters and refresh gradient
     optimpar_to_modelpar!(gcm, MathProgBase.getsolution(optm))
     loglikelihood!(gcm, true, false)

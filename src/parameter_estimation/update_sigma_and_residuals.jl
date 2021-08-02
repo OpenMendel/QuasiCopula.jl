@@ -255,6 +255,7 @@ function update_r_newton!(gcm::NBCopulaVCModel; maxIter=100, convTol=1e-6)
             logl += component_loglikelihood(gc, r)
             # 3rd term of logl
             qsum  = dot(gcm.Σ, gc.q)
+            # println("fdsafdsafdsafdsa 1 + qsum = $(1 + qsum)")
             logl += log(1 + qsum)
         end
         return logl
@@ -311,14 +312,6 @@ function update_r_newton!(gcm::NBCopulaVCModel; maxIter=100, convTol=1e-6)
 end
 
 function update_r!(gcm::NBCopulaVCModel)
-    for gc in gcm.data
-        # fill!(gc.μ, 0)
-        # fill!(gc.η, 0)
-        fill!(gc.∇β, 0)
-        fill!(gc.∇τ, 0)
-        fill!(gc.∇Σ, 0)
-        fill!(gc.Hβ, 0)
-    end
     new_r = update_r_newton!(gcm)
     gcm.r[1] = new_r
     for gc in gcm.data
