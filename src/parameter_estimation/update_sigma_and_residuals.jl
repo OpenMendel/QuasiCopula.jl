@@ -311,7 +311,7 @@ function update_r_newton!(gcm::NBCopulaVCModel; maxIter=100, convTol=1e-6)
 end
 
 function update_r!(gcm::NBCopulaVCModel)
-    new_r = update_r_newton!(gcm)
+    new_r = update_r_newton!(gcm, maxIter=10)
     gcm.r[1] = new_r
     for gc in gcm.data
         gc.d = NegativeBinomial(new_r)

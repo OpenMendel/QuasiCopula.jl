@@ -1,13 +1,18 @@
 """
     fit!(gcm::NBCopulaVCModel, solver=Ipopt.IpoptSolver(print_level=5))
 
-Fit an `NBCopulaVCModel` object by MLE using a nonlinear programming solver. Start point 
-should be provided in `gcm.β`, `gcm.Σ`, `gcm.r`
+Fit an `NBCopulaVCModel` object by block MLE using a nonlinear programming solver.
+Start point should be provided in `gcm.β`, `gcm.Σ`, `gcm.r`. In our block updates,
+we fit 10 iterations of `gcm.β`, `gcm.Σ` using IPOPT, followed by 10 iterations of 
+Newton on nuisance parameter `gcm.r`. Convergence is declared when difference of
+successive loglikelihood is less than `tol`.
 """
 function fit!(
         gcm::NBCopulaVCModel,
-        solver=Ipopt.IpoptSolver(print_level=5),
-        maxIter::Int=30
+        solver=Ipopt.IpoptSolver(print_level=5,max_iter=10,
+                                hessian_approximation = "limited-memory"),
+        tol::Float64 = 1e-4,
+        maxIter::Int=100
     )
     npar = gcm.p + gcm.m
     optm = MathProgBase.NonlinearModel(solver)
@@ -24,18 +29,20 @@ function fit!(
     par0 = zeros(npar)
     modelpar_to_optimpar!(par0, gcm)
     MathProgBase.setwarmstart!(optm, par0)
+    logl0 = MathProgBase.getobjval(optm)
     # optimize
     r_diff = Inf
     curr_r = gcm.r[1]
     for i in 1:maxIter
         MathProgBase.optimize!(optm)
-        optstat = MathProgBase.status(optm)
-        optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
-        println("huehuehuehueheuheuheu iter $i r = $(gcm.r[1])")
+        logl = MathProgBase.getobjval(optm)
         update_r!(gcm)
-        new_r = gcm.r[1]
-        r_diff = new_r - curr_r
-        r_diff ≤ 1 ? break : (curr_r = new_r)
+        if abs(logl - logl0) ≤ tol
+            break
+        else
+            println("iter $i r = $(gcm.r[1]), logl = $logl, tol = $(abs(logl - logl0))")
+            logl0 = logl
+        end
     end
     # update parameters and refresh gradient
     optimpar_to_modelpar!(gcm, MathProgBase.getsolution(optm))
