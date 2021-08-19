@@ -80,8 +80,7 @@ function update_res!(
    @inbounds for i in 1:length(gc.y)
        gc.μ[i] = GLM.linkinv(gc.link, gc.η[i])
        gc.varμ[i] = GLM.glmvar(gc.d, gc.μ[i])
-       # gc.dμ[i] = GLM.mueta(gc.link, gc.η[i])
-       gc.dμ[i] = (gc.link == GLM.LogLink() ? gc.μ[i] : GLM.mueta(gc.link, gc.η[i]))
+       gc.dμ[i] = GLM.mueta(gc.link, gc.η[i])
        gc.w1[i] = gc.dμ[i] / gc.varμ[i]
        gc.w2[i] = gc.w1[i] * gc.dμ[i]
        gc.res[i] = gc.y[i] - gc.μ[i]
@@ -138,8 +137,9 @@ end
 Update the quadratic forms `(r^T V[k] r) / 2` according to the current residual `r`.
 """
 function update_quadform!(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}}) where {T<:Real, D, Link}
-    for k in 1:length(gc.V)
-        gc.q[k] = dot(gc.res, mul!(gc.storage_n, gc.V[k], gc.res)) / 2
+    @inbounds for k in 1:length(gc.V)
+        mul!(gc.storage_n, gc.V[k], gc.res)
+        gc.q[k] = dot(gc.res, gc.storage_n) / 2
     end
     gc.q
 end
@@ -149,7 +149,8 @@ end
 Update the quadratic forms `(r^T V[k] r) / 2` according to the current residual `r`.
 """
 function update_quadform!(gc::GLMCopulaARObs{T, D, Link}) where {T<:Real, D, Link}
-    gc.q .= dot(gc.res, mul!(gc.storage_n, gc.V, gc.res)) / 2
+    mul!(gc.storage_n, gc.V, gc.res)
+    gc.q .= dot(gc.res, gc.storage_n) / 2
     gc.q
 end
 

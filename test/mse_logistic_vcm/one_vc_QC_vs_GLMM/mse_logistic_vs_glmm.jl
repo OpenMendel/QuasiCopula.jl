@@ -86,7 +86,7 @@ for t in 1:length(samplesizes)
             @show gcm.β
             @show gcm.Σ
             try 
-                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 1, max_iter = 150, tol = 10^-5, hessian_approximation = "limited-memory"))
+                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-6, mu_strategy = "adaptive",  mu_oracle = "loqo", hessian_approximation = "limited-memory")) 
                 @show gcm.θ
                 @show gcm.∇θ
                 loglikelihood!(gcm, true, true)

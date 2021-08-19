@@ -13,30 +13,30 @@ loglik_obs(d::NegativeBinomial, y, μ, wt, ϕ) = wt*GLM.logpdf(NegativeBinomial(
 loglik_obs(::Poisson, y, μ, wt, ϕ) = logpdf(Poisson(μ), y)
 
 # this gets the loglikelihood from the glm.jl package for the component density
-# """
-#     component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link}, τ, logl)
-# Calculates the loglikelihood of observing `y` given mean `μ`, a distribution
-# `d` using the GLM.jl package.
-# """
-# function component_loglikelihood(gc::GLMCopulaVCObs{T, D, Link}, τ::T) where {T <: BlasReal, D, Link}
-#   logl = zero(T)
-#     @inbounds for j in eachindex(gc.y)
-#       logl += GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], gc.wt[j], one(T))
-#   end
-#   logl
-# end
-
 """
-    component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link})
-Calculates the loglikelihood of observing `y` given mean `μ`, Bernoulli or Poisson distribution using the GLM.jl package.
+    component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link}, τ, logl)
+Calculates the loglikelihood of observing `y` given mean `μ`, a distribution
+`d` using the GLM.jl package.
 """
-function component_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link},GLMCopulaARObs{T, D, Link}}) where {T <: BlasReal, D<:Union{Bernoulli{T}, Poisson{T}}, Link}
-    logl = zero(T)
-    @inbounds for j in 1:length(gc.y)
-        logl += logpdf(D(gc.μ[j]), gc.y[j])
-    end
-    logl
+function component_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}}, τ::T) where {T <: BlasReal, D, Link}
+  logl = zero(T)
+    @inbounds for j in eachindex(gc.y)
+      logl += GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], gc.wt[j], τ)
+  end
+  logl
 end
+
+# """
+#     component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link})
+# Calculates the loglikelihood of observing `y` given mean `μ`, Bernoulli or Poisson distribution using the GLM.jl package.
+# """
+# function component_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link},GLMCopulaARObs{T, D, Link}}) where {T <: BlasReal, D<:Union{Bernoulli{T}, Poisson{T}}, Link}
+#     logl = zero(T)
+#     @inbounds for j in 1:length(gc.y)
+#         logl += logpdf(D(gc.μ[j]), gc.y[j])
+#     end
+#     logl
+# end
 
 # """
 #     component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link})
@@ -87,7 +87,7 @@ function loglikelihood!(
         gc.q[k] = dot(gc.res, gc.storage_n) / 2
     end
     # loglikelihood
-    logl = GLMCopula.component_loglikelihood(gc)
+    logl = GLMCopula.component_loglikelihood(gc, τ)
     tsum = dot(Σ, gc.t)
     logl += -log(1 + tsum)
     qsum  = dot(Σ, gc.q)

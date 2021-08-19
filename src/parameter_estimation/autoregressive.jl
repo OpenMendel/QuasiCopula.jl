@@ -123,6 +123,11 @@ struct GLMCopulaARModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalu
     Hσ2::Matrix{T}    # Hessian from all observations
     Hρσ2::Matrix{T}
     Hβσ2::Vector{T}
+    Ainv::Matrix{T}
+    Aevec::Matrix{T}
+    M::Matrix{T}
+    vcov::Matrix{T}
+    ψ::Vector{T}
     # Hβρ::Vector{T}
     TR::Matrix{T}
     QF::Matrix{T}         # n-by-1 matrix with qik = res_i' Vi res_i
@@ -151,6 +156,11 @@ function GLMCopulaARModel(gcs::Vector{GLMCopulaARObs{T, D, Link}}) where {T <: B
     Hσ2  = Matrix{T}(undef, 1, 1)
     Hρσ2 = Matrix{T}(undef, 1, 1)
     Hβσ2 = zeros(T, p)
+    Ainv    = zeros(T, p + 2, p + 2)
+    Aevec   = zeros(T, p + 2, p + 2)
+    M       = zeros(T, p + 2, p + 2)
+    vcov    = zeros(T, p + 2, p + 2)
+    ψ       = Vector{T}(undef, p + 2)
     # Hβρ = Vector{T}(undef, p)
     TR  = Matrix{T}(undef, n, 1) # collect trace terms
     QF  = Matrix{T}(undef, n, 1)
@@ -170,7 +180,7 @@ function GLMCopulaARModel(gcs::Vector{GLMCopulaARObs{T, D, Link}}) where {T <: B
     storage_m = Vector{T}(undef, 1)
     storage_Σ = Vector{T}(undef, 1)
     GLMCopulaARModel{T, D, Link}(gcs, Ytotal, ntotal, p, β, τ, ρ, σ2, Σ, θ,
-        ∇β, ∇ρ, ∇σ2, ∇θ, XtX, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2, # Hβρ,
+        ∇β, ∇ρ, ∇σ2, ∇θ, XtX, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2, Ainv, Aevec,  M, vcov, ψ,
         TR, QF, storage_n, storage_m, storage_Σ, d, link)
 end
 
@@ -262,7 +272,7 @@ function loglikelihood!(
     c1 = 1 + 0.5 * n * σ2
     c2 = 1 + 0.5 * σ2 * q
     # loglikelihood
-    logl = GLMCopula.component_loglikelihood(gc)
+    logl = GLMCopula.component_loglikelihood(gc, 1.0)
     logl += -log(c1)
     # @show logl
     logl += log(c2)

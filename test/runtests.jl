@@ -15,15 +15,16 @@ module PkgTest
 # include("simulation/multivariate_logistic/bivariate_logistic_test.jl")
 # include("simulation/multivariate_logistic/multivariate_n50_logistic_test.jl")
 
-# # # # # using mixed models to simulate data + checking gradient and hessian pieces using forward diff
+# vcm covariance structure
+# include("estimation/vcm/asymptotic_ci_VCM.jl")
 # # include("estimation/vcm/simulate_logistic_mixedmodels.jl")
 # # include("estimation/vcm/simulate_poisson_mixedmodels.jl")
 
-# # autoregressive covariance structure developing
-# include("estimation/ar/testar.jl")
+# # autoregressive covariance structure
+include("estimation/ar/asymptotic_ci_AR.jl")
 
 # profiling and benchmarking
 # include("perf.jl")
-include("mse_poisson_vcm/one_vc_QC_vs_GLMM/mse_poisson_vs_glmm.jl")
-include("mse_logistic_vcm/one_vc_QC_vs_GLMM/mse_logistic_vs_glmm.jl")
+# include("mse_poisson_vcm/one_vc_QC_vs_GLMM/mse_poisson_vs_glmm.jl")
+# include("mse_logistic_vcm/one_vc_QC_vs_GLMM/mse_logistic_vs_glmm.jl")
 end
