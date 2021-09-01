@@ -86,7 +86,7 @@ for t in 1:length(samplesizes)
             @show gcm.β
             @show gcm.Σ
             try 
-                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 25, hessian_approximation = "limited-memory")) 
+                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 25, accept_after_max_steps = 2, hessian_approximation = "limited-memory")) 
                 @show gcm.θ
                 @show gcm.∇θ
                 loglikelihood!(gcm, true, true)
@@ -146,12 +146,12 @@ import StatsBase: sem
 
 @show en - st #seconds 
 @info "writing to file..."
-ftail = "multivariate_vcm$(nsims)reps_sim.csv"
-writedlm("mse_beta_logistic_" * ftail, βMseResults, ',')
-writedlm("mse_Sigma_logistic_" * ftail, ΣMseResults, ',')
-writedlm("fittimes_logistic_" * ftail, fittimes, ',')
+ftail = "logistic_vcm$(nsims)reps_sim.csv"
+writedlm("mse_beta_multivariate_" * ftail, βMseResults, ',')
+writedlm("mse_Sigma_multivariate_" * ftail, ΣMseResults, ',')
+writedlm("fittimes_multivariate_" * ftail, fittimes, ',')
 
-writedlm("beta_sigma_coverage_logistic_" * ftail, βΣcoverage, ',')
+writedlm("beta_sigma_coverage_" * ftail, βΣcoverage, ',')
     
 # glmm
 writedlm("mse_beta_logistic_GLMM_" * ftail, βMseResults_GLMM, ',')
