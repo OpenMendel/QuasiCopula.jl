@@ -53,7 +53,7 @@ function GLMCopulaARObs(
     n, p = size(X, 1), size(X, 2)
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
-    V = Matrix{T}(I, n, n)
+    V = ones(T, n, n)
     vec = Vector{T}(undef, n)
     ∇ARV = Matrix{T}(undef, n, n)
     ∇2ARV = Matrix{T}(undef, n, n)

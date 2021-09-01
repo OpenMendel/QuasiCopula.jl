@@ -70,14 +70,22 @@ update_rho!(gcm, Y_1, Y_2)
 
 loglikelihood!(gcm, true, true)
 
+gcm2 = deepcopy(gcm);
+# gcm3 = deepcopy(gcm);
+# gcm4 = deepcopy(gcm);
+# gcm5 = deepcopy(gcm);
+# use quasi-newton
+
 ### Quasi-Newton ### 
-@time GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-6, mu_strategy = "adaptive",  mu_oracle = "loqo", hessian_approximation = "limited-memory")) # 56, 38.7
-
-
+@time GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
 println("estimated beta = $(gcm.β); true beta value= $β")
 println("estimated AR rho = $(gcm.ρ[1]); true AR rho = $ρ")
 println("estimated AR variance = $(gcm.σ2[1]); true AR variance = $σ2");
 
+@time GLMCopula.fit!(gcm2, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 25, hessian_approximation = "limited-memory"))
+println("estimated beta = $(gcm2.β); true beta value= $β")
+println("estimated AR rho = $(gcm2.ρ[1]); true AR rho = $ρ")
+println("estimated AR variance = $(gcm2.σ2[1]); true AR variance = $σ2");
 
 @info "get standard errors"
 

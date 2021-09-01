@@ -39,8 +39,10 @@ initialize_model!(gcm)
 @show gcm.β
 @show gcm.Σ
 loglikelihood!(gcm, true, true)
+gcm2 = deepcopy(gcm);
+
 # use quasi-newton
-@time GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-6, hessian_approximation = "limited-memory"))
+@time GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 25, hessian_approximation = "limited-memory"))
 println("estimated beta = $(gcm.β); true beta value= $β")
 println("estimated variance component 1 = $(gcm.Σ[1]); true variance component 1 = $variance_component_1")
 println("estimated variance component 2 = $(gcm.Σ[2]); true variance component 2 = $variance_component_2");
