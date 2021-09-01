@@ -91,7 +91,7 @@ for t in 1:length(samplesizes)
             @show gcm.ρ
             @show gcm.σ2
             try 
-                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 25, hessian_approximation = "limited-memory"))
+                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 20, hessian_approximation = "limited-memory"))
                 # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
                 @show gcm.θ
                 @show gcm.∇θ
