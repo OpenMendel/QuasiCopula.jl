@@ -111,11 +111,7 @@ function MathProgBase.eval_grad_f(
         offset += 1
     end
     # update nuisance parameter
-    # if typeof(gcm.data[1].d) <: NegativeBinomial
-    #     new_d = update_r!(gcm)
-    #     @show new_d
-    # end
-    @show gcm.θ
+    # @show gcm.θ
     copyto!(gcm.∇θ, grad)
     # @show gcm.∇θ
     # return objective

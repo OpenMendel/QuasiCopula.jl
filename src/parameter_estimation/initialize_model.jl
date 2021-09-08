@@ -83,7 +83,7 @@ function initialize_model!(
         gcmPoisson = GLMCopulaVCModel(gcsPoisson)
         initialize_model!(gcmPoisson)
 
-        GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 5, derivative_test = "first-order", 
+        GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0, derivative_test = "first-order", 
             mehrotra_algorithm ="yes", warm_start_init_point="yes", max_iter = 200,
             hessian_approximation = "exact"))
 

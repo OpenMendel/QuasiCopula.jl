@@ -30,9 +30,8 @@ function fit!(
     modelpar_to_optimpar!(par0, gcm)
     MathProgBase.setwarmstart!(optm, par0)
     logl0 = MathProgBase.getobjval(optm)
+    println("Converging when tol ≤ $tol (max iter = $maxIter)")
     # optimize
-    r_diff = Inf
-    curr_r = gcm.r[1]
     for i in 1:maxIter
         MathProgBase.optimize!(optm)
         logl = MathProgBase.getobjval(optm)
@@ -40,7 +39,8 @@ function fit!(
         if abs(logl - logl0) ≤ tol
             break
         else
-            println("iter $i r = $(gcm.r[1]), logl = $logl, tol = $(abs(logl - logl0))")
+            println("Block iter $i r = $(round(gcm.r[1], digits=2))," * 
+            " logl = $(round(logl, digits=2)), tol = $(abs(logl - logl0))")
             logl0 = logl
         end
     end
