@@ -81,7 +81,7 @@ function loglikelihood!(
   @inbounds for k in 1:m
       mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
       if needgrad
-          BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
+          BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual) in gc.∇β
       end
       gc.q[k] = dot(gc.res, gc.storage_n) / 2
   end
