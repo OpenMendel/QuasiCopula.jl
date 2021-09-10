@@ -1,5 +1,7 @@
 using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, CategoricalArrays
 using Random, Roots, SpecialFunctions, StatsFuns, Distributions, DataFrames, ToeplitzMatrices
+using Random, DataFrames, DelimitedFiles, Statistics, RCall, Printf
+import StatsBase: sem
 
 function run_test()
     p = 3    # number of fixed effects, including intercept
@@ -125,10 +127,6 @@ function run_test()
         end
     end 
     en = time()
-
-    using Random, DataFrames, DelimitedFiles, Statistics, RCall, Printf
-    import StatsBase: sem
-
     @show en - st #seconds 
     @info "writing to file..."
     ftail = "multivariate_logistic_AR$(nsims)reps_sim.csv"
@@ -136,8 +134,6 @@ function run_test()
     writedlm("mse_sigma_" * ftail, σ2MseResults, ',')
     writedlm("mse_rho_" * ftail, ρMseResults, ',')
     writedlm("fittimes_" * ftail, fittimes, ',')
-
     writedlm("beta_sigma_coverage_" * ftail, βρσ2coverage, ',')
-
 end
 run_test()

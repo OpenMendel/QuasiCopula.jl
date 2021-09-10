@@ -1,5 +1,7 @@
-using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, CategoricalArrays
+using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM
 using Random, Roots, SpecialFunctions, StatsFuns, Distributions, DataFrames
+using Random, DataFrames, DelimitedFiles, Statistics, RCall, Printf
+import StatsBase: sem
 function run_test()
     p  = 3    # number of fixed effects, including intercept
     m  = 2    # number of variance components
@@ -100,9 +102,6 @@ function run_test()
         end
     end 
     en = time()
-
-    using Random, DataFrames, DelimitedFiles, Statistics, RCall, Printf
-    import StatsBase: sem
 
     @show en - st #seconds 
     @info "writing to file..."
