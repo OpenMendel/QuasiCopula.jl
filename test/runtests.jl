@@ -15,16 +15,27 @@ module PkgTest
 # include("simulation/multivariate_logistic/bivariate_logistic_test.jl")
 # include("simulation/multivariate_logistic/multivariate_n50_logistic_test.jl")
 
-# vcm covariance structure
+# # inference/ confidence intervals
+# include("estimation/ar/asymptotic_ci_AR.jl")
 # include("estimation/vcm/asymptotic_ci_VCM.jl")
+
+# estimate simulated vcm covariance structure
 # # include("estimation/vcm/simulate_logistic_mixedmodels.jl")
 # # include("estimation/vcm/simulate_poisson_mixedmodels.jl")
+# # include("estimation/vcm/mse_logistic_vcm/two_vc_QC/mse.jl")
 
-# # autoregressive covariance structure
-include("estimation/ar/asymptotic_ci_AR.jl")
+# mean squared error 
+# AR 
+include("estimation/ar/mse_logistic_ar/mse.jl")
+include("estimation/ar/mse_poisson_ar/mse.jl")
+# one vc vs glmm
+include("mse_poisson_vcm/one_vc_QC_vs_GLMM/mse_poisson_vs_glmm.jl")
+include("mse_logistic_vcm/one_vc_QC_vs_GLMM/mse_logistic_vs_glmm.jl")
+# two vcm
+include("mse_poisson_vcm/two_vc_QC/mse.jl")
+include("mse_logistic_vcm/two_vc_QC/mse.jl")
 
 # profiling and benchmarking
 # include("perf.jl")
-# include("mse_poisson_vcm/one_vc_QC_vs_GLMM/mse_poisson_vs_glmm.jl")
-# include("mse_logistic_vcm/one_vc_QC_vs_GLMM/mse_logistic_vs_glmm.jl")
+
 end
