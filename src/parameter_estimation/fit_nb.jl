@@ -9,10 +9,10 @@ successive loglikelihood is less than `tol`.
 """
 function fit!(
         gcm::NBCopulaVCModel,
-        solver=Ipopt.IpoptSolver(print_level=5,max_iter=10,
+        solver=Ipopt.IpoptSolver(print_level=0,max_iter=10,
                                 hessian_approximation = "limited-memory"),
         tol::Float64 = 1e-4,
-        maxIter::Int=100
+        maxBlockIter::Int=100
     )
     npar = gcm.p + gcm.m
     optm = MathProgBase.NonlinearModel(solver)
@@ -30,9 +30,9 @@ function fit!(
     modelpar_to_optimpar!(par0, gcm)
     MathProgBase.setwarmstart!(optm, par0)
     logl0 = MathProgBase.getobjval(optm)
-    println("Converging when tol ≤ $tol (max iter = $maxIter)")
+    println("Converging when tol ≤ $tol (max block iter = $maxBlockIter)")
     # optimize
-    for i in 1:maxIter
+    for i in 1:maxBlockIter
         MathProgBase.optimize!(optm)
         logl = MathProgBase.getobjval(optm)
         update_r!(gcm)

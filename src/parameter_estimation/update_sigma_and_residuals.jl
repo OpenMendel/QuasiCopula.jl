@@ -200,8 +200,9 @@ function update_r_newton!(gcm::NBCopulaVCModel; maxIter=100, convTol=1e-6)
             end
             # 3rd term of logl
             resid = gcm.data[i].res
-            Γ = gcm.Σ' * gcm.data[i].V # Γ = a1*V1 + ... + am*Vm
+            Γ = gcm.data[i].storage_nn # Γ = a1*V1 + ... + am*Vm
             η = gcm.data[i].η
+            # Γ = gcm.Σ' * gcm.data[i].V 
             # D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
             # dD = Diagonal([-exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r))) for j in 1:length(η)])
             # dresid = -inv(D)*dD*resid
@@ -231,9 +232,10 @@ function update_r_newton!(gcm::NBCopulaVCModel; maxIter=100, convTol=1e-6)
                 s += tmp(gcm.data[i].y[j], gcm.data[i].μ[j])
             end
             # 3rd term of logl
-            Γ = gcm.Σ' * gcm.data[i].V # Γ = a1*V1 + ... + am*Vm
+            Γ = gcm.data[i].storage_nn # Γ = a1*V1 + ... + am*Vm
             η = gcm.data[i].η
             resid = gcm.data[i].res
+            # Γ = gcm.Σ' * gcm.data[i].V 
             # D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
             # dD = Diagonal([-exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r))) for j in 1:length(η)])
             # d2D = Diagonal([(exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) + 
@@ -286,16 +288,17 @@ function update_r_newton!(gcm::NBCopulaVCModel; maxIter=100, convTol=1e-6)
             standardize_res!(gc)
             # fill!(gc.∇resβ, 0.0) # fill gradient of residual vector with 0
             std_res_differential!(gc) # this will compute ∇resβ
+            fill!(gc.storage_nn, 0)
             @inbounds for k in 1:m
                 mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
-                # BLAS.gemv!('T', gcm.Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # gc.∇β += ∇resβ*Γ*res (standardized residual) 
                 gc.q[k] = dot(gc.res, gc.storage_n) / 2 # gc.q[k] = 0.5res' * V[k] * res
+                # BLAS.gemv!('T', gcm.Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # gc.∇β += ∇resβ*Γ*res (standardized residual) 
+                gc.storage_nn += gcm.Σ[k] .* gc.V[k] # compute Γ = a1*V1 + ... am*Vm
             end
             # 2nd term of logl
             logl += component_loglikelihood(gc, r)
             # 3rd term of logl
-            qsum  = dot(gcm.Σ, gc.q)
-            # println("fdsafdsafdsafdsa 1 + qsum = $(1 + qsum)")
+            qsum  = dot(gcm.Σ, gc.q) # q[k] = res_i' * V_i[k] * res_i / 2, so qsum = 0.5r(β)*Γ*r(β)
             logl += log(1 + qsum)
         end
         return logl

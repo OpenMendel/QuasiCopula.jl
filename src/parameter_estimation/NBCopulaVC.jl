@@ -26,6 +26,7 @@ mutable struct NBCopulaVCObs{T <: BlasReal, D, Link} # d changes, so must be mut
     storage_n3::Vector{T}
     storage_p1::Vector{T}
     storage_p2::Vector{T}
+    storage_nn::Matrix{T}
     storage_np::Matrix{T}
     storage_pp::Matrix{T}
     added_term_numerator::Matrix{T}
@@ -70,6 +71,7 @@ function NBCopulaVCObs(
     storage_n3 = Vector{T}(undef, n)
     storage_p1 = Vector{T}(undef, p)
     storage_p2 = Vector{T}(undef, p)
+    storage_nn = Matrix{T}(undef, n, n) # stores Γ = a1*V1 + ... am*Vm
     storage_np = Matrix{T}(undef, n, p)
     storage_pp = Matrix{T}(undef, p, p)
     added_term_numerator = Matrix{T}(undef, n, p)
@@ -85,7 +87,7 @@ function NBCopulaVCObs(
     # constructor
     NBCopulaVCObs{T, D, Link}(y, X, V, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇τ, ∇Σ, Hβ, HΣ, 
         Hτ, res, t, q, xtx, storage_n, storage_n2, storage_n3, storage_p1,
-        storage_p2, storage_np, storage_pp, added_term_numerator, added_term2,
+        storage_p2, storage_nn, storage_np, storage_pp, added_term_numerator, added_term2,
         η, μ, varμ, dμ, d, link, wt, w1, w2)
 end
 
