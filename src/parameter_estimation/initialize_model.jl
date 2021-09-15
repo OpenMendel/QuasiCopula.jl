@@ -72,31 +72,29 @@ end
 function initialize_model!(
     gcm::NBCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
 
-    # fit a Poisson regression model if the user does not specify an initial r
-    if gcm.d[1].r == 1
-        println("Initializing NegBin r to Poisson regression values")
-        nsample = length(gcm.data)
-        gcsPoisson = Vector{GLMCopulaVCObs{T, Poisson{T}, LogLink}}(undef, nsample)
-        for (i, gc) in enumerate(gcm.data)
-            gcsPoisson[i] = GLMCopulaVCObs(gc.y, gc.X, gc.V, Poisson(), LogLink())
-        end
-        gcmPoisson = GLMCopulaVCModel(gcsPoisson)
-        initialize_model!(gcmPoisson)
+    # initial guess for r = 1
+    fill!(gcm.r, 1)
 
-        GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0, derivative_test = "first-order", 
-            mehrotra_algorithm ="yes", warm_start_init_point="yes", max_iter = 200,
-            hessian_approximation = "exact"))
-
-        for i in 1:nsample
-            copyto!(gcm.data[i].μ, gcmPoisson.data[i].μ)
-            copyto!(gcm.data[i].η, gcmPoisson.data[i].η)
-        end
-        copyto!(gcm.τ, gcmPoisson.τ)
-        copyto!(gcm.β, gcmPoisson.β)
-    else
-        fill!(gcm.τ, 1)
-        glm_regress_model(gcm) # uses initial_r
+    # fit a Poisson regression model to estimate μ, η, β, τ
+    println("Initializing NegBin r to Poisson regression values")
+    nsample = length(gcm.data)
+    gcsPoisson = Vector{GLMCopulaVCObs{T, Poisson{T}, LogLink}}(undef, nsample)
+    for (i, gc) in enumerate(gcm.data)
+        gcsPoisson[i] = GLMCopulaVCObs(gc.y, gc.X, gc.V, Poisson(), LogLink())
     end
+    gcmPoisson = GLMCopulaVCModel(gcsPoisson)
+    initialize_model!(gcmPoisson)
+
+    GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0, derivative_test = "first-order", 
+        mehrotra_algorithm ="yes", warm_start_init_point="yes", max_iter = 200,
+        hessian_approximation = "exact"))
+
+    for i in 1:nsample
+        copyto!(gcm.data[i].μ, gcmPoisson.data[i].μ)
+        copyto!(gcm.data[i].η, gcmPoisson.data[i].η)
+    end
+    copyto!(gcm.τ, gcmPoisson.τ)
+    copyto!(gcm.β, gcmPoisson.β)
 
     # update r using maximum likelihood with Newton's method
     for gc in gcm.data

@@ -10,7 +10,7 @@ successive loglikelihood is less than `tol`.
 function fit!(
         gcm::NBCopulaVCModel,
         solver=Ipopt.IpoptSolver(print_level=0,max_iter=10,
-                                hessian_approximation = "limited-memory"),
+                                hessian_approximation = "limited-memory");
         tol::Float64 = 1e-4,
         maxBlockIter::Int=100
     )
