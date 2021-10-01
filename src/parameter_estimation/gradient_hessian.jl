@@ -66,13 +66,8 @@ Calculates the gradient with respect to beta for our the glm portion for one obs
 """
 function glm_gradient(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}}, β::Vector, τ) where {T<:Real, D, Link}
     (n, p) = size(gc.X)
-    update_res!(gc, β)
-    @inbounds for i in 1:n
-        gc.storage_n[i] = gc.w1[i] * gc.res[i]
-    end
-    @inbounds for j in 1:p
-        gc.storage_p1[j] = dot(@view(gc.X[:, j]), gc.storage_n)
-    end
+    gc.storage_n .= gc.w1 .* gc.res
+    mul!(gc.storage_p1, transpose(gc.X), gc.storage_n)
     gc.storage_p1 .*= τ[1]
     gc.storage_p1
 end

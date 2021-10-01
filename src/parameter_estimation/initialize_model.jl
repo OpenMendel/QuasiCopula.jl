@@ -32,8 +32,21 @@ function update_rho!(gcm, Y_1, Y_2)
     N = length(gcm.data)
     empirical_covariance_mat = scattermat(hcat(Y_1, Y_2))/N
     n1 = length(gcm.data[1].y)
-    ρhat = empirical_covariance_mat[1, 2] /(inv(1 + 0.5 * n1 * gcm.σ2[1]) * sqrt(Statistics.mean(Y_1)) * sqrt(Statistics.mean(Y_2)) * gcm.σ2[1])
-    copyto!(gcm.ρ, ρhat)
+    ρhat = abs(empirical_covariance_mat[1, 2] /(inv(1 + 0.5 * n1 * gcm.σ2[1]) * sqrt(Statistics.mean(Y_1)) * sqrt(Statistics.mean(Y_2)) * gcm.σ2[1]))
+    if ρhat > 1
+      copyto!(gcm.ρ, 1.0)
+    else
+      @inbounds for i in eachindex(gcm.data)
+        get_V!(ρhat, gcm.data[i])
+      end
+      update_Σ!(gcm)
+        if gcm.Σ[1] < 10
+          copyto!(gcm.σ2, gcm.Σ)
+        else
+          copyto!(gcm.σ2, 1.0)
+        end
+      copyto!(gcm.ρ, ρhat)
+    end
     nothing
 end
 

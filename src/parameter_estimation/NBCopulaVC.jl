@@ -255,6 +255,7 @@ function loglikelihood!(
           # gc.Hr .= nb_second_derivative(gc, Σ, r)
       end
       gc.storage_p2 .= gc.∇β .* inv1pq
+      gc.res .= gc.y .- gc.μ
       gc.∇β .= GLMCopula.glm_gradient(gc, β, τ)
       gc.∇β .+= gc.storage_p2
   end
