@@ -189,134 +189,6 @@ function update_r_newton!(gcm::NBCopulaVCModel; maxIter=100, convTol=1e-6)
 
     T = eltype(gcm.β)
     r = gcm.r[1] # estimated r in previous iteration
-
-    function first_derivative(gcm, r)
-        s = zero(T)
-        tmp(yi, μi) = -(yi+r)/(μi+r) - log(μi+r) + 1 + log(r) + digamma(r+yi) - digamma(r)
-        @inbounds for i in eachindex(gcm.data)
-            # 2nd term of logl
-            for j in eachindex(gcm.data[i].y)
-                s += tmp(gcm.data[i].y[j], gcm.data[i].μ[j])
-            end
-            # 3rd term of logl
-            resid = gcm.data[i].res
-            Γ = gcm.data[i].storage_nn # Γ = a1*V1 + ... + am*Vm
-            η = gcm.data[i].η
-            # Γ = gcm.Σ' * gcm.data[i].V 
-            # D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
-            # dD = Diagonal([-exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r))) for j in 1:length(η)])
-            # dresid = -inv(D)*dD*resid
-            # s += resid'*Γ*dresid / (1 + 0.5resid'*Γ*resid)
-            for j in 1:length(η)
-                gcm.data[i].storage_n[j] = inv(sqrt(exp(η[j])*(exp(η[j])+r) / r)) # storage_n[i] = 1 / Di = 1 / sqrt(var(yi))
-            end
-            for j in 1:length(η)
-                gcm.data[i].storage_n[j] *= -exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r))) # storage_n = inv(D) * dD
-            end
-            gcm.data[i].storage_n .*= -resid # storage_n = dr(β) (derivative of residuals)
-            mul!(gcm.data[i].storage_n2, Γ, gcm.data[i].storage_n) # storage_n2 = Γ * dresid
-            numer = dot(resid, gcm.data[i].storage_n2) # numer = r' * Γ * dr
-            mul!(gcm.data[i].storage_n2, Γ, resid) # storage_n = Γ * resid
-            denom = 1 + 0.5 * dot(resid, gcm.data[i].storage_n2) # denom = 1 + 0.5(r * Γ * r)
-            s += numer / denom
-        end
-        return s
-    end
-
-    function second_derivative(gcm, r)
-        tmp(yi, μi) = (yi+r)/(μi+r)^2 - 2/(μi+r) + 1/r + trigamma(r+yi) - trigamma(r)
-        s = zero(T)
-        @inbounds for i in eachindex(gcm.data)
-            # 2nd term of logl
-            for j in eachindex(gcm.data[i].y)
-                s += tmp(gcm.data[i].y[j], gcm.data[i].μ[j])
-            end
-            # 3rd term of logl
-            Γ = gcm.data[i].storage_nn # Γ = a1*V1 + ... + am*Vm
-            η = gcm.data[i].η
-            resid = gcm.data[i].res
-            # Γ = gcm.Σ' * gcm.data[i].V 
-            # D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
-            # dD = Diagonal([-exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r))) for j in 1:length(η)])
-            # d2D = Diagonal([(exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) + 
-            #     (3exp(2η[j]) / (4r^(2.5)*sqrt(exp(η[j])*(exp(η[j])+r)))) for j in 1:length(η)])
-            # resid = gcm.data[i].res
-            # dresid = -inv(D)*dD*resid
-            # d2resid = (2inv(D)*dD*inv(D)*dD - inv(D)*d2D)*resid
-            # denom = 1 + 0.5resid'*Γ*resid
-            # term1 = (resid'*Γ*dresid / denom)^2
-            # term2 = dresid'*Γ*dresid / denom
-            # term3 = resid'*Γ*d2resid / denom
-            # s += -term1 + term2 + term3
-            for j in 1:length(η)
-                gcm.data[i].storage_n[j] = inv(sqrt(exp(η[j])*(exp(η[j])+r) / r)) # storage_n = inv(Di) = 1 / sqrt(var(yi))
-            end
-            for j in 1:length(η)
-                # storage_n2 = -inv(D) * d2D
-                gcm.data[i].storage_n2[j] = -gcm.data[i].storage_n[j] * 
-                    ((exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) + 
-                    (3exp(2η[j]) / (4r^(2.5)*sqrt(exp(η[j])*(exp(η[j])+r)))))
-            end
-            for j in 1:length(η)
-                # storage_n = inv(D) * dD
-                gcm.data[i].storage_n[j] *= -exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r)))
-            end
-            for j in 1:length(η)
-                # storage_n2 = 2inv(D)*dD*inv(D)*dD -inv(D)*d2D
-                gcm.data[i].storage_n2[j] += 2 * abs2(gcm.data[i].storage_n[j])
-            end
-            gcm.data[i].storage_n .*= -resid # storage_n = dr(β) = derivative of residuals
-            gcm.data[i].storage_n2 .*= resid # storage_n2 = dr²(β) = 2nd derivative of residuals
-            mul!(gcm.data[i].storage_n3, Γ, resid) # storage_n3 = Γ * resid
-            denom = 1 + 0.5 * dot(resid, gcm.data[i].storage_n3)
-            mul!(gcm.data[i].storage_n3, Γ, gcm.data[i].storage_n) # storage_n3 = Γ * dresid
-            term1 = (dot(resid, gcm.data[i].storage_n3) / denom)^2 # (resid'*Γ*dresid / denom)^2
-            term2 = dot(gcm.data[i].storage_n, gcm.data[i].storage_n3) / denom # term2 = dresid'*Γ*dresid / denom
-            mul!(gcm.data[i].storage_n3, Γ, gcm.data[i].storage_n2) # storage_n3 = Γ * d2resid
-            term3 = dot(resid, gcm.data[i].storage_n3) / denom # term3 = resid'*Γ*d2resid / denom
-            s += -term1 + term2 + term3
-        end
-        return s
-    end
-
-    function negbin_component_loglikelihood(gcm, r)
-        logl = zero(T)
-        for gc in gcm.data
-            n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
-            # fill!(gc.∇β, 0.0)
-            update_res!(gc, gcm.β)
-            standardize_res!(gc)
-            # fill!(gc.∇resβ, 0.0) # fill gradient of residual vector with 0
-            std_res_differential!(gc) # this will compute ∇resβ
-            fill!(gc.storage_nn, 0)
-            @inbounds for k in 1:m
-                mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
-                gc.q[k] = dot(gc.res, gc.storage_n) / 2 # gc.q[k] = 0.5res' * V[k] * res
-                # BLAS.gemv!('T', gcm.Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # gc.∇β += ∇resβ*Γ*res (standardized residual) 
-                gc.storage_nn += gcm.Σ[k] .* gc.V[k] # compute Γ = a1*V1 + ... am*Vm
-            end
-            # 2nd term of logl
-            logl += component_loglikelihood(gc, r)
-            # 3rd term of logl
-            qsum  = dot(gcm.Σ, gc.q) # q[k] = res_i' * V_i[k] * res_i / 2, so qsum = 0.5r(β)*Γ*r(β)
-            logl += log(1 + qsum)
-        end
-        return logl
-    end
-
-    function newton_increment(gcm, r)
-        dx = first_derivative(gcm, r)
-        dx2 = second_derivative(gcm, r)
-        increment = dx / dx2
-        # use gradient ascent if hessian not negative definite
-        # if dx2 < 0
-        #     increment = dx / dx2
-        # else 
-        #     increment = dx
-        # end
-        return increment
-    end
-
     new_r = one(T)
     stepsize = one(T)
     for i in 1:maxIter
@@ -360,4 +232,141 @@ function update_r!(gcm::NBCopulaVCModel)
         gc.d = NegativeBinomial(new_r)
     end
     return nothing
+end
+
+function first_derivative(gcm, r::T) where T <: AbstractFloat
+    s = zero(T)
+    @inbounds for i in eachindex(gcm.data)
+        # 2nd term of logl
+        y = gcm.data[i].y
+        μ = gcm.data[i].μ
+        for j in eachindex(y)
+            s += dLdr_2ndterm(y[j], μ[j], r)
+        end
+        # 3rd term of logl
+        resid = gcm.data[i].res
+        Γ = gcm.data[i].storage_nn # Γ = a1*V1 + ... + am*Vm
+        η = gcm.data[i].η
+        # Γ = gcm.Σ' * gcm.data[i].V 
+        # D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
+        # dD = Diagonal([-exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r))) for j in 1:length(η)])
+        # dresid = -inv(D)*dD*resid
+        # s += resid'*Γ*dresid / (1 + 0.5resid'*Γ*resid)
+        for j in 1:length(η)
+            gcm.data[i].storage_n[j] = inv(sqrt(exp(η[j])*(exp(η[j])+r) / r)) # storage_n[i] = 1 / Di = 1 / sqrt(var(yi))
+        end
+        for j in 1:length(η)
+            gcm.data[i].storage_n[j] *= -exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r))) # storage_n = inv(D) * dD
+        end
+        gcm.data[i].storage_n .*= -1.0 .* resid # storage_n = dr(β) (derivative of residuals)
+        mul!(gcm.data[i].storage_n2, Γ, gcm.data[i].storage_n) # storage_n2 = Γ * dresid
+        numer = dot(resid, gcm.data[i].storage_n2) # numer = r' * Γ * dr
+        mul!(gcm.data[i].storage_n2, Γ, resid) # storage_n = Γ * resid
+        denom = 1 + 0.5 * dot(resid, gcm.data[i].storage_n2) # denom = 1 + 0.5(r * Γ * r)
+        s += numer / denom
+    end
+    return s
+end
+
+function second_derivative(gcm, r::T) where T <: AbstractFloat
+    s = zero(T)
+    @inbounds for i in eachindex(gcm.data)
+        # 2nd term of logl
+        y = gcm.data[i].y
+        μ = gcm.data[i].μ
+        for j in eachindex(y)
+            s += dLdr2_2ndterm(y[j], μ[j], r)
+        end
+        # 3rd term of logl
+        Γ = gcm.data[i].storage_nn # Γ = a1*V1 + ... + am*Vm
+        η = gcm.data[i].η
+        resid = gcm.data[i].res
+        # Γ = gcm.Σ' * gcm.data[i].V 
+        # D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
+        # dD = Diagonal([-exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r))) for j in 1:length(η)])
+        # d2D = Diagonal([(exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) + 
+        #     (3exp(2η[j]) / (4r^(2.5)*sqrt(exp(η[j])*(exp(η[j])+r)))) for j in 1:length(η)])
+        # resid = gcm.data[i].res
+        # dresid = -inv(D)*dD*resid
+        # d2resid = (2inv(D)*dD*inv(D)*dD - inv(D)*d2D)*resid
+        # denom = 1 + 0.5resid'*Γ*resid
+        # term1 = (resid'*Γ*dresid / denom)^2
+        # term2 = dresid'*Γ*dresid / denom
+        # term3 = resid'*Γ*d2resid / denom
+        # s += -term1 + term2 + term3
+        for j in 1:length(η)
+            gcm.data[i].storage_n[j] = inv(sqrt(exp(η[j])*(exp(η[j])+r) / r)) # storage_n = inv(Di) = 1 / sqrt(var(yi))
+        end
+        for j in 1:length(η)
+            # storage_n2 = -inv(D) * d2D
+            gcm.data[i].storage_n2[j] = -gcm.data[i].storage_n[j] * 
+                ((exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) + 
+                (3exp(2η[j]) / (4r^(2.5)*sqrt(exp(η[j])*(exp(η[j])+r)))))
+        end
+        for j in 1:length(η)
+            # storage_n = inv(D) * dD
+            gcm.data[i].storage_n[j] *= -exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r)))
+        end
+        for j in 1:length(η)
+            # storage_n2 = 2inv(D)*dD*inv(D)*dD -inv(D)*d2D
+            gcm.data[i].storage_n2[j] += 2 * abs2(gcm.data[i].storage_n[j])
+        end
+        gcm.data[i].storage_n .*= -1.0 .* resid # storage_n = dr(β) = derivative of residuals
+        gcm.data[i].storage_n2 .*= resid # storage_n2 = dr²(β) = 2nd derivative of residuals
+        mul!(gcm.data[i].storage_n3, Γ, resid) # storage_n3 = Γ * resid
+        denom = 1 + 0.5 * dot(resid, gcm.data[i].storage_n3)
+        mul!(gcm.data[i].storage_n3, Γ, gcm.data[i].storage_n) # storage_n3 = Γ * dresid
+        term1 = (dot(resid, gcm.data[i].storage_n3) / denom)^2 # (resid'*Γ*dresid / denom)^2
+        term2 = dot(gcm.data[i].storage_n, gcm.data[i].storage_n3) / denom # term2 = dresid'*Γ*dresid / denom
+        mul!(gcm.data[i].storage_n3, Γ, gcm.data[i].storage_n2) # storage_n3 = Γ * d2resid
+        term3 = dot(resid, gcm.data[i].storage_n3) / denom # term3 = resid'*Γ*d2resid / denom
+        s += -term1 + term2 + term3
+    end
+    return s
+end
+
+function negbin_component_loglikelihood(gcm, r::T) where T <: AbstractFloat
+    logl = zero(T)
+    for gc in gcm.data
+        n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
+        # fill!(gc.∇β, 0.0)
+        update_res!(gc, gcm.β)
+        standardize_res!(gc)
+        # fill!(gc.∇resβ, 0.0) # fill gradient of residual vector with 0
+        std_res_differential!(gc) # this will compute ∇resβ
+        fill!(gc.storage_nn, 0)
+        @inbounds for k in 1:m
+            mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
+            gc.q[k] = dot(gc.res, gc.storage_n) / 2 # gc.q[k] = 0.5res' * V[k] * res
+            # BLAS.gemv!('T', gcm.Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # gc.∇β += ∇resβ*Γ*res (standardized residual) 
+            gc.storage_nn .+= gcm.Σ[k] .* gc.V[k] # compute Γ = a1*V1 + ... am*Vm
+        end
+        # 2nd term of logl
+        logl += component_loglikelihood(gc, r)
+        # 3rd term of logl
+        qsum  = dot(gcm.Σ, gc.q) # q[k] = res_i' * V_i[k] * res_i / 2, so qsum = 0.5r(β)*Γ*r(β)
+        logl += log(1 + qsum)
+    end
+    return logl
+end
+
+function newton_increment(gcm, r)
+    dx = first_derivative(gcm, r)
+    dx2 = second_derivative(gcm, r)
+    increment = dx / dx2
+    # use gradient ascent if hessian not negative definite
+    # if dx2 < 0
+    #     increment = dx / dx2
+    # else 
+    #     increment = dx
+    # end
+    return increment
+end
+
+function dLdr_2ndterm(yi::T, μi::T, r::T) where T <: AbstractFloat
+    return -(yi+r)/(μi+r) - log(μi+r) + 1 + log(r) + digamma(r+yi) - digamma(r) :: T
+end
+
+function dLdr2_2ndterm(yi::T, μi::T, r::T) where T <: AbstractFloat
+    return (yi+r)/(μi+r)^2 - 2/(μi+r) + 1/r + trigamma(r+yi) - trigamma(r) :: T
 end
