@@ -1,20 +1,19 @@
 export ◺
 """
-    fit!(gcm::GLMCopulaARModel, solver=Ipopt.IpoptSolver(print_level=5))
+    fit!(gcm::GLMCopulaARModel{Bernoulli{Float64}}, solver=Ipopt.IpoptSolver(print_level=5))
 
 Fit an `GLMCopulaVCModel` object by MLE using a nonlinear programming solver. Start point 
 should be provided in `gcm.β`, `gcm.Σ`.
 """
 function fit!(
         gcm::GLMCopulaARModel,
-        solver=Ipopt.IpoptSolver(print_level=5)
+        solver=Ipopt.IpoptSolver(print_level = 5)
     )
     npar = gcm.p + 2 # rho and sigma squared
     optm = MathProgBase.NonlinearModel(solver)
     # set lower bounds and upper bounds of parameters
-    # diagonal entries of Cholesky factor L should be >= 0
     lb   = fill(-Inf, npar)
-    ub   = fill( Inf, npar)
+    ub   = fill(Inf, npar)
     offset = gcm.p + 1
     ub[offset] = 1
     for k in 1:2

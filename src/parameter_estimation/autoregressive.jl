@@ -234,7 +234,8 @@ function loglikelihood!(
     ρ::T,
     σ2::T,
     needgrad::Bool = false,
-    needhess::Bool = false
+    needhess::Bool = false;
+    penalized::Bool = true
     ) where {T <: BlasReal, D, Link}
     n, p = size(gc.X, 1), size(gc.X, 2)
     needgrad = needgrad || needhess
@@ -276,6 +277,10 @@ function loglikelihood!(
     logl += -log(c1)
     # @show logl
     logl += log(c2)
+    # add L2 ridge penalty
+    if penalized
+        logl -= 0.5 * (σ2)^2
+    end
     # @show logl
     if needgrad
         inv1pq = inv(c2)
@@ -287,6 +292,9 @@ function loglikelihood!(
 
         # gradient with respect to sigma2
         gc.∇σ2 .= -0.5 * n * inv(c1) .+ inv(c2) * 0.5 * q
+        if penalized
+            gc.∇σ2 .-= σ2
+        end
       if needhess
             # gc.∇2ARV .= get_∇2ARV(n, ρ, σ2, gc.∇2ARV)
             get_∇2V!(ρ, gc)
