@@ -69,14 +69,64 @@ function initialize_model!(
 end
 
 function initialize_model!(
-  gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}}) where {T <: BlasReal, D, Link}
-  println("initializing β using Newton's Algorithm under Independence Assumption")
-  glm_regress_model(gcm)
-  fill!(gcm.τ, 1.0)
-  println("initializing variance components using MM-Algorithm")
-  fill!(gcm.Σ, 1.0)
-  update_Σ!(gcm)
-  nothing
+    gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
+    println("initializing β using Newton's Algorithm under Independence Assumption")
+    glm_regress_model(gcm)
+    fill!(gcm.τ, 1.0)
+    println("initializing variance components using MM-Algorithm")
+    fill!(gcm.Σ, 1.0)
+    update_Σ!(gcm)
+    @show gcm.Σ
+
+    nothing
+end
+
+# code inspired from https://github.com/JuliaStats/GLM.jl/blob/master/src/negbinfit.jl
+function initialize_model!(
+    gcm::NBCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
+
+    # initial guess for r = 1
+    fill!(gcm.r, 1)
+
+    # fit a Poisson regression model to estimate μ, η, β, τ
+    println("Initializing NegBin r to Poisson regression values")
+    nsample = length(gcm.data)
+    gcsPoisson = Vector{GLMCopulaVCObs{T, Poisson{T}, LogLink}}(undef, nsample)
+    for (i, gc) in enumerate(gcm.data)
+        gcsPoisson[i] = GLMCopulaVCObs(gc.y, gc.X, gc.V, Poisson(), LogLink())
+    end
+    gcmPoisson = GLMCopulaVCModel(gcsPoisson)
+    initialize_model!(gcmPoisson)
+
+    GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0, derivative_test = "first-order", 
+        mehrotra_algorithm ="yes", warm_start_init_point="yes", max_iter = 200,
+        hessian_approximation = "exact"))
+
+    for i in 1:nsample
+        copyto!(gcm.data[i].μ, gcmPoisson.data[i].μ)
+        copyto!(gcm.data[i].η, gcmPoisson.data[i].η)
+    end
+    copyto!(gcm.τ, gcmPoisson.τ)
+    copyto!(gcm.β, gcmPoisson.β)
+
+    # update r using maximum likelihood with Newton's method
+    for gc in gcm.data
+      fill!(gcm.τ, 1.0)
+      fill!(gcm.Σ, 1.0)
+      fill!(gc.∇β, 0)
+      fill!(gc.∇τ, 0)
+      fill!(gc.∇Σ, 0)
+      fill!(gc.Hβ, 0)
+      fill!(gc.Hτ, 0)
+      fill!(gc.HΣ, 0)
+    end
+    update_r!(gcm)
+
+    println("initializing variance components using MM-Algorithm")
+    fill!(gcm.Σ, 1)
+    update_Σ!(gcm)
+
+    nothing
 end
 
 """
@@ -118,7 +168,12 @@ function glm_regress_model(gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARM
                     c = gc.res[j] * gc.w1[j]
                     copyto!(x, gc.X[j, :])
                     BLAS.axpy!(c, x, gcm.∇β) # score = score + c * x
-                    obj = obj + GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], gc.wt[j], 1)
+                    if typeof(gc.d) <: NegativeBinomial
+                      r = gc.d.r
+                      obj = obj + logpdf(D(r, r/(gc.μ[j] + r)), gc.y[j])
+                    else
+                      obj = obj + GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], gc.wt[j], 1)
+                    end
                    end
            end
       if obj > old_obj

@@ -110,6 +110,7 @@ function MathProgBase.eval_grad_f(
         grad[offset] = gcm.∇Σ[k]
         offset += 1
     end
+    # update nuisance parameter
     # @show gcm.θ
     copyto!(gcm.∇θ, grad)
     # @show gcm.∇θ

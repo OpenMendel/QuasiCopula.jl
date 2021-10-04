@@ -1,14 +1,20 @@
 """
     fit!(gcm::NBCopulaVCModel, solver=Ipopt.IpoptSolver(print_level=5))
 
-Fit an `NBCopulaVCModel` object by MLE using a nonlinear programming solver. Start point 
-should be provided in `gcm.β`, `gcm.Σ`, `gcm.r`
+Fit an `NBCopulaVCModel` object by block MLE using a nonlinear programming solver.
+Start point should be provided in `gcm.β`, `gcm.Σ`, `gcm.r`. In our block updates,
+we fit 10 iterations of `gcm.β`, `gcm.Σ` using IPOPT, followed by 10 iterations of 
+Newton on nuisance parameter `gcm.r`. Convergence is declared when difference of
+successive loglikelihood is less than `tol`.
 """
 function fit!(
         gcm::NBCopulaVCModel,
-        solver=Ipopt.IpoptSolver(print_level=5)
+        solver=Ipopt.IpoptSolver(print_level=0,max_iter=10,
+                                hessian_approximation = "limited-memory");
+        tol::Float64 = 1e-4,
+        maxBlockIter::Int=100
     )
-    npar = gcm.p + gcm.m + 1 # add one for r
+    npar = gcm.p + gcm.m
     optm = MathProgBase.NonlinearModel(solver)
     # set lower bounds and upper bounds of parameters
     lb   = fill(-Inf, npar)
@@ -18,16 +24,26 @@ function fit!(
         lb[offset] = 0
         offset += 1
     end
-    lb[offset] = 1 # lower bound of r is 1, upper bound is Inf
     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Max, gcm)
     # starting point
     par0 = zeros(npar)
     modelpar_to_optimpar!(par0, gcm)
     MathProgBase.setwarmstart!(optm, par0)
+    logl0 = MathProgBase.getobjval(optm)
+    println("Converging when tol ≤ $tol (max block iter = $maxBlockIter)")
     # optimize
-    MathProgBase.optimize!(optm)
-    optstat = MathProgBase.status(optm)
-    optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
+    for i in 1:maxBlockIter
+        MathProgBase.optimize!(optm)
+        logl = MathProgBase.getobjval(optm)
+        update_r!(gcm)
+        if abs(logl - logl0) ≤ tol
+            break
+        else
+            println("Block iter $i r = $(round(gcm.r[1], digits=2))," * 
+            " logl = $(round(logl, digits=2)), tol = $(abs(logl - logl0))")
+            logl0 = logl
+        end
+    end
     # update parameters and refresh gradient
     optimpar_to_modelpar!(gcm, MathProgBase.getsolution(optm))
     loglikelihood!(gcm, true, false)
@@ -51,7 +67,6 @@ function modelpar_to_optimpar!(
         par[offset] = gcm.Σ[k]
         offset += 1
     end
-    par[end] = gcm.r[1]
     par
 end
 
@@ -72,7 +87,6 @@ function optimpar_to_modelpar!(
         gcm.Σ[k] = par[offset]
         offset   += 1
     end
-    gcm.r[1] = par[offset]
     copyto!(gcm.θ, par)
     gcm
 end
@@ -112,7 +126,6 @@ function MathProgBase.eval_grad_f(
         grad[offset] = gcm.∇Σ[k]
         offset += 1
     end
-    grad[end] = gcm.∇r[1]  # add gradient with respect to r
     copyto!(gcm.∇θ, grad)
     # @show gcm.∇θ
     # return objective
@@ -132,8 +145,8 @@ MathProgBase.eval_jac_g(gcm::NBCopulaVCModel, J, par) = nothing
 function MathProgBase.hesslag_structure(gcm::NBCopulaVCModel)
     m◺ = ◺(gcm.m)
     # we work on the upper triangular part of the Hessian
-    arr1 = Vector{Int}(undef, ◺(gcm.p) + m◺ + 1)
-    arr2 = Vector{Int}(undef, ◺(gcm.p) + m◺ + 1)
+    arr1 = Vector{Int}(undef, ◺(gcm.p) + m◺)
+    arr2 = Vector{Int}(undef, ◺(gcm.p) + m◺)
     # Hββ block
     idx  = 1    
     for j in 1:gcm.p
@@ -151,8 +164,6 @@ function MathProgBase.hesslag_structure(gcm::NBCopulaVCModel)
             idx += 1
         end
     end
-    arr1[idx] = gcm.p + gcm.m + 1 # without hessian cross terms, add diagonal block in hessian for r
-    arr2[idx] = gcm.p + gcm.m + 1 
     return (arr1, arr2)
 end
     
@@ -176,8 +187,6 @@ function MathProgBase.eval_hesslag(
         H[idx] = gcm.HΣ[i, j]
         idx   += 1
     end
-    # Hrr block
-    H[idx] = gcm.Hr[1, 1]
     # lmul!(σ, H)
     H .*= σ
 end

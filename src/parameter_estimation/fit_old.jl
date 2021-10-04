@@ -32,8 +32,14 @@ function MathProgBase.eval_f(
     gcm::GLMCopulaVCModel, 
     par::Vector)
     copy_par!(gcm, par)
+    # update nuisance parameter
+    if typeof(gcm.data[1].d) <: NegativeBinomial
+        new_d = update_r!(gcm)
+        @show new_d
+    end
     # maximize σ2 and τ at current β using MM
     update_Σ!(gcm)
+    @show gcm.Σ
     # evaluate loglikelihood
     loglikelihood!(gcm, false, false)
 end
@@ -42,9 +48,15 @@ function MathProgBase.eval_grad_f(
     gcm::GLMCopulaVCModel, 
     grad::Vector, 
     par::Vector)
+    # println("reached eval_grad_f")
     copy_par!(gcm, par)
     # maximize σ2 and τ at current β using MM
     @show gcm.β
+    # update nuisance parameter
+    if typeof(gcm.data[1].d) <: NegativeBinomial
+        new_d = update_r!(gcm)
+        @show new_d
+    end
     update_Σ!(gcm)
     @show gcm.Σ
     # evaluate gradient
@@ -80,7 +92,12 @@ function MathProgBase.eval_hesslag(
     par::Vector{T},
     σ::T,
     μ::Vector{T}) where {T}
+    # println("reached eval_hesslag")
     copy_par!(gcm, par)
+    if typeof(gcm.data[1].d) <: NegativeBinomial
+        new_d = update_r!(gcm)
+        @show new_d
+    end
     # maximize σ2 and τ at current β using MM
     update_Σ!(gcm)
     # evaluate Hessian

@@ -1,6 +1,7 @@
 module GLMCopula
 using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Distributions, StatsFuns, Statistics, StatsBase, ToeplitzMatrices
 using LinearAlgebra: BlasReal, copytri!
+using SpecialFunctions
 @reexport using Ipopt
 @reexport using NLopt
 
@@ -11,7 +12,7 @@ export glm_regress_jl, glm_regress_model, glm_score_statistic!  # these are to i
 export component_loglikelihood, glm_gradient, hessian_glm
 export GLMCopulaVCObs, GLMCopulaVCModel
 
-struct GLMCopulaVCObs{T <: BlasReal, D, Link}
+mutable struct GLMCopulaVCObs{T <: BlasReal, D, Link}
     # data
     y::Vector{T}
     X::Matrix{T}
