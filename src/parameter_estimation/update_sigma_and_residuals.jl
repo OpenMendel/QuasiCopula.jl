@@ -18,7 +18,7 @@ function update_Σ_jensen!(
     gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}},
     maxiter::Integer=50000,
     reltol::Number=1e-6,
-    verbose::Bool=false) where {T <: BlasReal, D, Link}
+    verbose::Bool=false) where {T <: BlasReal, D<:Union{Poisson, Bernoulli, NegativeBinomial}, Link}
     rsstotal = zero(T)
     for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
@@ -34,11 +34,7 @@ function update_Σ_jensen!(
 
         # update τ if necessary
         mul!(gcm.storage_n, gcm.QF, gcm.Σ) # gcm.storage_n[i] = sum_k^m qi[k] sigmai_[k] # denom of numerator
-        if gcm.d[1] == Normal()
-            gcm.τ[1] = GLMCopula.update_τ(gcm.τ[1], gcm.storage_n, gcm.ntotal, rsstotal, 1)
-        else
-            fill!(gcm.τ, 1.0)
-        end
+        fill!(gcm.τ, 1.0)
 
         ##### Numerator in the multiplicative update ##########
         # when its logistic gcm.τ = 1.0
@@ -59,6 +55,51 @@ function update_Σ_jensen!(
         # convergence check
         gcm.storage_m .= gcm.Σ .- gcm.storage_Σ
 
+        # norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1) && break
+        if norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1)
+            verbose && println("iters=$iter")
+            break
+        end
+        verbose && iter == maxiter && @warn "maximum iterations $maxiter reached"
+    end
+    gcm.Σ
+end
+
+function update_Σ_jensen!(
+    gcm::GLMCopulaVCModel{T, D, Link}, 
+    maxiter::Integer=50000,
+    reltol::Number=1e-6,
+    verbose::Bool=false) where {T <: BlasReal, D<:Normal, Link}
+    rsstotal = zero(T)
+    for i in eachindex(gcm.data)
+        update_res!(gcm.data[i], gcm.β)
+        rsstotal += abs2(norm(gcm.data[i].res))
+        update_quadform!(gcm.data[i])
+        gcm.QF[i, :] = gcm.data[i].q        
+    end
+    # MM iteration
+    for iter in 1:maxiter
+        # store previous iterate
+        copyto!(gcm.storage_Σ, gcm.Σ)
+        # update τ
+        mul!(gcm.storage_n, gcm.QF, gcm.Σ) # gcm.storage_n[i] = q[i]
+        gcm.τ[1] = update_τ(gcm.τ[1], gcm.storage_n, gcm.ntotal, rsstotal, 1)
+        # numerator in the multiplicative update
+        gcm.storage_n .= inv.(inv(gcm.τ[1]) .+ gcm.storage_n) # use newest τ to update Σ
+        mul!(gcm.storage_m, transpose(gcm.QF), gcm.storage_n)
+        gcm.Σ .*= gcm.storage_m
+        # denominator in the multiplicative update
+        mul!(gcm.storage_n, gcm.TR, gcm.storage_Σ)
+        gcm.storage_n .= inv.(1 .+ gcm.storage_n)
+        mul!(gcm.storage_m, transpose(gcm.TR), gcm.storage_n)
+        gcm.Σ ./= gcm.storage_m
+        # monotonicity diagnosis
+        verbose && println(sum(log, 1 .+ gcm.τ[1] .* (gcm.QF * gcm.Σ)) - 
+            sum(log, 1 .+ gcm.TR * gcm.Σ) + 
+            gcm.ntotal / 2 * (log(gcm.τ[1]) - log(2π)) - 
+            rsstotal / 2 * gcm.τ[1])
+        # convergence check
+        gcm.storage_m .= gcm.Σ .- gcm.storage_Σ
         # norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1) && break
         if norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1)
             verbose && println("iters=$iter")

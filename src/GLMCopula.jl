@@ -136,7 +136,7 @@ struct GLMCopulaVCModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalu
     link::Vector{Link}
 end
 
-function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: BlasReal, D, Link}
+function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
     n, p, m = length(gcs), size(gcs[1].X, 2), length(gcs[1].V)
     β       = Vector{T}(undef, p)
     τ       = [1.0]
@@ -177,6 +177,48 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: B
         storage_n, storage_m, storage_Σ, d, link)
 end
 
+
+function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: BlasReal, D<:Normal, Link}
+    n, p, m = length(gcs), size(gcs[1].X, 2), length(gcs[1].V)
+    β       = Vector{T}(undef, p)
+    τ       = [1.0]
+    Σ       = Vector{T}(undef, m)
+    θ       = Vector{T}(undef, m + p + 1)
+    ∇β      = Vector{T}(undef, p)
+    ∇τ      = Vector{T}(undef, 1)
+    ∇Σ      = Vector{T}(undef, m)
+    ∇θ      = Vector{T}(undef, m + p + 1)
+    XtX     = zeros(T, p, p) # sum_i xi'xi
+    Hβ      = Matrix{T}(undef, p, p)
+    HΣ      = Matrix{T}(undef, m, m)
+    Hτ      = Matrix{T}(undef, 1, 1)
+    Ainv    = zeros(T, p + m + 1, p + m + 1)
+    Aevec   = zeros(T, p + m + 1, p + m + 1)
+    M       = zeros(T, p + m + 1, p + m + 1)
+    vcov    = zeros(T, p + m + 1, p + m + 1)
+    ψ       = Vector{T}(undef, p + m + 1)
+    TR      = Matrix{T}(undef, n, m) # collect trace terms
+    Ytotal  = 0.0
+    ntotal  = 0.0
+    d       = Vector{D}(undef, n)
+    link    = Vector{Link}(undef, n)
+    for i in eachindex(gcs)
+        ntotal  += length(gcs[i].y)
+        Ytotal  += sum(gcs[i].y)
+        BLAS.axpy!(one(T), gcs[i].xtx, XtX)
+        TR[i, :] = gcs[i].t
+        d[i] = gcs[i].d
+        link[i] = gcs[i].link
+    end
+    QF        = Matrix{T}(undef, n, m)
+    storage_n = Vector{T}(undef, n)
+    storage_m = Vector{T}(undef, m)
+    storage_Σ = Vector{T}(undef, m)
+    GLMCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, p, m, β, τ, Σ, θ,
+        ∇β, ∇τ, ∇Σ, ∇θ, XtX, Hβ, HΣ, Hτ, Ainv, Aevec, M, vcov, ψ, TR, QF,
+        storage_n, storage_m, storage_Σ, d, link)
+end
+
 include("parameter_estimation/autoregressive.jl")
 include("parameter_estimation/NBCopulaVC.jl")
 include("generate_random_deviates/discrete_rand.jl")
@@ -191,4 +233,5 @@ include("parameter_estimation/fit_new.jl") # only initializes using MM-algorithm
 include("parameter_estimation/fit_nb.jl")
 include("parameter_estimation/inference_ci.jl")
 # include("parameter_estimation/fit_old.jl") # only uses MM-algorithm
+
 end # module    

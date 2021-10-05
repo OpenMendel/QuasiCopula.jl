@@ -9,7 +9,6 @@ loglik_obs(::Binomial, y, μ, wt, ϕ) = GLM.logpdf(Binomial(Int(wt), μ), Int(y*
 loglik_obs(::Gamma, y, μ, wt, ϕ) = wt*GLM.logpdf(Gamma(inv(ϕ), μ*ϕ), y)
 loglik_obs(::InverseGaussian, y, μ, wt, ϕ) = wt*GLM.logpdf(InverseGaussian(μ, inv(ϕ)), y)
 loglik_obs(::Normal, y, μ, wt, ϕ) = wt*GLM.logpdf(Normal(μ, sqrt(ϕ)), y)
-# loglik_obs(d::NegativeBinomial, y, μ, wt, ϕ) = wt*GLM.logpdf(NegativeBinomial(d.r, d.r/(μ+d.r)), y)
 loglik_obs(::Poisson, y, μ, wt, ϕ) = logpdf(Poisson(μ), y)
 
 # this gets the loglikelihood from the glm.jl package for the component density
@@ -26,34 +25,9 @@ function component_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopula
   logl
 end
 
-# """
-#     component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link})
-# Calculates the loglikelihood of observing `y` given mean `μ`, Bernoulli or Poisson distribution using the GLM.jl package.
-# """
-# function component_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link},GLMCopulaARObs{T, D, Link}}) where {T <: BlasReal, D<:Union{Bernoulli{T}, Poisson{T}}, Link}
-#     logl = zero(T)
-#     @inbounds for j in 1:length(gc.y)
-#         logl += logpdf(D(gc.μ[j]), gc.y[j])
-#     end
-#     logl
-# end
-
-# """
-#     component_loglikelihood!(gc::GLMCopulaVCObs{T, D, Link})
-# Calculates the loglikelihood of observing `y` given mean `μ`, Negative Binomial distribution using the GLM.jl package.
-# """
-# function component_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}}) where {T <: BlasReal, D<:NegativeBinomial{T}, Link}
-#     logl = zero(T)
-#     r = gc.d.r # this needs to change
-#     @inbounds for j in 1:length(gc.y)
-#         logl += logpdf(D(r, r/(gc.μ[j] + r)), gc.y[j])
-#     end
-#     logl
-# end
-
 """
     loglikelihood!(gc::GLMCopulaVCObs{T, D, Link}, β, τ, Σ)
-Calculates the loglikelihood of observing `y` given mean `μ`, Negative Binomial distribution using the GLM.jl package.
+Calculates the loglikelihood of observing `y` given mean `μ`, for the Poisson and Bernoulli base distribution using the GLM.jl package.
 """
 function loglikelihood!(
     gc::GLMCopulaVCObs{T, D, Link},
@@ -62,7 +36,7 @@ function loglikelihood!(
     Σ::Vector{T},
     needgrad::Bool = false,
     needhess::Bool = false
-    ) where {T <: BlasReal, D, Link}
+    ) where {T <: BlasReal, D<: Union{Poisson, Bernoulli}, Link}
     n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
     needgrad = needgrad || needhess
     if needgrad
@@ -95,7 +69,7 @@ function loglikelihood!(
 
     if needgrad
         inv1pq = inv(1 + qsum)
-        inv1pt = inv(1 + tsum)
+        inv1pt = inv(1 + tsum) # 
         # gc.∇Σ .= inv1pq * gc.q .- inv1pt * gc.t
         gc.m1 .= gc.q
         gc.m1 .*= inv1pq
@@ -138,7 +112,7 @@ function loglikelihood!(
     gcm::GLMCopulaVCModel{T, D, Link},
     needgrad::Bool = false,
     needhess::Bool = false
-    ) where {T <: BlasReal, D, Link}
+    ) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
     logl = zero(T)
     if needgrad
         fill!(gcm.∇β, 0)
@@ -162,3 +136,93 @@ function loglikelihood!(
     logl
 end
 
+"""
+    loglikelihood!(gc::GLMCopulaVCObs{T, D, Link}, β, τ, Σ)
+Calculates the loglikelihood of observing `y` given mean `μ`, for the Normal base distribution.
+"""
+function loglikelihood!(
+    gc::GLMCopulaVCObs{T, D, Link},
+    β::Vector{T},
+    τ::T, # inverse of linear regression variance
+    Σ::Vector{T},
+    needgrad::Bool = false,
+    needhess::Bool = false
+    ) where {T <: BlasReal, D<:Normal, Link}
+    n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
+    needgrad = needgrad || needhess
+    if needgrad
+        fill!(gc.∇β, 0)
+        fill!(gc.∇τ, 0)
+        fill!(gc.∇Σ, 0) 
+    end
+    needhess && fill!(gc.Hβ, 0)
+    # evaluate copula loglikelihood
+    sqrtτ = sqrt(τ)
+    update_res!(gc, β)
+    standardize_res!(gc, sqrtτ)
+    rss  = abs2(norm(gc.res)) # RSS of standardized residual
+    tsum = dot(Σ, gc.t)
+    logl = - log(1 + tsum) - (n * log(2π) -  n * log(τ) + rss) / 2
+    for k in 1:m
+        mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
+        if needgrad # ∇β stores X'*Γ*res (standardized residual)
+            BLAS.gemv!('T', Σ[k], gc.X, gc.storage_n, one(T), gc.∇β)
+        end
+        gc.q[k] = dot(gc.res, gc.storage_n) / 2
+    end
+    qsum  = dot(Σ, gc.q)
+    logl += log(1 + qsum)
+    # gradient
+    if needgrad
+        inv1pq = inv(1 + qsum)
+        if needhess
+            inv1pt = inv(1 + tsum) # 
+            # gc.∇Σ .= inv1pq * gc.q .- inv1pt * gc.t
+            gc.m1 .= gc.q
+            gc.m1 .*= inv1pq
+            gc.m2 .= gc.t
+            gc.m2 .*= inv1pt
+            gc.HΣ .= gc.m2 * transpose(gc.m2) - τ * gc.m1 * transpose(gc.m1)
+            BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, one(T), gc.Hβ) # only lower triangular
+            gc.Hτ[1, 1] = - abs2(qsum * inv1pq / τ)
+        end
+        BLAS.gemv!('T', one(T), gc.X, gc.res, -inv1pq, gc.∇β)
+        gc.∇β .*= sqrtτ
+        gc.∇τ  .= (n - rss + 2qsum * inv1pq) / 2τ
+        gc.∇Σ  .= inv1pq .* gc.q .- inv(1 + tsum) .* gc.t 
+    end
+    # output
+    logl
+end
+
+function loglikelihood!(
+    gcm::GLMCopulaVCModel{T, D, Link},
+    needgrad::Bool = false,
+    needhess::Bool = false
+    ) where {T <: BlasReal, D<:Normal, Link}
+    logl = zero(T)
+    if needgrad
+        fill!(gcm.∇β, 0)
+        fill!(gcm.∇τ, 0)
+        fill!(gcm.∇Σ, 0)
+    end
+    if needhess
+        gcm.Hβ .= - gcm.XtX
+        gcm.Hτ .= - gcm.ntotal / 2abs2(gcm.τ[1])
+    end
+    for i in eachindex(gcm.data)
+        logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.Σ, needgrad, needhess)
+        if needgrad
+            gcm.∇β .+= gcm.data[i].∇β
+            gcm.∇τ .+= gcm.data[i].∇τ
+            gcm.∇Σ .+= gcm.data[i].∇Σ
+        end
+        if needhess
+            gcm.Hβ .+= gcm.data[i].Hβ
+            gcm.Hτ .+= gcm.data[i].Hτ
+            gcm.HΣ .+= gcm.data[i].HΣ
+        end
+    end
+    needhess && (gcm.Hβ .*= gcm.τ[1])
+    logl
+end
