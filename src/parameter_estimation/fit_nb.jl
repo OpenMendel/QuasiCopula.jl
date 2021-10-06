@@ -9,9 +9,9 @@ successive loglikelihood is less than `tol`.
 """
 function fit!(
         gcm::NBCopulaVCModel,
-        solver=Ipopt.IpoptSolver(print_level=0,max_iter=10,
+        solver=Ipopt.IpoptSolver(print_level=0, max_iter=10, 
                                 hessian_approximation = "limited-memory");
-        tol::Float64 = 1e-4,
+        tol::Float64 = 1e-5,
         maxBlockIter::Int=100
     )
     npar = gcm.p + gcm.m
@@ -36,7 +36,8 @@ function fit!(
         MathProgBase.optimize!(optm)
         logl = MathProgBase.getobjval(optm)
         update_r!(gcm)
-        if abs(logl - logl0) ≤ tol
+        if abs(logl - logl0) / (1 + abs(logl0)) ≤ tol # this is faster but has wider confidence intervals
+        # if abs(logl - logl0) ≤ tol # this is slower but has very tight confidence intervals
             break
         else
             println("Block iter $i r = $(round(gcm.r[1], digits=2))," * 

@@ -15,24 +15,26 @@ rtrue = 100.0
 # β_true = log(μ)
 
 # generate data
-intervals = zeros(p + m, 2) #hold intervals
-curcoverage = zeros(p + m) #hold current coverage resutls
-trueparams = [βtrue; Σtrue] #hold true parameters
+intervals = zeros(p + m + 1, 2) #hold intervals
+curcoverage = zeros(p + m + 1) #hold current coverage resutls
+trueparams = [βtrue; rtrue; Σtrue] #hold true parameters
 
 #simulation parameters
 samplesizes = [1000; 10000; 25000; 50000]
 ns = [5; 10; 20; 50]
-nsims = 1
+nsims = 10
 
 #storage for our results
 βMseResults = ones(nsims * length(ns) * length(samplesizes))
 ΣMseResults = ones(nsims * length(ns) *  length(samplesizes))
-βΣcoverage = Matrix{Float64}(undef, p + m, nsims * length(ns) * length(samplesizes))
+rMseResults = ones(nsims * length(ns) *  length(samplesizes))
+βrΣcoverage = Matrix{Float64}(undef, p + m + 1, nsims * length(ns) * length(samplesizes))
 fittimes = zeros(nsims * length(ns) * length(samplesizes))
 
 #storage for glmm results
 βMseResults_GLMM = ones(nsims * length(ns) * length(samplesizes))
 ΣMseResults_GLMM = ones(nsims * length(ns) *  length(samplesizes))
+rMseResults_GLMM = ones(nsims * length(ns) *  length(samplesizes))
 fittimes_GLMM = zeros(nsims * length(ns) * length(samplesizes))
 
 # solver = KNITRO.KnitroSolver(outlev=0)
@@ -93,7 +95,7 @@ for t in 1:length(samplesizes)
             @show gcm.Σ
             @show gcm.r
             # try
-                @time GLMCopula.fit!(gcm, maxBlockIter=100)
+                fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter=100)
                 # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 20, hessian_approximation = "limited-memory"))
                 loglikelihood!(gcm, true, true)
                 @show gcm.θ
@@ -108,15 +110,15 @@ for t in 1:length(samplesizes)
                 @show mseΣ
                 #index = Int(nsims * length(ns) * (t - 1) + nsims * (k - 1) + j)
                 global currentind
-                @views copyto!(βΣcoverage[:, currentind], curcoverage)
+                @views copyto!(βrΣcoverage[:, currentind], curcoverage)
                 βMseResults[currentind] = mseβ
                 ΣMseResults[currentind] = mseΣ
+                rMseResults[currentind] = mser
                 fittimes[currentind] = fittime
                 # glmm
                 # fit glmm
                 @info "Fit with MixedModels..."
                 fittime_GLMM = @elapsed gm1 = fit(MixedModel, form, df, NegativeBinomial(), LogLink(); nAGQ = 25)
-                # fittime_GLMM = @elapsed gm1 = fit(MixedModel, form, df, Poisson(), contrasts = Dict(:group => Grouping()))
                 display(gm1)
                 @show gm1.β
                 # mse and time under glmm
@@ -124,10 +126,11 @@ for t in 1:length(samplesizes)
                 level = 0.95
                 p = 3
                 @show GLMM_CI_β = hcat(gm1.β + MixedModels.stderror(gm1) * quantile(Normal(), (1. - level) / 2.), gm1.β - MixedModels.stderror(gm1) * quantile(Normal(), (1. - level) / 2.))
-                @show GLMM_mse = [sum(abs2, gm1.β .- βtrue) / p, sum(abs2, (gm1.θ.^2) .- Σtrue[1]) / 1]
+                @show GLMM_mse = [sum(abs2, gm1.β .- βtrue) / p, sum(abs2, gm1.σ^2 - inv(rtrue)), sum(abs2, (gm1.θ.^2) .- Σtrue[1]) / 1]
                 # glmm
                 βMseResults_GLMM[currentind] = GLMM_mse[1]
-                ΣMseResults_GLMM[currentind] = GLMM_mse[2]
+                rMseResults_GLMM[currentind] = GLMM_mse[2]
+                ΣMseResults_GLMM[currentind] = GLMM_mse[3]
                 fittimes_GLMM[currentind] = fittime_GLMM
                 currentind += 1
         end

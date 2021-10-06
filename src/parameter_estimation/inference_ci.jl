@@ -185,6 +185,14 @@ end
     stderror(gcm::GLMCopulaVCModel)
 Get the estimated standard errors from the asymptotic variance covariance matrix of the parameters.
 """
+function stderror(gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D<:Normal, Link}
+    [sqrt(abs(gcm.vcov[i, i])) for i in 1:(gcm.p + gcm.m + 1)]
+end
+
+"""
+    stderror(gcm::GLMCopulaVCModel)
+Get the estimated standard errors from the asymptotic variance covariance matrix of the parameters.
+"""
 function stderror(gcm::NBCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
     [sqrt(abs(gcm.vcov[i, i])) for i in 1:(gcm.p + gcm.m + 1)]
 end
@@ -228,11 +236,11 @@ end
 
 """
     MSE(gcm::NBCopulaVCModel, β::Vector, r::T, Σ::Vector)
-Get the mean squared error of the parameters `β`, `r` and `Σ`.
+Get the mean squared error of the parameters `β`, `r` and `Σ`. We report the MSE of the dispersion, 1/r.
 """
 function MSE(gcm::NBCopulaVCModel{T, D, Link}, β::Vector, r::T, Σ::Vector) where {T <: BlasReal, D, Link}
     mseβ = sum(abs2, gcm.β .- β) / gcm.p
-    mser = sum(abs2, gcm.r .- r)
+    mser = sum(abs2, inv.(gcm.r) .- inv(r))
     mseΣ = sum(abs2, gcm.Σ .- Σ) / gcm.m
     return mseβ, mser, mseΣ
 end
