@@ -12,10 +12,10 @@ mutable struct NBCopulaVCObs{T <: BlasReal, D, Link} # d changes, so must be mut
     ∇resβ::Matrix{T}# residual gradient matrix d/dβ_p res_ij (each observation has a gradient of residual is px1)
     ∇τ::Vector{T}   # gradient wrt τ
     ∇Σ::Vector{T}   # gradient wrt σ2
-    # ∇r::Vector{T}   # gradient wrt r (NB)
+    ∇r::Vector{T}   # gradient wrt r (NB)
     Hβ::Matrix{T}   # Hessian wrt β
     HΣ::Matrix{T}   # Hessian wrt variance components Σ
-    # Hr::Matrix{T}   # Hessian wrt r (NB)
+    Hr::Matrix{T}   # Hessian wrt r (NB)
     Hτ::Matrix{T}   # Hessian wrt τ
     res::Vector{T}  # residual vector res_i
     t::Vector{T}    # t[k] = tr(V_i[k]) / 2
@@ -57,10 +57,10 @@ function NBCopulaVCObs(
     ∇resβ  = Matrix{T}(undef, n, p)
     ∇τ  = Vector{T}(undef, 1)
     ∇Σ  = Vector{T}(undef, m)
-    # ∇r  = Vector{T}(undef, 1)
+    ∇r  = Vector{T}(undef, 1)
     Hβ  = Matrix{T}(undef, p, p)
     HΣ  = Matrix{T}(undef, m, m)
-    # Hr  = Matrix{T}(undef, 1, 1)
+    Hr  = Matrix{T}(undef, 1, 1)
     Hτ  = Matrix{T}(undef, 1, 1)
     res = Vector{T}(undef, n)
     t   = [tr(V[k])/2 for k in 1:m]
@@ -85,7 +85,7 @@ function NBCopulaVCObs(
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
-    NBCopulaVCObs{T, D, Link}(y, X, V, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇τ, ∇Σ, Hβ, HΣ, 
+    NBCopulaVCObs{T, D, Link}(y, X, V, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇τ, ∇Σ, ∇r, Hβ, HΣ, Hr,
         Hτ, res, t, q, xtx, storage_n, storage_n2, storage_n3, storage_p1,
         storage_p2, storage_nn, storage_np, storage_pp, added_term_numerator, added_term2,
         η, μ, varμ, dμ, d, link, wt, w1, w2)
@@ -114,13 +114,18 @@ struct NBCopulaVCModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalua
     ∇β::Vector{T}   # gradient from all observations
     ∇τ::Vector{T}
     ∇Σ::Vector{T}
-    # ∇r::Vector{T}
+    ∇r::Vector{T}
     ∇θ::Vector{T}   # overall gradient for beta and variance components vector Σ
     XtX::Matrix{T}  # X'X = sum_i Xi'Xi
     Hβ::Matrix{T}    # Hessian from all observations
     HΣ::Matrix{T}
-    # Hr::Matrix{T}
+    Hr::Matrix{T}
     Hτ::Matrix{T}
+    Ainv::Matrix{T}
+    Aevec::Matrix{T}
+    M::Matrix{T}
+    vcov::Matrix{T}
+    ψ::Vector{T}
     TR::Matrix{T}         # n-by-m matrix with tik = tr(Vi[k]) / 2
     QF::Matrix{T}         # n-by-m matrix with qik = res_i' Vi[k] res_i
     hess1::Matrix{T}      # holds transpose(gcm.QF) * Diagonal(gcm.storage_n) required for outer product in hessian term 1 
@@ -143,13 +148,18 @@ function NBCopulaVCModel(gcs::Vector{NBCopulaVCObs{T, D, Link}}) where {T <: Bla
     ∇β  = Vector{T}(undef, p)
     ∇τ  = Vector{T}(undef, 1)
     ∇Σ  = Vector{T}(undef, m)
-    # ∇r  = Vector{T}(undef, 1)
+    ∇r  = Vector{T}(undef, 1)
     ∇θ  = Vector{T}(undef, m + p + 1) # should this +1 ??
     XtX = zeros(T, p, p) # sum_i xi'xi
     Hβ  = Matrix{T}(undef, p, p)
     HΣ  = Matrix{T}(undef, m, m)
-    # Hr  = Matrix{T}(undef, 1, 1)
+    Hr  = Matrix{T}(undef, 1, 1)
     Hτ  = Matrix{T}(undef, 1, 1)
+    Ainv    = zeros(T, p + m + 1, p + m + 1)
+    Aevec   = zeros(T, p + m + 1, p + m + 1)
+    M       = zeros(T, p + m + 1, p + m + 1)
+    vcov    = zeros(T, p + m + 1, p + m + 1)
+    ψ       = Vector{T}(undef, p + m + 1)
     TR  = Matrix{T}(undef, n, m) # collect trace terms
     Ytotal = 0.0
     ntotal = 0.0
@@ -171,7 +181,7 @@ function NBCopulaVCModel(gcs::Vector{NBCopulaVCObs{T, D, Link}}) where {T <: Bla
     storage_m = Vector{T}(undef, m)
     storage_Σ = Vector{T}(undef, m)
     NBCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, p, m, β, τ, Σ, r, θ,
-        ∇β, ∇τ, ∇Σ, ∇θ, XtX, Hβ, HΣ, Hτ, TR, QF, hess1, hess2,
+        ∇β, ∇τ, ∇Σ, ∇r, ∇θ, XtX, Hβ, HΣ, Hr, Hτ, Ainv, Aevec, M, vcov, ψ, TR, QF, hess1, hess2,
         storage_n, storage_n2, storage_m, storage_Σ, d, link)
 end
 
@@ -236,7 +246,7 @@ function loglikelihood!(
       inv1pq = inv(1 + qsum)
 
         # gradient with respect to r
-        # gc.∇r .= nb_first_derivative(gc, Σ, r)
+        gc.∇r .= nb_first_derivative(gc, Σ, r)
 
       if needhess
           BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 1.0, gc.Hβ) # only lower triangular
@@ -252,7 +262,7 @@ function loglikelihood!(
           gc.Hβ .+= GLMCopula.glm_hessian(gc, β)
 
           # hessian for r
-          # gc.Hr .= nb_second_derivative(gc, Σ, r)
+          gc.Hr .= nb_second_derivative(gc, Σ, r)
       end
       gc.storage_p2 .= gc.∇β .* inv1pq
       gc.res .= gc.y .- gc.μ
@@ -271,22 +281,22 @@ function loglikelihood!(
   if needgrad
       fill!(gcm.∇β, 0.0)
       fill!(gcm.∇Σ, 0.0)
-    #   fill!(gcm.∇r, 0.0)
+      fill!(gcm.∇r, 0.0)
   end
   if needhess
       fill!(gcm.Hβ, 0.0)
       fill!(gcm.HΣ, 0.0)
-    #   fill!(gcm.Hr, 0.0)
+      fill!(gcm.Hr, 0.0)
   end
   @inbounds for i in eachindex(gcm.data)
       logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.Σ, gcm.r[1], needgrad, needhess)
       if needgrad
           gcm.∇β .+= gcm.data[i].∇β
-        #   gcm.∇r .+= gcm.data[i].∇r
+          gcm.∇r .+= gcm.data[i].∇r
       end
       if needhess
           gcm.Hβ .+= gcm.data[i].Hβ
-        #   gcm.Hr .+= gcm.data[i].Hr
+          gcm.Hr .+= gcm.data[i].Hr
       end
   end
     if needgrad
