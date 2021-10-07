@@ -5,6 +5,9 @@ mutable struct NBCopulaVCObs{T <: BlasReal, D, Link} # d changes, so must be mut
     y::Vector{T}
     X::Matrix{T}
     V::Vector{Matrix{T}}
+    n::Int
+    p::Int
+    m::Int
     # working arrays
     ∇β::Vector{T}   # gradient wrt β
     ∇μβ::Matrix{T}
@@ -85,7 +88,7 @@ function NBCopulaVCObs(
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
-    NBCopulaVCObs{T, D, Link}(y, X, V, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇τ, ∇Σ, ∇r, Hβ, HΣ, Hr,
+    NBCopulaVCObs{T, D, Link}(y, X, V, n, p, m, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇τ, ∇Σ, ∇r, Hβ, HΣ, Hr,
         Hτ, res, t, q, xtx, storage_n, storage_n2, storage_n3, storage_p1,
         storage_p2, storage_nn, storage_np, storage_pp, added_term_numerator, added_term2,
         η, μ, varμ, dμ, d, link, wt, w1, w2)
