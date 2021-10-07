@@ -200,7 +200,7 @@ function component_loglikelihood(gc::NBCopulaVCObs{T, D, Link}, r::T) where {T <
     p .= map(x -> x .< 0 ? 0.0 : x, gc.p)
     p .= map(x -> x .> 1 ? 1.0 : x, gc.p)
     @inbounds for j in 1:length(gc.y)
-        logl += logpdf(D(r, p), gc.y[j])
+        logl += logpdf(D(r, p[j]), gc.y[j])
     end
     logl
 end
