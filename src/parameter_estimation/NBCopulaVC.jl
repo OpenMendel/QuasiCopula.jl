@@ -192,8 +192,12 @@ Calculates the loglikelihood of observing `y` given parameters for `μ` and `r` 
 """
 function component_loglikelihood(gc::NBCopulaVCObs{T, D, Link}, r::T) where {T <: BlasReal, D<:NegativeBinomial{T}, Link}
     logl = zero(T)
+    p = zeros(T, gc.n)
+    p .= r ./ (gc.μ .+ r)
+    p .= map(x -> x .< 0 ? 0.0 : x, gc.p)
+    p .= map(x -> x .> 1 ? 1.0 : x, gc.p)
     @inbounds for j in 1:length(gc.y)
-        logl += logpdf(D(r, abs(r/(gc.μ[j] + r))), gc.y[j])
+        logl += logpdf(D(r, p), gc.y[j])
     end
     logl
 end
