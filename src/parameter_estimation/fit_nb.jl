@@ -14,6 +14,8 @@ function fit!(
         tol::Float64 = 1e-5,
         maxBlockIter::Int=100
     )
+    # initialize model
+    initialize_model!(gcm)
     npar = gcm.p + gcm.m
     optm = MathProgBase.NonlinearModel(solver)
     # set lower bounds and upper bounds of parameters
