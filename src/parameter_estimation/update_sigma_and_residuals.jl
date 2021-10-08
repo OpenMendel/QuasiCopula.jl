@@ -66,7 +66,7 @@ function update_Σ_jensen!(
 end
 
 function update_Σ_jensen!(
-    gcm::GLMCopulaVCModel{T, D, Link}, 
+    gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}},
     maxiter::Integer=50000,
     reltol::Number=1e-6,
     verbose::Bool=false) where {T <: BlasReal, D<:Normal, Link}
@@ -74,7 +74,7 @@ function update_Σ_jensen!(
     for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
         rsstotal += abs2(norm(gcm.data[i].res))
-        update_quadform!(gcm.data[i])
+        GLMCopula.update_quadform!(gcm.data[i])
         gcm.QF[i, :] = gcm.data[i].q        
     end
     # MM iteration
@@ -139,7 +139,7 @@ function update_res!(
 end
 
 function standardize_res!(
-    gc::GLMCopulaVCObs{T, D, Link},
+    gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}},
     σinv::T
     ) where {T <: BlasReal, D, Link}
     @inbounds for j in eachindex(gc.y)
@@ -241,6 +241,10 @@ function update_r_newton!(gcm::NBCopulaVCModel; maxIter=100, convTol=1e-6)
         increment = newton_increment(gcm, r)
         new_r = r - stepsize * increment
 
+        # restart r if r < 0
+        # if new_r <= 0 
+        #     new_r = 1
+        # end
         # linesearch
         # for j in 1:20
         #     if new_r <= 0
@@ -398,11 +402,11 @@ function newton_increment(gcm, r)
     dx2 = second_derivative(gcm, r)
     increment = dx / dx2
     # use gradient ascent if hessian not negative definite
-    # if dx2 < 0
-    #     increment = dx / dx2
-    # else 
-    #     increment = dx
-    # end
+    if dx2 < 0
+        increment = dx / dx2
+    else 
+        increment = dx
+    end
     return increment
 end
 
