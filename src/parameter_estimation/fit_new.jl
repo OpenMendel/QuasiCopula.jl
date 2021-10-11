@@ -44,6 +44,7 @@ function fit!(
         gcm::GLMCopulaVCModel{T, D, Link},
         solver=Ipopt.IpoptSolver(print_level=5)
     )  where {T <: BlasReal, D<:Normal, Link}
+    initialize_model!(gcm)
     npar = gcm.p + gcm.m + 1
     optm = MathProgBase.NonlinearModel(solver)
     # set lower bounds and upper bounds of parameters

@@ -11,16 +11,24 @@ function initialize_model!(
     for i in eachindex(gcm.data)
         BLAS.gemv!('T', one(T), gcm.data[i].X, gcm.data[i].y, one(T), xty)
     end
+    println("initialize using least square solution for β")
     # least square solution for β s.t gcm.β = inv(cholesky(Symmetric(gcm.XtX)))*xty
     ldiv!(gcm.β, cholesky(Symmetric(gcm.XtX)), xty)
+    @show gcm.β
     # accumulate residual sum of squares
+    println("initializing dispersion using residual sum of squares")
     rss = zero(T)
     for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
         rss += abs2(norm(gcm.data[i].res))
     end
     gcm.τ[1] = gcm.ntotal / rss
-    gcm.β
+    @show gcm.τ[1]
+    println("initializing variance components using MM-Algorithm")
+    fill!(gcm.Σ, 1.0)
+    update_Σ!(gcm)
+    @show gcm.Σ
+    nothing
 end
 
 """
@@ -32,13 +40,14 @@ function update_rho!(gcm, Y_1, Y_2)
     N = length(gcm.data)
     empirical_covariance_mat = scattermat(hcat(Y_1, Y_2))/N
     n1 = length(gcm.data[1].y)
-    ρhat = abs(empirical_covariance_mat[1, 2] /(inv(1 + 0.5 * n1 * gcm.σ2[1]) * sqrt(Statistics.mean(Y_1)) * sqrt(Statistics.mean(Y_2)) * gcm.σ2[1]))
+    ρhat = abs(empirical_covariance_mat[1, 2] /(inv(1 + 0.5 * n1 * gcm.σ2[1]) * sqrt(abs(Statistics.mean(Y_1))) * sqrt(abs(Statistics.mean(Y_2))) * gcm.σ2[1]))
     if ρhat > 1
       copyto!(gcm.ρ, 1.0)
     else
       @inbounds for i in eachindex(gcm.data)
         get_V!(ρhat, gcm.data[i])
       end
+      fill!(gcm.Σ, 1.0)
       update_Σ!(gcm)
         if gcm.Σ[1] < 10
           copyto!(gcm.σ2, gcm.Σ)
@@ -183,7 +192,7 @@ function glm_regress_model(gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARM
         increment = 0.5 * increment
       end
     end
-    println(iteration," ",old_obj," ",obj," ",steps)
+    # println(iteration," ",old_obj," ",obj," ",steps)
     if iteration > 1 && abs(obj - old_obj) < epsilon * (abs(old_obj) + 1.0)
       return gcm.β
     else
