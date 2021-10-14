@@ -41,8 +41,9 @@ compute the gradient of residual vector ∇resβ (standardized residual) with re
 """
 function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}}) where {T<: BlasReal, D<:Bernoulli{T}, Link}
     @inbounds for j in 1:length(gc.y)
-        gc.∇σ2β[j, :].= (1 - 2 * gc.μ[j]) * gc.dμ[j] .* @view(gc.X[j, :])
-        gc.∇resβ[j, :] .= -inv(sqrt(gc.varμ[j])) .* gc.dμ[j] .* @view(gc.X[j, :]) .- (0.5 * inv(gc.varμ[j])) .* gc.res[j] .* @view(gc.∇σ2β[j, :])
+        gc.∇μβ[j, :] .= gc.varμ[j] .* @view(gc.X[j, :])
+        gc.∇σ2β[j, :].= gc.varμ[j] * (1 - 2 * gc.μ[j]) .* @view(gc.X[j, :])
+        gc.∇resβ[j, :] .= -inv(sqrt(gc.varμ[j])) .* @view(gc.∇μβ[j, :]) .- (0.5 * inv(sqrt(gc.varμ[j]))) .* gc.res[j] .* @view(gc.∇σ2β[j, :])
     end
     nothing
 end
