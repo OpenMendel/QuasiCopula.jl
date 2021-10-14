@@ -81,12 +81,16 @@ function initialize_model!(
     gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
     println("initializing β using Newton's Algorithm under Independence Assumption")
     glm_regress_model(gcm)
+    @show gcm.β
     fill!(gcm.τ, 1.0)
     println("initializing variance components using MM-Algorithm")
     fill!(gcm.Σ, 1.0)
     update_Σ!(gcm)
     @show gcm.Σ
-
+    if sum(gcm.Σ) >= 20
+      fill!(gcm.Σ, 1.0)
+    end
+    @show gcm.Σ
     nothing
 end
 
