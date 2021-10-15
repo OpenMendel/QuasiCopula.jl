@@ -86,7 +86,6 @@ function initialize_model!(
     println("initializing variance components using MM-Algorithm")
     fill!(gcm.Σ, 1.0)
     update_Σ!(gcm)
-    @show gcm.Σ
     if sum(gcm.Σ) >= 20
       fill!(gcm.Σ, 1.0)
     end
@@ -109,11 +108,7 @@ function initialize_model!(
         gcsPoisson[i] = GLMCopulaVCObs(gc.y, gc.X, gc.V, Poisson(), LogLink())
     end
     gcmPoisson = GLMCopulaVCModel(gcsPoisson)
-    initialize_model!(gcmPoisson)
-
-    GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0, derivative_test = "first-order", 
-        mehrotra_algorithm ="yes", warm_start_init_point="yes", max_iter = 200,
-        hessian_approximation = "exact"))
+    GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0, max_iter = 10, tol = 10^-2, hessian_approximation = "limited-memory"))
 
     for i in 1:nsample
         copyto!(gcm.data[i].μ, gcmPoisson.data[i].μ)

@@ -9,9 +9,9 @@ successive loglikelihood is less than `tol`.
 """
 function fit!(
         gcm::NBCopulaVCModel,
-        solver=Ipopt.IpoptSolver(print_level=0, max_iter=10, 
+        solver=Ipopt.IpoptSolver(print_level=0, max_iter=2,
                                 hessian_approximation = "limited-memory");
-        tol::Float64 = 1e-5,
+        tol::Float64 = 1e-4,
         maxBlockIter::Int=100
     )
     # initialize model
@@ -19,8 +19,8 @@ function fit!(
     npar = gcm.p + gcm.m
     optm = MathProgBase.NonlinearModel(solver)
     # set lower bounds and upper bounds of parameters
-    lb   = fill(-Inf, npar)
-    ub   = fill( Inf, npar)
+    lb = fill(-Inf, npar)
+    ub = fill( Inf, npar)
     offset = gcm.p + 1
     for k in 1:gcm.m
         lb[offset] = 0

@@ -236,11 +236,11 @@ end
 
 """
     MSE(gcm::NBCopulaVCModel, β::Vector, r::T, Σ::Vector)
-Get the mean squared error of the parameters `β`, `r` and `Σ`. We report the MSE of the dispersion, 1/r.
+Get the mean squared error of the parameters `β`, `r` and `Σ`. 
 """
 function MSE(gcm::NBCopulaVCModel{T, D, Link}, β::Vector, r::T, Σ::Vector) where {T <: BlasReal, D, Link}
     mseβ = sum(abs2, gcm.β .- β) / gcm.p
-    mser = sum(abs2, inv.(gcm.r) .- inv(r))
+    mser = sum(abs2, gcm.r .- r)
     mseΣ = sum(abs2, gcm.Σ .- Σ) / gcm.m
     return mseβ, mser, mseΣ
 end
@@ -255,6 +255,7 @@ function MSE(gcm::GLMCopulaARModel{T, D, Link}, β::Vector, ρ::Vector, σ2::Vec
     mseσ2 = sum(abs2, gcm.σ2 .- σ2)
     return mseβ, mseρ, mseσ2
 end
+
 
 """
     coverage!(gcm::Union{GLMCopulaVCModel, GLMCopulaARModel}, trueparams::Vector, 
