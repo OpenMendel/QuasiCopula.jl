@@ -17,12 +17,12 @@ function runtest()
     trueparams = [βtrue; rtrue; Σtrue] #hold true parameters
 
     #simulation parameters
-    samplesizes = [100000]
-    ns = [2; 5; 10; 20; 50]
-    nsims = 3
-    # samplesizes = [1000; 10000; 100000]
+    # samplesizes = [100000]
     # ns = [2; 5; 10; 20; 50]
-    # nsims = 50
+    # nsims = 5
+    samplesizes = [1000; 10000; 100000]
+    ns = [2; 5; 10; 20; 50]
+    nsims = 10
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -178,7 +178,7 @@ function runtest()
     # glmm
     writedlm("nb/mse_beta_GLMM_" * ftail, βMseResults_GLMM, ',')
     writedlm("nb/mse_Sigma_GLMM_" * ftail, ΣMseResults_GLMM, ',')
-    writedlm("nb/mse_r_" * ftail, rMseResults_GLMM, ',')
+    writedlm("nb/mse_r_GLMM" * ftail, rMseResults_GLMM, ',')
     writedlm("nb/fittimes_GLMM_" * ftail, fittimes_GLMM, ',')
 end
 runtest()
