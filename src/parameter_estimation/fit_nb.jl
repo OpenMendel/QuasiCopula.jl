@@ -3,13 +3,13 @@
 
 Fit an `NBCopulaVCModel` object by block MLE using a nonlinear programming solver.
 Start point should be provided in `gcm.β`, `gcm.Σ`, `gcm.r`. In our block updates,
-we fit 10 iterations of `gcm.β`, `gcm.Σ` using IPOPT, followed by 10 iterations of 
+we fit 10 iterations of `gcm.β`, `gcm.Σ` using IPOPT, followed by 10 iterations of
 Newton on nuisance parameter `gcm.r`. Convergence is declared when difference of
 successive loglikelihood is less than `tol`.
 """
 function fit!(
         gcm::NBCopulaVCModel,
-        solver=Ipopt.IpoptSolver(print_level=0, max_iter=5,
+        solver=Ipopt.IpoptSolver(print_level=0, max_iter=10,
                                 hessian_approximation = "limited-memory");
         tol::Float64 = 1e-6,
         maxBlockIter::Int=100
@@ -42,7 +42,7 @@ function fit!(
         # if abs(logl - logl0) ≤ tol # this is slower but has very tight confidence intervals
             break
         else
-            println("Block iter $i r = $(round(gcm.r[1], digits=2))," * 
+            println("Block iter $i r = $(round(gcm.r[1], digits=2))," *
             " logl = $(round(logl, digits=2)), tol = $(abs(logl - logl0))")
             logl0 = logl
         end
@@ -79,7 +79,7 @@ end
 Translate optimization variables in `par` to the model parameters in `gcm`.
 """
 function optimpar_to_modelpar!(
-        gcm :: NBCopulaVCModel, 
+        gcm :: NBCopulaVCModel,
         par :: Vector
     )
     # β
@@ -107,7 +107,7 @@ end
 MathProgBase.features_available(gcm::NBCopulaVCModel) = [:Grad, :Hess]
 
 function MathProgBase.eval_f(
-        gcm :: NBCopulaVCModel, 
+        gcm :: NBCopulaVCModel,
         par :: Vector
     )
     optimpar_to_modelpar!(gcm, par)
@@ -115,11 +115,11 @@ function MathProgBase.eval_f(
 end
 
 function MathProgBase.eval_grad_f(
-        gcm    :: NBCopulaVCModel, 
-        grad :: Vector, 
+        gcm    :: NBCopulaVCModel,
+        grad :: Vector,
         par  :: Vector
     )
-    optimpar_to_modelpar!(gcm, par) 
+    optimpar_to_modelpar!(gcm, par)
     obj = loglikelihood!(gcm, true, false)
     # gradient wrt β
     copyto!(grad, gcm.∇β)
@@ -169,12 +169,12 @@ function MathProgBase.hesslag_structure(gcm::NBCopulaVCModel)
     end
     return (arr1, arr2)
 end
-    
+
 function MathProgBase.eval_hesslag(
-        gcm   :: NBCopulaVCModel, 
+        gcm   :: NBCopulaVCModel,
         H   :: Vector{T},
-        par :: Vector{T}, 
-        σ   :: T, 
+        par :: Vector{T},
+        σ   :: T,
         μ   :: Vector{T}
     ) where {T}    
     optimpar_to_modelpar!(gcm, par)
