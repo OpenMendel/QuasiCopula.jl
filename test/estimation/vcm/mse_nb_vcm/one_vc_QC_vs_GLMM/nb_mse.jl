@@ -17,12 +17,9 @@ function runtest()
     trueparams = [βtrue; rtrue; Σtrue] #hold true parameters
 
     #simulation parameters
-    # samplesizes = [100000]
-    # ns = [2; 5; 10; 20; 50]
-    # nsims = 5
     samplesizes = [1000; 10000; 100000]
     ns = [2; 5; 10; 20; 50]
-    nsims = 10
+    nsims = 50
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -50,7 +47,7 @@ function runtest()
 
     for t in 1:length(samplesizes)
         m = samplesizes[t]
-        gcs = Vector{GLMCopulaVCObs{T, D, Link}}(undef, m)
+        gcs = Vector{NBCopulaVCObs{T, D, Link}}(undef, m)
         for k in 1:length(ns)
             ni = ns[k] # number of observations per individual
             β = ones(p_fixed)
@@ -66,11 +63,8 @@ function runtest()
                 Xstack = []
                 Ystack = []
                 # df = DataFrame(Y = Ystack, X1 = Xstack[:, 1], X2 = Xstack[:, 2], X3 = Xstack[:, 3], group = CategoricalArray(groupstack))
-
-                gcs = Vector{NBCopulaVCObs{T, D, Link}}(undef, m)
                 for i in 1:m
-                    Random.seed!(j + i + 100000k + 1000t)
-                    # Random.seed!(123 * j * k * i)
+                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     X = [ones(ni) randn(ni, p_fixed - 1)]
                     η = X * β
                     μ = exp.(η)
@@ -81,8 +75,7 @@ function runtest()
                     # simuate single vector y
                     y = Vector{Float64}(undef, ni)
                     res = Vector{Float64}(undef, ni)
-                    # Random.seed!(123 * j * k * i)
-                    Random.seed!(j + i + 100000k + 1000t)
+                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     rand(nonmixed_multivariate_dist, y, res)
                     V = [ones(ni, ni)]
                     gcs[i] = NBCopulaVCObs(y, X, V, d, link)
@@ -152,7 +145,7 @@ function runtest()
                     fittimes_GLMM[currentind] = fittime_GLMM
                     currentind += 1
                 catch
-                    println("random seed is $(j + i + 100000k + 1000t), rep $j obs per person $ni samplesize $m ")
+                    println("random seed is $(100 * j + k), rep $j obs per person $ni samplesize $m ")
                     # glmm
                     βMseResults_GLMM[currentind] = NaN
                     rMseResults_GLMM[currentind] = NaN
