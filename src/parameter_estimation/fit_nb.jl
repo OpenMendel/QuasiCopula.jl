@@ -43,7 +43,7 @@ function fit!(
             break
         else
             println("Block iter $i r = $(round(gcm.r[1], digits=2))," *
-            " logl = $(round(logl, digits=2)), tol = $(abs(logl - logl0))")
+            " logl = $(round(logl, digits=2)), tol = $(abs(logl - logl0) / (1 + abs(logl0)))")
             logl0 = logl
         end
     end

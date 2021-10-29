@@ -1,7 +1,7 @@
 """
     fit!(gcm::GLMCopulaVCModel, solver=Ipopt.IpoptSolver(print_level=5))
 
-Fit an `GLMCopulaVCModel` object by MLE using a nonlinear programming solver. Start point 
+Fit an `GLMCopulaVCModel` object by MLE using a nonlinear programming solver. Start point
 should be provided in `gcm.β`, `gcm.Σ`, this is for Poisson and Bernoulli base with no additional parameters than the mean.
 """
 function fit!(
@@ -37,7 +37,7 @@ end
 """
     fit!(gcm::GLMCopulaVCModel, solver=Ipopt.IpoptSolver(print_level=5))
 
-Fit an `GLMCopulaVCModel` object by MLE using a nonlinear programming solver. Start point 
+Fit an `GLMCopulaVCModel` object by MLE using a nonlinear programming solver. Start point
 should be provided in `gcm.β`, `gcm.Σ`. This is for the normal base with the additional precision parameter.
 """
 function fit!(
@@ -109,6 +109,7 @@ function modelpar_to_optimpar!(
         par[offset] = gcm.Σ[k]
         offset += 1
     end
+    println("par = $par")
     par
 end
 
@@ -138,7 +139,7 @@ end
 Translate optimization variables in `par` to the model parameters in `gcm` for Normal base with additional precision parameter.
 """
 function optimpar_to_modelpar!(
-        gcm :: GLMCopulaVCModel{T, D, Link}, 
+        gcm :: GLMCopulaVCModel{T, D, Link},
         par :: Vector
     ) where {T <: BlasReal, D<:Normal, Link}
     # β
@@ -148,7 +149,11 @@ function optimpar_to_modelpar!(
     gcm.τ[1] = par[offset]
     offset   += 1
     @inbounds for k in 1:gcm.m
-        gcm.Σ[k] = par[offset]
+        if par[offset] > 0
+            gcm.Σ[k] = par[offset]
+        else
+            gcm.Σ[k] = 1.0
+        end
         offset   += 1
     end
     copyto!(gcm.θ, par)
@@ -168,7 +173,7 @@ end
 MathProgBase.features_available(gcm::GLMCopulaVCModel) = [:Grad, :Hess]
 
 function MathProgBase.eval_f(
-        gcm :: GLMCopulaVCModel, 
+        gcm :: GLMCopulaVCModel,
         par :: Vector
     )
     optimpar_to_modelpar!(gcm, par)
@@ -176,11 +181,11 @@ function MathProgBase.eval_f(
 end
 
 function MathProgBase.eval_grad_f(
-    gcm  :: GLMCopulaVCModel{T, D, Link}, 
-    grad :: Vector, 
+    gcm  :: GLMCopulaVCModel{T, D, Link},
+    grad :: Vector,
     par  :: Vector
 ) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
-optimpar_to_modelpar!(gcm, par) 
+optimpar_to_modelpar!(gcm, par)
 obj = loglikelihood!(gcm, true, false)
 # gradient wrt β
 copyto!(grad, gcm.∇β)
@@ -199,11 +204,11 @@ obj
 end
 
 function MathProgBase.eval_grad_f(
-        gcm  :: GLMCopulaVCModel{T, D, Link}, 
-        grad :: Vector, 
+        gcm  :: GLMCopulaVCModel{T, D, Link},
+        grad :: Vector,
         par  :: Vector
     ) where {T <: BlasReal, D<:Normal, Link}
-    optimpar_to_modelpar!(gcm, par) 
+    optimpar_to_modelpar!(gcm, par)
     obj = loglikelihood!(gcm, true, false)
     # gradient wrt β
     copyto!(grad, gcm.∇β)
@@ -281,12 +286,12 @@ function MathProgBase.hesslag_structure(gcm::GLMCopulaVCModel{T, D, Link}) where
     end
     return (arr1, arr2)
 end
-    
+
 function MathProgBase.eval_hesslag(
-        gcm   :: GLMCopulaVCModel{T, D, Link}, 
+        gcm   :: GLMCopulaVCModel{T, D, Link},
         H   :: Vector{T},
-        par :: Vector{T}, 
-        σ   :: T, 
+        par :: Vector{T},
+        σ   :: T,
         μ   :: Vector{T}
     )where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
     optimpar_to_modelpar!(gcm, par)
@@ -307,10 +312,10 @@ function MathProgBase.eval_hesslag(
 end
 
 function MathProgBase.eval_hesslag(
-            gcm   :: GLMCopulaVCModel{T, D, Link}, 
+            gcm   :: GLMCopulaVCModel{T, D, Link},
             H   :: Vector{T},
-            par :: Vector{T}, 
-            σ   :: T, 
+            par :: Vector{T},
+            σ   :: T,
             μ   :: Vector{T}
         ) where {T <: BlasReal, D<:Normal, Link}
         optimpar_to_modelpar!(gcm, par)
