@@ -8,7 +8,7 @@ loglik_obs(::Bernoulli, y, μ, wt, ϕ) = wt*GLM.logpdf(Bernoulli(μ), y)
 loglik_obs(::Binomial, y, μ, wt, ϕ) = GLM.logpdf(Binomial(Int(wt), μ), Int(y*wt))
 loglik_obs(::Gamma, y, μ, wt, ϕ) = wt*GLM.logpdf(Gamma(inv(ϕ), μ*ϕ), y)
 loglik_obs(::InverseGaussian, y, μ, wt, ϕ) = wt*GLM.logpdf(InverseGaussian(μ, inv(ϕ)), y)
-loglik_obs(::Normal, y, μ, wt, ϕ) = wt*GLM.logpdf(Normal(μ, sqrt(ϕ)), y)
+loglik_obs(::Normal, y, μ, wt, ϕ) = wt*GLM.logpdf(Normal(μ, sqrt(abs(ϕ))), y)
 loglik_obs(::Poisson, y, μ, wt, ϕ) = logpdf(Poisson(μ), y)
 
 # this gets the loglikelihood from the glm.jl package for the component density
@@ -20,7 +20,7 @@ Calculates the loglikelihood of observing `y` given mean `μ`, a distribution
 function component_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}}, τ::T) where {T <: BlasReal, D, Link}
   logl = zero(T)
     @inbounds for j in eachindex(gc.y)
-      logl += GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], gc.wt[j], τ)
+      logl += GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], gc.wt[j], inv(τ))
   end
   logl
 end
@@ -157,39 +157,65 @@ function loglikelihood!(
     end
     needhess && fill!(gc.Hβ, 0)
     # evaluate copula loglikelihood
-    sqrtτ = sqrt(τ)
+    sqrtτ = sqrt(abs(τ))
     update_res!(gc, β)
     standardize_res!(gc, sqrtτ)
     rss  = abs2(norm(gc.res)) # RSS of standardized residual
     tsum = dot(Σ, gc.t)
-    logl = - log(1 + tsum) - (n * log(2π) -  n * log(τ) + rss) / 2
+
+    fill!(gc.∇resβ, 0.0) # fill gradient of residual vector with 0
+    std_res_differential!(gc) # this will compute ∇resβ
+
     for k in 1:m
         mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
         if needgrad # ∇β stores X'*Γ*res (standardized residual)
-            BLAS.gemv!('T', Σ[k], gc.X, gc.storage_n, one(T), gc.∇β)
+            BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, one(T), gc.∇β)
         end
         gc.q[k] = dot(gc.res, gc.storage_n) / 2
     end
-    qsum  = dot(Σ, gc.q)
-    logl += log(1 + qsum)
+    # test passed gc.∇β ≈ [8.846661533432094]
+    # loglikelihood
+    qsum = abs(dot(Σ, gc.q)) #  test passed: 1.8124610637883112
+    logl = GLMCopula.component_loglikelihood(gc, τ)
+    tsum = dot(Σ, gc.t)
+    logl += -log(1 + tsum)
+    logl += log(1 + qsum) # test passed: -27.795829678091444
     # gradient
     if needgrad
         inv1pq = inv(1 + qsum)
-        if needhess
-            inv1pt = inv(1 + tsum) # 
-            # gc.∇Σ .= inv1pq * gc.q .- inv1pt * gc.t
-            gc.m1 .= gc.q
-            gc.m1 .*= inv1pq
-            gc.m2 .= gc.t
-            gc.m2 .*= inv1pt
-            gc.HΣ .= gc.m2 * transpose(gc.m2) - τ * gc.m1 * transpose(gc.m1)
-            BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, one(T), gc.Hβ) # only lower triangular
+        inv1pt = inv(1 + tsum) 
+        gc.m1 .= gc.q
+        gc.m1 .*= inv1pq
+        gc.m2 .= gc.t
+        gc.m2 .*= inv1pt
+        gc.∇Σ .= gc.m1 .- gc.m2
+        if needhess 
+            # gc.HΣ .= gc.m2 * transpose(gc.m2) - τ * gc.m1 * transpose(gc.m1)
+            # BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, one(T), gc.Hβ) # only lower triangular
+            # gc.Hτ[1, 1] = - abs2(qsum * inv1pq / τ)
+            BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 1.0, gc.Hβ) # only lower triangular
+            # does adding this term to the approximation of the hessian violate negative semidefinite properties?
+            fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
+            fill!(gc.added_term2, 0.0) # fill hessian with 0
+            @inbounds for k in 1:m
+                mul!(gc.added_term_numerator, gc.V[k], gc.∇resβ) # storage_n = V[k] * res
+                BLAS.gemm!('T', 'N', Σ[k], gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2)
+            end
+            gc.added_term2 .*= inv1pq
+            gc.Hβ .+= gc.added_term2
+            gc.Hβ .+= GLMCopula.glm_hessian(gc, β)
             gc.Hτ[1, 1] = - abs2(qsum * inv1pq / τ)
+            # hessian for vc
+            fill!(gc.HΣ, 0.0)
+            BLAS.syr!('U', one(T), gc.m2, gc.HΣ)
+            BLAS.syr!('U', -one(T), gc.m1, gc.HΣ)
+            copytri!(gc.HΣ, 'U')
         end
-        BLAS.gemv!('T', one(T), gc.X, gc.res, -inv1pq, gc.∇β)
-        gc.∇β .*= sqrtτ
-        gc.∇τ  .= (n - rss + 2qsum * inv1pq) / 2τ
-        gc.∇Σ  .= inv1pq .* gc.q .- inv(1 + tsum) .* gc.t 
+        # @show gc.∇β
+        BLAS.gemv!('T', one(T), gc.X, gc.res, inv1pq, gc.∇β)
+        # @show gc.∇β
+        gc.∇β .*= sqrtτ # test passed: 0.01997344639809115
+        gc.∇τ .= (n - rss + 2qsum * inv1pq) / 2τ
     end
     # output
     logl
@@ -207,7 +233,6 @@ function loglikelihood!(
         fill!(gcm.∇Σ, 0)
     end
     if needhess
-        gcm.Hβ .= - gcm.XtX
         gcm.Hτ .= - gcm.ntotal / 2abs2(gcm.τ[1])
     end
     for i in eachindex(gcm.data)
