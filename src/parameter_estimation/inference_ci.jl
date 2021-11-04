@@ -34,13 +34,30 @@ function sandwich!(gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D<:U
 end
 
 """
-    sandwich!(gcm::GLMCopulaVCModel)
-Calculate the sandwich estimator of the asymptotic covariance of the parameters, 
+    sandwich!(gcm::GaussianCopulaVCModel)
+For the Gaussian base, calculate the sandwich estimator of the asymptotic covariance of the parameters, 
 based on values `gcm.Hββ`, `gcm.HΣ`, `gcm.data[i].∇β`,
 `gcm.data[i].∇Σ`, and `gcm.vcov` is updated by the sandwich 
 estimator and returned.
 """
-function sandwich!(gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D<:Normal, Link}
+function sandwich!(gcm::GaussianCopulaVCModel{T}) where {T <: BlasReal}
+    fill!(gcm.HΣ, 0)
+    for i in 1:length(gcm.data)
+        qsum  = dot(gcm.Σ, gcm.data[i].q)
+        tsum = dot(gcm.Σ, gcm.data[i].t)
+        inv1pq = inv(1 + qsum)
+        inv1pt = inv(1 + tsum)
+        gcm.data[i].m1 .= gcm.data[i].q
+        gcm.data[i].m1 .*= inv1pq
+        gcm.data[i].m2 .= gcm.data[i].t
+        gcm.data[i].m2 .*= inv1pt
+        # hessian for vc
+        fill!(gcm.data[i].HΣ, 0.0)
+        BLAS.syr!('U', one(T), gcm.data[i].m2, gcm.data[i].HΣ)
+        BLAS.syr!('U', -one(T), gcm.data[i].m1, gcm.data[i].HΣ)
+        copytri!(gcm.data[i].HΣ, 'U')
+        gcm.HΣ .+= gcm.data[i].HΣ
+    end
     p, m = gcm.p, gcm.m
     minv = inv(length(gcm.data))
     # form A matrix in the sandwich formula
@@ -153,7 +170,7 @@ end
     coef(gcm::GLMCopulaVCModel)
 Get the estimated parameter coefficients from the model.
 """
-function coef(gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D<:Normal, Link}
+function coef(gcm::GaussianCopulaVCModel{T}) where {T <: BlasReal}
     [gcm.β; gcm.τ; gcm.Σ]
 end 
 
@@ -185,7 +202,7 @@ end
     stderror(gcm::GLMCopulaVCModel)
 Get the estimated standard errors from the asymptotic variance covariance matrix of the parameters.
 """
-function stderror(gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D<:Normal, Link}
+function stderror(gcm::GaussianCopulaVCModel{T}) where {T <: BlasReal}
     [sqrt(abs(gcm.vcov[i, i])) for i in 1:(gcm.p + gcm.m + 1)]
 end
 
@@ -209,9 +226,9 @@ end
     confint(gcm::Union{GLMCopulaVCModel, GLMCopulaARModel}, level::Real) 
 Get the confidence interval for each of the estimated parameters at level (default level = 95%).
 """
-confint(gcm::Union{GLMCopulaVCModel, GLMCopulaARModel, NBCopulaVCModel}, level::Real) = hcat(GLMCopula.coef(gcm) + GLMCopula.stderror(gcm) * quantile(Normal(), (1. - level) / 2.), GLMCopula.coef(gcm) - GLMCopula.stderror(gcm) * quantile(Normal(), (1. - level) / 2.))
+confint(gcm::Union{GLMCopulaVCModel, GaussianCopulaVCModel, GLMCopulaARModel, NBCopulaVCModel}, level::Real) = hcat(GLMCopula.coef(gcm) + GLMCopula.stderror(gcm) * quantile(Normal(), (1. - level) / 2.), GLMCopula.coef(gcm) - GLMCopula.stderror(gcm) * quantile(Normal(), (1. - level) / 2.))
 
-confint(gcm::Union{GLMCopulaVCModel, GLMCopulaARModel, NBCopulaVCModel}) = confint(gcm, 0.95)
+confint(gcm::Union{GLMCopulaVCModel, GaussianCopulaVCModel, GLMCopulaARModel, NBCopulaVCModel}) = confint(gcm, 0.95)
 
 """
     MSE(gcm::GLMCopulaVCModel, β::Vector, Σ::Vector)
@@ -227,7 +244,7 @@ end
     MSE(gcm::GLMCopulaVCModel, β::Vector, τ::Float64, Σ::Vector)
 Get the mean squared error of the parameters `β`, `τ` and `Σ`.
 """
-function MSE(gcm::GLMCopulaVCModel{T, D, Link}, β::Vector, invτ::T, Σ::Vector) where {T <: BlasReal, D<:Normal, Link}
+function MSE(gcm::GaussianCopulaVCModel{T}, β::Vector, invτ::T, Σ::Vector) where {T <: BlasReal}
     mseβ = sum(abs2, gcm.β .- β) / gcm.p
     mseτ = sum(abs2, sqrt.(inv.(gcm.τ)) .- invτ)
     mseΣ = sum(abs2, gcm.Σ .- Σ) / gcm.m
@@ -262,7 +279,7 @@ end
 intervals::Matrix, curcoverage::Vector)
 Find the coverage of the estimated parameters `β` and `Σ`, given the true parameters.
 """
-function coverage!(gcm::Union{GLMCopulaVCModel, GLMCopulaARModel, NBCopulaVCModel}, trueparams::Vector, 
+function coverage!(gcm::Union{GLMCopulaVCModel, GaussianCopulaVCModel, GLMCopulaARModel, NBCopulaVCModel}, trueparams::Vector, 
     intervals::Matrix, curcoverage::Vector)
     copyto!(intervals, confint(gcm))
     lbs = @views intervals[:, 1]

@@ -1,33 +1,18 @@
 """
-    initialize!(gcm{D}) where D<: Normal
+    initialize_model!(gcm{D}) where D<: Poisson, Bernoulli
 
-Initialize the linear regression parameters `β` and `τ=σ0^{-2}` by the least
-squares solution for the Normal distribution.
+Initialize the linear regression parameters `β` by the weighted least
+squares solution.
 """
 function initialize_model!(
-    gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}}) where {T <:BlasReal, D<:Normal, Link}
-    # accumulate sufficient statistics X'y
-    xty = zeros(T, gcm.p)
-    for i in eachindex(gcm.data)
-        BLAS.gemv!('T', one(T), gcm.data[i].X, gcm.data[i].y, one(T), xty)
-    end
-    println("initialize using least square solution for β")
-    # least square solution for β s.t gcm.β = inv(cholesky(Symmetric(gcm.XtX)))*xty
-    ldiv!(gcm.β, cholesky(Symmetric(gcm.XtX)), xty)
-    @show gcm.β
-    # accumulate residual sum of squares
-    println("initializing dispersion using residual sum of squares")
-    rss = zero(T)
-    for i in eachindex(gcm.data)
-        update_res!(gcm.data[i], gcm.β)
-        rss += abs2(norm(gcm.data[i].res))
-    end
-    gcm.τ[1] = gcm.ntotal / rss
-    @show gcm.τ[1]
-    println("initializing variance components using MM-Algorithm")
+    gcm::GLMCopulaARModel{T, D}) where {T <: BlasReal, D}
+    println("initializing β using Newton's Algorithm under Independence Assumption")
+    glm_regress_model(gcm)
+    fill!(gcm.τ, 1.0)
+    fill!(gcm.ρ, 1.0)
     fill!(gcm.Σ, 1.0)
     update_Σ!(gcm)
-    @show gcm.Σ
+    copyto!(gcm.σ2, gcm.Σ)
     nothing
 end
 
@@ -56,24 +41,6 @@ function update_rho!(gcm, Y_1, Y_2)
         end
       copyto!(gcm.ρ, ρhat)
     end
-    nothing
-end
-
-"""
-    initialize_model!(gcm{D}) where D<: Poisson, Bernoulli
-
-Initialize the linear regression parameters `β` by the weighted least
-squares solution.
-"""
-function initialize_model!(
-    gcm::GLMCopulaARModel{T, D}) where {T <: BlasReal, D}
-    println("initializing β using Newton's Algorithm under Independence Assumption")
-    glm_regress_model(gcm)
-    fill!(gcm.τ, 1.0)
-    fill!(gcm.ρ, 1.0)
-    fill!(gcm.Σ, 1.0)
-    update_Σ!(gcm)
-    copyto!(gcm.σ2, gcm.Σ)
     nothing
 end
 
@@ -233,4 +200,4 @@ function glm_score_statistic(gcm::Union{GLMCopulaVCModel{T, D}, GLMCopulaARModel
         gcm.Hβ .+= gcm.data[i].Hβ
     end
   return gcm
-end # function glm_score_statistic
+  end

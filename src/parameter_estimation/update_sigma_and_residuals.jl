@@ -1,14 +1,3 @@
-
-"""
-update_Σ!(gcm)
-
-Update variance components `Σ` according to the current value of
-`β` by an MM algorithm. `gcm.QF` now needs to hold qudratic forms calculated from standardized residuals.
-"""
-function update_Σ!(gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}}) where {T <: BlasReal, D, Link}
-    update_Σ_jensen!(gcm)
-end
-
 """
 update_Σ_jensen!(gcm)
 
@@ -55,51 +44,6 @@ function update_Σ_jensen!(
         # convergence check
         gcm.storage_m .= gcm.Σ .- gcm.storage_Σ
 
-        # norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1) && break
-        if norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1)
-            verbose && println("iters=$iter")
-            break
-        end
-        verbose && iter == maxiter && @warn "maximum iterations $maxiter reached"
-    end
-    gcm.Σ
-end
-
-function update_Σ_jensen!(
-    gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}},
-    maxiter::Integer=50000,
-    reltol::Number=1e-6,
-    verbose::Bool=false) where {T <: BlasReal, D<:Normal, Link}
-    rsstotal = zero(T)
-    for i in eachindex(gcm.data)
-        update_res!(gcm.data[i], gcm.β)
-        rsstotal += abs2(norm(gcm.data[i].res))
-        GLMCopula.update_quadform!(gcm.data[i])
-        gcm.QF[i, :] = gcm.data[i].q        
-    end
-    # MM iteration
-    for iter in 1:maxiter
-        # store previous iterate
-        copyto!(gcm.storage_Σ, gcm.Σ)
-        # update τ
-        mul!(gcm.storage_n, gcm.QF, gcm.Σ) # gcm.storage_n[i] = q[i]
-        gcm.τ[1] = update_τ(gcm.τ[1], gcm.storage_n, gcm.ntotal, rsstotal, 1)
-        # numerator in the multiplicative update
-        gcm.storage_n .= inv.(inv(gcm.τ[1]) .+ gcm.storage_n) # use newest τ to update Σ
-        mul!(gcm.storage_m, transpose(gcm.QF), gcm.storage_n)
-        gcm.Σ .*= gcm.storage_m
-        # denominator in the multiplicative update
-        mul!(gcm.storage_n, gcm.TR, gcm.storage_Σ)
-        gcm.storage_n .= inv.(1 .+ gcm.storage_n)
-        mul!(gcm.storage_m, transpose(gcm.TR), gcm.storage_n)
-        gcm.Σ ./= gcm.storage_m
-        # monotonicity diagnosis
-        verbose && println(sum(log, 1 .+ gcm.τ[1] .* (gcm.QF * gcm.Σ)) - 
-            sum(log, 1 .+ gcm.TR * gcm.Σ) + 
-            gcm.ntotal / 2 * (log(gcm.τ[1]) - log(2π)) - 
-            rsstotal / 2 * gcm.τ[1])
-        # convergence check
-        gcm.storage_m .= gcm.Σ .- gcm.storage_Σ
         # norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1) && break
         if norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1)
             verbose && println("iters=$iter")
@@ -195,31 +139,6 @@ function update_quadform!(gc::GLMCopulaARObs{T, D, Link}) where {T<:Real, D, Lin
     gc.q
 end
 
-"""
-    MM update to minimize ``n \\log (\\tau) - rss / 2 \\ln (\\tau) +
-\\sum_i \\log (1 + \\tau * q_i)``.
-"""
-function update_τ(
-    τ0::T,
-    q::Vector{T},
-    n::Integer,
-    rss::T,
-    maxiter::Integer=50000,
-    reltol::Number=1e-6,
-    ) where T <: BlasReal
-    @assert τ0 ≥ 0 "τ0 has to be nonnegative"
-    τ = τ0
-    for τiter in 1:maxiter
-        τold = τ
-        tmp = zero(T)
-        for i in eachindex(q)
-            tmp += q[i] / (1 + τ * q[i])
-        end
-        τ = (n + 2τ * tmp) / rss
-        abs(τ - τold) < reltol * (abs(τold) + 1) && break
-    end
-    τ
-end
 
 """
     update_r!(gc::GLMCopulaVCObs{T, D, Link})
