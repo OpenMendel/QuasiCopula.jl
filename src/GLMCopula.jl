@@ -220,6 +220,7 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: B
 end
 include("parameter_estimation/gaussian_VC.jl")
 include("parameter_estimation/autoregressive.jl")
+include("parameter_estimation/NBCopulaAR.jl")
 include("parameter_estimation/NBCopulaVC.jl")
 include("generate_random_deviates/discrete_rand.jl")
 include("generate_random_deviates/continuous_rand.jl")
@@ -233,5 +234,4 @@ include("parameter_estimation/fit_new.jl") # only initializes using MM-algorithm
 include("parameter_estimation/fit_nb.jl")
 include("parameter_estimation/inference_ci.jl")
 # include("parameter_estimation/fit_old.jl") # only uses MM-algorithm
-
 end # module    

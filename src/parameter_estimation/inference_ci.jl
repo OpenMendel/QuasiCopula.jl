@@ -273,6 +273,18 @@ function MSE(gcm::GLMCopulaARModel{T, D, Link}, β::Vector, ρ::Vector, σ2::Vec
     return mseβ, mseρ, mseσ2
 end
 
+"""
+    MSE(gcm::NBCopulaARModel, β::Vector, ρ::Vector, σ2::Vector)
+Get the mean squared error of the parameters `β` , `ρ` and `σ2`.
+"""
+function MSE(gcm::NBCopulaARModel{T, D, Link}, β::Vector, r::T, ρ::Vector, σ2::Vector) where {T <: BlasReal, D, Link}
+    mseβ = sum(abs2, gcm.β .- β) / gcm.p
+    mser = sum(abs2, gcm.r .- r)
+    mseρ = sum(abs2, gcm.ρ .- ρ)
+    mseσ2 = sum(abs2, gcm.σ2 .- σ2)
+    return mseβ, mser, mseρ, mseσ2
+end
+
 
 """
     coverage!(gcm::Union{GLMCopulaVCModel, GLMCopulaARModel}, trueparams::Vector, 

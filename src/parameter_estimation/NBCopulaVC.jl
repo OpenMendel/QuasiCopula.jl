@@ -190,10 +190,10 @@ end
 
 ### loglikelihood functions
 """
-    component_loglikelihood!(gc::NBCopulaVCObs{T, D, Link}, r)
+    component_loglikelihood!(gc::Union{NBCopulaVCObs{T, D, Link}, NBCopulaARObs{T, D, Link}}, r::T)
 Calculates the loglikelihood of observing `y` given parameters for `μ` and `r` for Negative Binomial distribution using the GLM.jl package.
 """
-function component_loglikelihood(gc::NBCopulaVCObs{T, D, Link}, r::T) where {T <: BlasReal, D<:NegativeBinomial{T}, Link}
+function component_loglikelihood(gc::Union{NBCopulaVCObs{T, D, Link}, NBCopulaARObs{T, D, Link}}, r::T) where {T <: BlasReal, D<:NegativeBinomial{T}, Link}
     logl = zero(T)
     @inbounds for j in 1:length(gc.y)
         logl += logpdf(D(r, r / (gc.μ[j] + r)), gc.y[j])
