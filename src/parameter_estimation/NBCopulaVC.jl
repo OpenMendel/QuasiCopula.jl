@@ -312,8 +312,8 @@ function loglikelihood!(
 end
 
 """
-# 1st derivative of loglikelihood of a sample with Σ being the variance components
-# """
+1st derivative of loglikelihood of a sample with Σ being the variance components
+"""
 function nb_first_derivative(gc::NBCopulaVCObs, Σ::Vector{T}, r::Number) where T <: BlasReal
     s = zero(T)
     # 2nd term of logl
