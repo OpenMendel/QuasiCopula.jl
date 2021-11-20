@@ -59,7 +59,7 @@ update_res!(gc, β)
 Update the residual vector according to `β` given link function and distribution.
 """
 function update_res!(
-   gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}},
+   gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}},
    β::Vector{T}) where {T <: BlasReal, D, Link}
    mul!(gc.η, gc.X, β)
    @inbounds for i in 1:length(gc.y)
@@ -92,7 +92,7 @@ function standardize_res!(
 end
 
 function standardize_res!(
-    gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}}
+    gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}}
     ) where {T <: BlasReal, D, Link}
     @inbounds for j in eachindex(gc.y)
         σinv = inv(sqrt(gc.varμ[j]))
@@ -147,7 +147,8 @@ Performs maximum loglikelihood estimation of the nuisance paramter for negative
 binomial model using Newton's algorithm. Will run a maximum of `maxIter` and
 convergence is defaulted to `convTol`.
 """
-function update_r_newton!(gcm::NBCopulaVCModel; maxIter=100, convTol=1e-6)
+function update_r_newton!(gcm::Union{NBCopulaVCModel, NBCopulaARModel};
+    maxIter=100, convTol=1e-6)
 
     T = eltype(gcm.β)
     r = gcm.r[1] # estimated r in previous iteration
@@ -191,7 +192,7 @@ function update_r_newton!(gcm::NBCopulaVCModel; maxIter=100, convTol=1e-6)
     return new_r
 end
 
-function update_r!(gcm::NBCopulaVCModel)
+function update_r!(gcm::Union{NBCopulaVCModel, NBCopulaARModel})
     new_r = update_r_newton!(gcm, maxIter=10)
     gcm.r[1] = new_r
     for gc in gcm.data
@@ -291,7 +292,12 @@ function second_derivative(gcm, r::T) where T <: AbstractFloat
     return s
 end
 
-function negbin_component_loglikelihood(gcm, r::T) where T <: AbstractFloat
+
+function negbin_component_loglikelihood(gcm::NBCopulaARModel, r::T) where T <: AbstractFloat
+    return loglikelihood!(gcm)
+end
+
+function negbin_component_loglikelihood(gcm::NBCopulaVCModel, r::T) where T <: AbstractFloat
     logl = zero(T)
     for gc in gcm.data
         n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)

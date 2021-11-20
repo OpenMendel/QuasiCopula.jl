@@ -104,6 +104,51 @@ function initialize_model!(
     nothing
 end
 
+function initialize_model!(gcm::NBCopulaARModel{T, D, Link}) where {T <: BlasReal, D, Link}
+
+  # initial guess for r = 1
+  fill!(gcm.r, 1)
+
+  # fit a Poisson regression model to estimate μ, η, β, τ
+  println("Initializing NegBin r to Poisson regression values")
+  nsample = length(gcm.data)
+  gcsPoisson = Vector{GLMCopulaARObs{T, Poisson{T}, LogLink}}(undef, nsample)
+  for (i, gc) in enumerate(gcm.data)
+      gcsPoisson[i] = GLMCopulaARObs(gc.y, gc.X, Poisson(), LogLink())
+  end
+  gcmPoisson = GLMCopulaARModel(gcsPoisson)
+  GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0, max_iter = 10, 
+    tol = 10^-2, hessian_approximation = "limited-memory"))
+  for i in 1:nsample
+      copyto!(gcm.data[i].μ, gcmPoisson.data[i].μ)
+      copyto!(gcm.data[i].η, gcmPoisson.data[i].η)
+  end
+  copyto!(gcm.τ, gcmPoisson.τ)
+  copyto!(gcm.β, gcmPoisson.β)
+
+  # update r using maximum likelihood with Newton's method
+  for gc in gcm.data
+    fill!(gcm.τ, 1.0)
+    fill!(gcm.Σ, 1.0)
+    fill!(gc.∇β, 0)
+    # fill!(gc.∇τ, 0)
+    # fill!(gc.∇Σ, 0)
+    fill!(gc.Hβ, 0)
+    # fill!(gc.Hτ, 0)
+    # fill!(gc.HΣ, 0)
+  end
+  update_r!(gcm)
+
+  println("Fdsafdsa")
+  fff
+
+  println("initializing variance components using MM-Algorithm")
+  fill!(gcm.Σ, 1)
+  update_Σ!(gcm)
+
+  nothing
+end
+
 """
     glm_regress_model(gcm)
 

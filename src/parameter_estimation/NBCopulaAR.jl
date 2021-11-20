@@ -114,6 +114,7 @@ struct NBCopulaARModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalua
     ρ::Vector{T}            # autocorrelation parameter
     σ2::Vector{T}           # autoregressive noise parameter
     Σ::Vector{T}
+    r::Vector{T}   # r parameter for negative binomial
     θ::Vector{T}   # all parameters
     # working arrays
     ∇β::Vector{T}   # gradient of beta from all observations
@@ -149,7 +150,7 @@ function NBCopulaARModel(gcs::Vector{NBCopulaARObs{T, D, Link}}) where {T <: Bla
     τ   = [1.0]
     ρ = [1.0]
     σ2 = [1.0]
-    Σ   = Vector{T}(undef, 1)
+    r = [1.0]
     θ = Vector{T}(undef, p + 2)
     ∇β  = Vector{T}(undef, p)
     ∇ρ  = Vector{T}(undef, 1)
@@ -186,7 +187,7 @@ function NBCopulaARModel(gcs::Vector{NBCopulaARObs{T, D, Link}}) where {T <: Bla
     storage_n = Vector{T}(undef, n)
     storage_m = Vector{T}(undef, 1)
     storage_Σ = Vector{T}(undef, 1)
-    NBCopulaARModel{T, D, Link}(gcs, Ytotal, ntotal, p, β, τ, ρ, σ2, Σ, θ,
+    NBCopulaARModel{T, D, Link}(gcs, Ytotal, ntotal, p, β, τ, ρ, σ2, r, θ,
         ∇β, ∇ρ, ∇σ2, ∇r, ∇θ, XtX, Hβ, Hρ, Hσ2, Hr, Hρσ2, Hβσ2, Ainv, Aevec,  M, vcov, ψ,
         TR, QF, storage_n, storage_m, storage_Σ, d, link)
 end
@@ -196,6 +197,7 @@ function loglikelihood!(
     β::Vector{T},
     ρ::T,
     σ2::T,
+    r::T,
     needgrad::Bool = false,
     needhess::Bool = false;
     penalized::Bool = true
@@ -236,7 +238,7 @@ function loglikelihood!(
     c1 = 1 + 0.5 * n * σ2
     c2 = 1 + 0.5 * σ2 * q
     # loglikelihood
-    logl = GLMCopula.component_loglikelihood(gc, 1.0)
+    logl = GLMCopula.component_loglikelihood(gc, r)
     logl += -log(c1)
     # @show logl
     logl += log(c2)
@@ -323,7 +325,7 @@ function loglikelihood!(
         fill!(gcm.Hr, 0.0)
     end
     @inbounds for i in eachindex(gcm.data)
-        logl += loglikelihood!(gcm.data[i], gcm.β, gcm.ρ[1], gcm.σ2[1], needgrad, needhess)
+        logl += loglikelihood!(gcm.data[i], gcm.β, gcm.ρ[1], gcm.σ2[1], gcm.r[1], needgrad, needhess)
         if needgrad
             gcm.∇β .+= gcm.data[i].∇β
             gcm.∇ρ .+= gcm.data[i].∇ρ
@@ -343,8 +345,8 @@ function loglikelihood!(
 end
 
 """
-# 1st derivative of loglikelihood of a sample with ρ and σ2 being the AR(1) parameterization of the covariance matrix.
-# """
+1st derivative of loglikelihood of a sample with ρ and σ2 being the AR(1) parameterization of the covariance matrix.
+"""
 function nb_first_derivative(gc::NBCopulaARObs, ρ::T, σ2::T, r::Number) where T <: BlasReal
     s = zero(T)
     # 2nd term of logl
@@ -354,8 +356,6 @@ function nb_first_derivative(gc::NBCopulaARObs, ρ::T, σ2::T, r::Number) where 
     end
     # 3rd term of logl
     resid = gc.res # res = inv(D)(y - μ)
-    # Γ = Σ' * gc.V # Γ = a1*V1 + ... + am*Vm
-    # set gc.V .= AR1(ρ)
     get_V!(ρ, gc)
     Γ = σ2 * gc.V
     η = gc.η

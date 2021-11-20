@@ -26,7 +26,8 @@ end
     std_res_differential!(gc)
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Negative Binomial.
 """
-function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}}) where {T<: BlasReal, D<:NegativeBinomial{T}, Link}
+function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}}
+    ) where {T<: BlasReal, D<:NegativeBinomial{T}, Link}
     @inbounds for j in 1:length(gc.y)
         gc.∇μβ[j, :] .= gc.dμ[j] .* @view(gc.X[j, :])
         gc.∇σ2β[j, :] .= (gc.μ[j] * inv(gc.d.r) + (1 + inv(gc.d.r) * gc.μ[j])) .* @view(gc.∇μβ[j, :])

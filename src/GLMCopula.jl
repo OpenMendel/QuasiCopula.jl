@@ -1,7 +1,7 @@
 module GLMCopula
 using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Distributions, StatsFuns, Statistics, StatsBase, ToeplitzMatrices
 using LinearAlgebra: BlasReal, copytri!
-using SpecialFunctions
+using SpecialFunctions, Random
 @reexport using Ipopt
 @reexport using NLopt
 
