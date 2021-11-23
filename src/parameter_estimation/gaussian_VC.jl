@@ -422,6 +422,17 @@ function loglikelihood!(
         if needhess
             BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, one(T), gc.Hβ) # only lower triangular
             gc.Hτ[1, 1] = - abs2(qsum * inv1pq / τ)
+            # # hessian of vc vector use with fit_newton_normal.jl
+            inv1pt = inv(1 + tsum)
+            gc.m1 .= gc.q
+            gc.m1 .*= inv1pq
+            gc.m2 .= gc.t
+            gc.m2 .*= inv1pt
+            # hessian for vc
+            fill!(gc.HΣ, 0.0)
+            BLAS.syr!('U', one(T), gc.m2, gc.HΣ)
+            BLAS.syr!('U', -one(T), gc.m1, gc.HΣ)
+            copytri!(gc.HΣ, 'U')
         end
         BLAS.gemv!('T', one(T), gc.X, gc.res, -inv1pq, gc.∇β)
         gc.∇β .*= sqrtτ
@@ -457,104 +468,106 @@ function loglikelihood!(
         if needhess
             gcm.Hβ .+= gcm.data[i].Hβ
             gcm.Hτ .+= gcm.data[i].Hτ
+            gcm.HΣ .+= gcm.data[i].HΣ
         end
     end
     needhess && (gcm.Hβ .*= gcm.τ[1])
     logl
 end
 
-function fit!(
-    gcm::GaussianCopulaVCModel,
-    solver=Ipopt.IpoptSolver(print_level=0)
-    )
-    initialize_model!(gcm)
-    optm = MathProgBase.NonlinearModel(solver)
-    lb = fill(-Inf, gcm.p)
-    ub = fill( Inf, gcm.p)
-    MathProgBase.loadproblem!(optm, gcm.p, 0, lb, ub, Float64[], Float64[], :Max, gcm)
-    MathProgBase.setwarmstart!(optm, gcm.β)
-    MathProgBase.optimize!(optm)
-    optstat = MathProgBase.status(optm)
-    optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
-    copy_par!(gcm, MathProgBase.getsolution(optm))
-    loglikelihood!(gcm)
-    gcm
-end
+# uncomment this and exclude fit_newton_normal.jl from GLMCopula.jl to fit variance components separately using MM-algorithm instead of Joint Newton.
+# function fit!(
+#     gcm::GaussianCopulaVCModel,
+#     solver=Ipopt.IpoptSolver(print_level=0)
+#     )
+#     initialize_model!(gcm)
+#     optm = MathProgBase.NonlinearModel(solver)
+#     lb = fill(-Inf, gcm.p)
+#     ub = fill( Inf, gcm.p)
+#     MathProgBase.loadproblem!(optm, gcm.p, 0, lb, ub, Float64[], Float64[], :Max, gcm)
+#     MathProgBase.setwarmstart!(optm, gcm.β)
+#     MathProgBase.optimize!(optm)
+#     optstat = MathProgBase.status(optm)
+#     optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
+#     copy_par!(gcm, MathProgBase.getsolution(optm))
+#     loglikelihood!(gcm)
+#     gcm
+# end
 
-function MathProgBase.initialize(
-    gcm::GaussianCopulaVCModel, 
-    requested_features::Vector{Symbol})
-    for feat in requested_features
-        if !(feat in [:Grad, :Hess])
-            error("Unsupported feature $feat")
-        end
-    end
-end
+# function MathProgBase.initialize(
+#     gcm::GaussianCopulaVCModel, 
+#     requested_features::Vector{Symbol})
+#     for feat in requested_features
+#         if !(feat in [:Grad, :Hess])
+#             error("Unsupported feature $feat")
+#         end
+#     end
+# end
 
-MathProgBase.features_available(gcm::GaussianCopulaVCModel) = [:Grad, :Hess]
+# MathProgBase.features_available(gcm::GaussianCopulaVCModel) = [:Grad, :Hess]
 
-function MathProgBase.eval_f(
-    gcm::GaussianCopulaVCModel, 
-    par::Vector)
-    copy_par!(gcm, par)
-    # maximize σ2 and τ at current β using MM
-    update_Σ!(gcm)
-    # evaluate loglikelihood
-    loglikelihood!(gcm, false, false)
-end
+# function MathProgBase.eval_f(
+#     gcm::GaussianCopulaVCModel, 
+#     par::Vector)
+#     copy_par!(gcm, par)
+#     # maximize σ2 and τ at current β using MM
+#     update_Σ!(gcm)
+#     # evaluate loglikelihood
+#     loglikelihood!(gcm, false, false)
+# end
 
-function MathProgBase.eval_grad_f(
-    gcm::GaussianCopulaVCModel, 
-    grad::Vector, 
-    par::Vector)
-    copy_par!(gcm, par)
-    # maximize σ2 and τ at current β using MM
-    update_Σ!(gcm)
-    # evaluate gradient
-    logl = loglikelihood!(gcm, true, false)
-    copyto!(grad, gcm.∇β)
-    nothing
-end
+# function MathProgBase.eval_grad_f(
+#     gcm::GaussianCopulaVCModel, 
+#     grad::Vector, 
+#     par::Vector)
+#     copy_par!(gcm, par)
+#     # maximize σ2 and τ at current β using MM
+#     update_Σ!(gcm)
+#     # evaluate gradient
+#     logl = loglikelihood!(gcm, true, false)
+#     copyto!(grad, gcm.∇β)
+#     nothing
+# end
 
-function copy_par!(
-    gcm::GaussianCopulaVCModel, 
-    par::Vector)
-    copyto!(gcm.β, par)
-    par
-end
+# function copy_par!(
+#     gcm::GaussianCopulaVCModel, 
+#     par::Vector)
+#     copyto!(gcm.β, par)
+#     par
+# end
 
-function MathProgBase.hesslag_structure(gcm::GaussianCopulaVCModel)
-    Iidx = Vector{Int}(undef, (gcm.p * (gcm.p + 1)) >> 1)
-    Jidx = similar(Iidx)
-    ct = 1
-    for j in 1:gcm.p
-        for i in j:gcm.p
-            Iidx[ct] = i
-            Jidx[ct] = j
-            ct += 1
-        end
-    end
-    Iidx, Jidx
-end
+# function MathProgBase.hesslag_structure(gcm::GaussianCopulaVCModel)
+#     Iidx = Vector{Int}(undef, (gcm.p * (gcm.p + 1)) >> 1)
+#     Jidx = similar(Iidx)
+#     ct = 1
+#     for j in 1:gcm.p
+#         for i in j:gcm.p
+#             Iidx[ct] = i
+#             Jidx[ct] = j
+#             ct += 1
+#         end
+#     end
+#     Iidx, Jidx
+# end
 
-function MathProgBase.eval_hesslag(
-    gcm::GaussianCopulaVCModel{T},
-    H::Vector{T},
-    par::Vector{T},
-    σ::T,
-    μ::Vector{T}) where T <: BlasReal
-    copy_par!(gcm, par)
-    # maximize σ2 and τ at current β using MM
-    update_Σ!(gcm)
-    # evaluate Hessian
-    loglikelihood!(gcm, true, true)
-    # copy Hessian elements into H
-    ct = 1
-    for j in 1:gcm.p
-        for i in j:gcm.p
-            H[ct] = gcm.Hβ[i, j]
-            ct += 1
-        end
-    end
-    H .*= σ
-end
+# function MathProgBase.eval_hesslag(
+#     gcm::GaussianCopulaVCModel{T},
+#     H::Vector{T},
+#     par::Vector{T},
+#     σ::T,
+#     μ::Vector{T}) where T <: BlasReal
+#     copy_par!(gcm, par)
+#     # maximize σ2 and τ at current β using MM
+#     update_Σ!(gcm)
+#     # evaluate Hessian
+#     loglikelihood!(gcm, true, true)
+#     # copy Hessian elements into H
+#     ct = 1
+#     for j in 1:gcm.p
+#         for i in j:gcm.p
+#             H[ct] = gcm.Hβ[i, j]
+#             ct += 1
+#         end
+#     end
+#     H .*= σ
+# end
