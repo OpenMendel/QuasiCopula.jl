@@ -401,7 +401,7 @@ function loglikelihood!(
     end
     needhess && fill!(gc.Hβ, 0)
     # evaluate copula loglikelihood
-    sqrtτ = sqrt(τ)
+    sqrtτ = sqrt(abs(τ))
     update_res!(gc, β)
     standardize_res!(gc, sqrtτ)
     rss  = abs2(norm(gc.res)) # RSS of standardized residual
