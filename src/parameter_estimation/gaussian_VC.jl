@@ -405,8 +405,8 @@ function loglikelihood!(
     update_res!(gc, β)
     standardize_res!(gc, sqrtτ)
     rss  = abs2(norm(gc.res)) # RSS of standardized residual
-    tsum = dot(Σ, gc.t)
-    logl = - log(1 + tsum) - (n * log(2π) -  n * log(τ) + rss) / 2
+    tsum = dot(abs(Σ), gc.t)
+    logl = - log(1 + tsum) - (n * log(2π) -  n * log(abs(τ)) + rss) / 2
     for k in 1:m
         mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
         if needgrad # ∇β stores X'*Γ*res (standardized residual)
