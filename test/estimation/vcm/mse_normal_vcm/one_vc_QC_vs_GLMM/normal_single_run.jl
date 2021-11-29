@@ -7,7 +7,7 @@ p = 3   # number of fixed effects, including intercept
 m = 1    # number of variance components
 # true parameter values
 βtrue = ones(p)
-Σtrue = [0.5]
+Σtrue = [0.1]
 
 # generate data
 intervals = zeros(p + m + 1, 2) # hold intervals
@@ -20,14 +20,9 @@ clustersize = 5
 samplesizes = [samplesize]
 ns = [clustersize]
 
-d = Normal()
-link = IdentityLink()
-D = typeof(d)
-Link = typeof(link)
-T = Float64
 k = 2; j = 1; # for random seed
-
-gcs = Vector{GLMCopulaVCObs{T, D, Link}}(undef, samplesize)
+T = Float64
+gcs = Vector{GaussianCopulaVCObs{T}}(undef, samplesize)
 
 ni = ns[1] # number of observations per individual
 y = Vector{Float64}(undef, ni)
@@ -59,25 +54,25 @@ form = @formula(Y ~ 1 + X2 + X3 + (1|group));
 # # for p = 2
 # df = (Y = Ystack, X1 = Xstack[:, 1], X2 = Xstack[:, 2], group = string.(groupstack))
 # form = @formula(Y ~ 1 + X2 + (1|group));
-
-gcs = Vector{GLMCopulaVCObs{T, D, Link}}(undef, samplesize)
+T = Float64
+gcs = Vector{GaussianCopulaVCObs{T}}(undef, samplesize)
 for i in 1:samplesize
     y = Float64.(Y_nsample[i])
     V = [ones(ni, ni)]
-    gcs[i] = GLMCopulaVCObs(y, X, V, d, link)
+    gcs[i] = GaussianCopulaVCObs(y, X, V)
 end
 
 # form VarLmmModel
-gcm = GLMCopulaVCModel(gcs);
-fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
+gcm = GaussianCopulaVCModel(gcs);
+fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-4, hessian_approximation = "limited-memory"))
 @show fittime
 @show gcm.β
 @show gcm.Σ
 @show gcm.τ
-@show gcm.θ
-@show gcm.∇θ
+# @show gcm.θ
+# @show gcm.∇θ
 loglikelihood!(gcm, true, true)
-sandwich!(gcm)
+vcov!(gcm)
 @show GLMCopula.confint(gcm)
 # mse and time under our model
 mseβ, mseτ, mseΣ = MSE(gcm, βtrue, 0.1, Σtrue)

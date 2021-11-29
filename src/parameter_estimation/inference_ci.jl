@@ -1,19 +1,16 @@
-export sandwich!, coef, stderror, confint, MSE, coverage!
+export vcov!, coef, stderror, confint, MSE, coverage!
 """
-    sandwich!(gcm::GLMCopulaVCModel)
-Calculate the sandwich estimator of the asymptotic covariance of the parameters, 
+    vcov!(gcm::GLMCopulaVCModel)
+Calculate the asymptotic covariance of the parameters, 
 based on values `gcm.Hββ`, `gcm.HΣ`, `gcm.data[i].∇β`,
-`gcm.data[i].∇Σ`, and `gcm.vcov` is updated by the sandwich 
-estimator and returned.
+`gcm.data[i].∇Σ`, and `gcm.vcov` is updated and returned.
 """
-function sandwich!(gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
+function vcov!(gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
     p, m = gcm.p, gcm.m
-    minv = inv(length(gcm.data))
     # form A matrix in the sandwich formula
     fill!(gcm.Ainv, 0.0)
     gcm.Ainv[          1:p,                 1:p      ] = gcm.Hβ
     gcm.Ainv[    (p + 1):(p + m),     (p + 1):(p + m)] = gcm.HΣ
-    lmul!(minv, gcm.Ainv)
     # form M matrix in the sandwich formula
     fill!(gcm.M, 0.0)
     for obs in gcm.data
@@ -22,25 +19,21 @@ function sandwich!(gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D<:U
         BLAS.syr!('U', T(1), gcm.ψ, gcm.M)
     end
     copytri!(gcm.M, 'U')
-    lmul!(minv, gcm.M)
     Aeval, Aevec = eigen(Symmetric(gcm.Ainv))
     gcm.Ainv .= Aevec * inv(Diagonal(Aeval)) * Aevec
     fill!(gcm.vcov, 0.0)
     mul!(gcm.Aevec, gcm.Ainv, gcm.M) # use Avec as scratch space
-    # vcov = Ainv * M * Ainv 
     mul!(gcm.vcov, gcm.Aevec, gcm.Ainv)
-    gcm.vcov .*= minv
     nothing
 end
 
 """
-    sandwich!(gcm::GaussianCopulaVCModel)
-For the Gaussian base, calculate the sandwich estimator of the asymptotic covariance of the parameters, 
-based on values `gcm.Hββ`, `gcm.HΣ`, `gcm.data[i].∇β`,
-`gcm.data[i].∇Σ`, and `gcm.vcov` is updated by the sandwich 
-estimator and returned.
+    vcov!(gcm::GaussianCopulaVCModel)
+For the Gaussian base, calculate the asymptotic covariance of the parameters, 
+based on expected information `gcm.Hββ`, `gcm.HΣ`, `gcm.data[i].∇β`,
+`gcm.data[i].∇Σ`, and `gcm.vcov` is updated and returned.
 """
-function sandwich!(gcm::GaussianCopulaVCModel{T}) where {T <: BlasReal}
+function vcov!(gcm::GaussianCopulaVCModel{T}) where {T <: BlasReal}
     fill!(gcm.HΣ, 0)
     for i in 1:length(gcm.data)
         qsum  = dot(gcm.Σ, gcm.data[i].q)
@@ -59,13 +52,11 @@ function sandwich!(gcm::GaussianCopulaVCModel{T}) where {T <: BlasReal}
         gcm.HΣ .+= gcm.data[i].HΣ
     end
     p, m = gcm.p, gcm.m
-    minv = inv(length(gcm.data))
     # form A matrix in the sandwich formula
     fill!(gcm.Ainv, 0.0)
     gcm.Ainv[          1:p,                 1:p      ] = gcm.Hβ
     gcm.Ainv[          p + 1:p + 1,                 p + 1:p + 1      ] = gcm.Hτ
     gcm.Ainv[    (p + 2):(p + 1 + m),     (p + 2):(p + 1 + m)] = gcm.HΣ
-    lmul!(minv, gcm.Ainv)
     # form M matrix in the sandwich formula
     fill!(gcm.M, 0.0)
     for obs in gcm.data
@@ -75,33 +66,28 @@ function sandwich!(gcm::GaussianCopulaVCModel{T}) where {T <: BlasReal}
         BLAS.syr!('U', T(1), gcm.ψ, gcm.M)
     end
     copytri!(gcm.M, 'U')
-    lmul!(minv, gcm.M)
     Aeval, Aevec = eigen(Symmetric(gcm.Ainv))
     gcm.Ainv .= Aevec * inv(Diagonal(Aeval)) * Aevec
     fill!(gcm.vcov, 0.0)
     mul!(gcm.Aevec, gcm.Ainv, gcm.M) # use Avec as scratch space
     # vcov = Ainv * M * Ainv 
     mul!(gcm.vcov, gcm.Aevec, gcm.Ainv)
-    gcm.vcov .*= minv
     nothing
 end
 
 """
-    sandwich!(gcm::NBCopulaVCModel)
-Calculate the sandwich estimator of the asymptotic covariance of the parameters, 
-based on values `gcm.Hββ`, `gcm.HΣ`, `gcm.data[i].∇β`,
-`gcm.data[i].∇Σ`, and `gcm.vcov` is updated by the sandwich 
-estimator and returned.
+    vcov!(gcm::NBCopulaVCModel)
+Calculate the asymptotic covariance of the parameters, 
+based on values `gcm.Hββ`, `gcm.HΣ`, `gcm.Hr`, `gcm.data[i].∇β`,
+`gcm.data[i].∇Σ`, `gcm.data[i].∇r`, and `gcm.vcov` is updated and returned.
 """
 function sandwich!(gcm::NBCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
     p, m = gcm.p, gcm.m
-    minv = inv(length(gcm.data))
     # form A matrix in the sandwich formula
     fill!(gcm.Ainv, 0.0)
     gcm.Ainv[          1:p,                 1:p      ] = gcm.Hβ
     gcm.Ainv[          p + 1:p + 1,                 p + 1:p + 1      ] = gcm.Hr
     gcm.Ainv[    (p + 2):(p + 1 + m),     (p + 2):(p + 1 + m)] = gcm.HΣ
-    lmul!(minv, gcm.Ainv)
     # form M matrix in the sandwich formula
     fill!(gcm.M, 0.0)
     for obs in gcm.data
@@ -111,33 +97,28 @@ function sandwich!(gcm::NBCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Li
         BLAS.syr!('U', T(1), gcm.ψ, gcm.M)
     end
     copytri!(gcm.M, 'U')
-    lmul!(minv, gcm.M)
     Aeval, Aevec = eigen(Symmetric(gcm.Ainv))
     gcm.Ainv .= Aevec * pinv(Diagonal(Aeval)) * Aevec
     fill!(gcm.vcov, 0.0)
     mul!(gcm.Aevec, gcm.Ainv, gcm.M) # use Avec as scratch space
     # vcov = Ainv * M * Ainv 
     mul!(gcm.vcov, gcm.Aevec, gcm.Ainv)
-    gcm.vcov .*= minv
     nothing
 end
 
 """
-    sandwich!(gcm::GLMCopulaARModel)
-Calculate the sandwich estimator of the asymptotic covariance of the parameters, 
-based on values `gcm.Hββ`, `gcm.HΣ`, `gcm.data[i].∇β`,
-`gcm.data[i].∇Σ`, and `gcm.vcov` is updated by the sandwich 
-estimator and returned.
+    vcov!(gcm::GLMCopulaARModel)
+Calculate the asymptotic covariance of the parameters, 
+based on values `gcm.Hββ`, `gcm.Hρ`, `gcm.Hσ2`, `gcm.data[i].∇β`,
+`gcm.data[i].∇ρ`, `gcm.data[i].∇σ2`, and `gcm.vcov` is updated and returned.
 """
 function sandwich!(gcm::GLMCopulaARModel{T, D, Link}) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
     p = gcm.p
-    minv = inv(length(gcm.data))
     # form A matrix in the sandwich formula
     fill!(gcm.Ainv, 0.0)
     gcm.Ainv[1:p, 1:p] = gcm.Hβ
     gcm.Ainv[(p + 1) : (p + 1), (p + 1) : (p + 1)] = gcm.Hρ
     gcm.Ainv[(p + 2) : (p + 2), (p + 2) : (p + 2)] = gcm.Hσ2
-    lmul!(minv, gcm.Ainv)
     # form M matrix in the sandwich formula
     fill!(gcm.M, 0.0)
     for obs in gcm.data
@@ -147,14 +128,12 @@ function sandwich!(gcm::GLMCopulaARModel{T, D, Link}) where {T <: BlasReal, D<:U
         BLAS.syr!('U', T(1), gcm.ψ, gcm.M)
     end
     copytri!(gcm.M, 'U')
-    lmul!(minv, gcm.M)
     Aeval, Aevec = eigen(Symmetric(gcm.Ainv))
     gcm.Ainv .= Aevec * inv(Diagonal(Aeval)) * Aevec
     fill!(gcm.vcov, 0.0)
     mul!(gcm.Aevec, gcm.Ainv, gcm.M) # use Avec as scratch space
     # vcov = Ainv * M * Ainv 
     mul!(gcm.vcov, gcm.Aevec, gcm.Ainv)
-    gcm.vcov .*= minv
     nothing
 end
 
