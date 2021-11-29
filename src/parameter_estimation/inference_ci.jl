@@ -112,7 +112,7 @@ Calculate the asymptotic covariance of the parameters,
 based on values `gcm.Hββ`, `gcm.Hρ`, `gcm.Hσ2`, `gcm.data[i].∇β`,
 `gcm.data[i].∇ρ`, `gcm.data[i].∇σ2`, and `gcm.vcov` is updated and returned.
 """
-function sandwich!(gcm::GLMCopulaARModel{T, D, Link}) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
+function vcov!(gcm::GLMCopulaARModel{T, D, Link}) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
     p = gcm.p
     # form A matrix in the sandwich formula
     fill!(gcm.Ainv, 0.0)
