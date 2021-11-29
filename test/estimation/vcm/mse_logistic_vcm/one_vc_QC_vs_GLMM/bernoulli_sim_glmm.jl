@@ -3,6 +3,10 @@ using Random, Roots, SpecialFunctions
 using DataFrames, DelimitedFiles, Statistics
 import StatsBase: sem
 
+function __get_distribution(dist::Type{D}, μ) where D <: UnivariateDistribution
+    return dist(μ)
+end
+
 function runtest()
     p = 3    # number of fixed effects, including intercept
     m = 1    # number of variance components
@@ -16,7 +20,7 @@ function runtest()
     trueparams = [βtrue; Σtrue] #hold true parameters
 
     #simulation parameters
-    samplesizes = [1000; 10000; 100000]
+    samplesizes = [100; 1000; 10000]
     ns = [2; 5; 10; 20; 50]
     nsims = 50
 
@@ -48,7 +52,7 @@ function runtest()
         for k in 1:length(ns)
             ni = ns[k] # number of observations per individual
             β = ones(p)
-            Γ = Σtrue[1] * ones(ni, ni)
+            Γ = Σtrue[1] * ones(ni, ni) + 0.00000000001 * Matrix(I, ni, ni)
             for j in 1:nsims
                 println("rep $j obs per person $ni samplesize $m")
 
@@ -63,18 +67,13 @@ function runtest()
                     Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     X = [ones(ni) randn(ni, p - 1)]
                     η = X * β
-                    μ = exp.(η) ./ (1 .+ exp.(η))
-                    vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
-                    for i in 1:ni
-                        vecd[i] = Bernoulli(μ[i])
-                    end
-                    nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
-                    # simuate single vector y
-                    y = Vector{Float64}(undef, ni)
-                    res = Vector{Float64}(undef, ni)
-                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-                    rand(nonmixed_multivariate_dist, y, res)
                     V = [ones(ni, ni)]
+                    # generate mvn response
+                    mvn_d = MvNormal(η, Γ)
+                    mvn_η = rand(mvn_d)
+                    μ = GLM.linkinv.(link, mvn_η)
+                    y = Float64.(rand.(__get_distribution.(D, μ)))
+                    # add to data
                     gcs[i] = GLMCopulaVCObs(y, X, V, d, link)
                     push!(Xstack, X)
                     push!(Ystack, y)
@@ -91,7 +90,7 @@ function runtest()
                 df = (Y = Ystack, X2 = Xstack[:, 2], X3 = Xstack[:, 3], group = string.(groupstack))
                 form = @formula(Y ~ 1 + X2 + X3 + (1|group));
 
-                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-6, limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
+                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
                 @show fittime
                 @show gcm.β
                 @show gcm.Σ
@@ -146,15 +145,15 @@ function runtest()
     @show en - st #seconds
     @info "writing to file..."
     ftail = "multivariate_logistic_vcm$(nsims)reps_sim.csv"
-    writedlm("bernoulli/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("bernoulli/mse_Sigma_" * ftail, ΣMseResults, ',')
-    writedlm("bernoulli/fittimes_" * ftail, fittimes, ',')
+    writedlm("bernoulli_sim_glmm/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("bernoulli_sim_glmm/mse_Sigma_" * ftail, ΣMseResults, ',')
+    writedlm("bernoulli_sim_glmm/fittimes_" * ftail, fittimes, ',')
 
-    writedlm("bernoulli/beta_sigma_coverage_" * ftail, βΣcoverage, ',')
+    writedlm("bernoulli_sim_glmm/beta_sigma_coverage_" * ftail, βΣcoverage, ',')
 
 #     # glmm
-    writedlm("bernoulli/mse_beta_GLMM_" * ftail, βMseResults_GLMM, ',')
-    writedlm("bernoulli/mse_Sigma_GLMM_" * ftail, ΣMseResults_GLMM, ',')
-    writedlm("bernoulli/fittimes_GLMM_" * ftail, fittimes_GLMM, ',')
+    writedlm("bernoulli_sim_glmm/mse_beta_GLMM_" * ftail, βMseResults_GLMM, ',')
+    writedlm("bernoulli_sim_glmm/mse_Sigma_GLMM_" * ftail, ΣMseResults_GLMM, ',')
+    writedlm("bernoulli_sim_glmm/fittimes_GLMM_" * ftail, fittimes_GLMM, ',')
 end
 runtest()
