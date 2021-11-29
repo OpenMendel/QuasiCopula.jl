@@ -8,7 +8,7 @@ function runtest()
     m  = 1    # number of variance components
     # true parameter values
     βtrue = ones(p)
-    Σtrue = [0.5]
+    Σtrue = [0.2]
 
     # generate data
     intervals = zeros(p + m, 2) #hold intervals
@@ -16,12 +16,9 @@ function runtest()
     trueparams = [βtrue; Σtrue] #hold true parameters
 
     #simulation parameters
-    # samplesizes = [100000]
-    # ns = [5]
-    # nsims = 20
-    samplesizes = [1000; 10000; 100000]
-    ns = [2; 5; 10; 20; 50]
-    nsims = 20
+    samplesizes = [100; 1000; 10000]
+    ns = [2; 5; 10; 15; 20; 25]
+    nsims = 50
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -29,7 +26,7 @@ function runtest()
     βΣcoverage = Matrix{Float64}(undef, p + m, nsims * length(ns) * length(samplesizes))
     fittimes = zeros(nsims * length(ns) * length(samplesizes))
 
-#     #storage for glmm results
+    #storage for glmm results
     βMseResults_GLMM = ones(nsims * length(ns) * length(samplesizes))
     ΣMseResults_GLMM = ones(nsims * length(ns) *  length(samplesizes))
     fittimes_GLMM = zeros(nsims * length(ns) * length(samplesizes))
@@ -54,21 +51,15 @@ function runtest()
             Γ = Σtrue[1] * ones(ni, ni)
             for j in 1:nsims
                 println("rep $j obs per person $ni samplesize $m")
-                
-                # Ystack = vcat(Y_nsample...)
-                # @show length(Ystack)
+
                 a = collect(1:m)
                 group = [repeat([a[i]], ni) for i in 1:m]
                 groupstack = vcat(group...)
                 Xstack = []
                 Ystack = []
-                # df = DataFrame(Y = Ystack, X1 = Xstack[:, 1], X2 = Xstack[:, 2], X3 = Xstack[:, 3], group = CategoricalArray(groupstack))
-                
-                gcs = Vector{GLMCopulaVCObs{T, D, Link}}(undef, m)
                 for i in 1:m
-                    Random.seed!(123 * j * k + i)
-                    # Random.seed!(j + 100000k + 1000t + i)
-                    # Random.seed!(123 * j * k + i)
+                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
+                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     X = [ones(ni) randn(ni, p - 1)]
                     η = X * β
                     μ = exp.(η)
@@ -80,8 +71,8 @@ function runtest()
                     # simuate single vector y
                     y = Vector{Float64}(undef, ni)
                     res = Vector{Float64}(undef, ni)
-                    Random.seed!(123 * j * k + i)
-                    # Random.seed!(j + 100000k + 1000t + i)
+                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
+                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     rand(nonmixed_multivariate_dist, y, res)
                     V = [ones(ni, ni)]
                     gcs[i] = GLMCopulaVCObs(y, X, V, d, link)
@@ -96,36 +87,39 @@ function runtest()
                 # form glmm
                 Xstack = [vcat(Xstack...)][1]
                 Ystack = [vcat(Ystack...)][1]
+                # p = 3
                 df = (Y = Ystack, X2 = Xstack[:, 2], X3 = Xstack[:, 3], group = string.(groupstack))
                 form = @formula(Y ~ 1 + X2 + X3 + (1|group));
-                
-                # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "exact"))
-                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 20, hessian_approximation = "limited-memory"))
-                @show fittime
-                @show gcm.β
-                @show gcm.Σ
-                @show gcm.θ
-                @show gcm.∇θ
-                loglikelihood!(gcm, true, true)
-                sandwich!(gcm)
-                @show GLMCopula.confint(gcm)
-                # mse and time under our model
-                coverage!(gcm, trueparams, intervals, curcoverage)
-                mseβ, mseΣ = MSE(gcm, βtrue, Σtrue)
-                @show mseβ
-                @show mseΣ
-                #index = Int(nsims * length(ns) * (t - 1) + nsims * (k - 1) + j)
-                # global currentind
-                @views copyto!(βΣcoverage[:, currentind], curcoverage)
-                βMseResults[currentind] = mseβ
-                ΣMseResults[currentind] = mseΣ
-                fittimes[currentind] = fittime
-                # glmm
-                # fit glmm
+                # p = 2
+                # df = (Y = Ystack, X2 = Xstack[:, 2], group = string.(groupstack))
+                # form = @formula(Y ~ 1 + X2 + (1|group));
+
+                    # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "exact"))
+                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 18, hessian_approximation = "limited-memory"))
+                    @show fittime
+                    @show gcm.β
+                    @show gcm.Σ
+                    @show gcm.θ
+                    @show gcm.∇θ
+                    loglikelihood!(gcm, true, true)
+                    vcov!(gcm)
+                    @show GLMCopula.confint(gcm)
+                    # mse and time under our model
+                    coverage!(gcm, trueparams, intervals, curcoverage)
+                    mseβ, mseΣ = MSE(gcm, βtrue, Σtrue)
+                    @show mseβ
+                    @show mseΣ
+                    #index = Int(nsims * length(ns) * (t - 1) + nsims * (k - 1) + j)
+                    # global currentind
+                    @views copyto!(βΣcoverage[:, currentind], curcoverage)
+                    βMseResults[currentind] = mseβ
+                    ΣMseResults[currentind] = mseΣ
+                    fittimes[currentind] = fittime
+                    # glmm
+                    # fit glmm
                 try
                     @info "Fit with MixedModels..."
                     # fittime_GLMM = @elapsed gm1 = fit(MixedModel, form, df, Poisson(); nAGQ = 25)
-                    println("random seed is $(j + 100000k + 1000t + i), rep $j obs per person $ni samplesize $m ")
                     fittime_GLMM = @elapsed gm1 = fit(MixedModel, form, df, Poisson(), contrasts = Dict(:group => Grouping()); nAGQ = 25)
                     @show fittime_GLMM
                     display(gm1)
@@ -133,7 +127,7 @@ function runtest()
                     # mse and time under glmm
                     @info "Get MSE under GLMM..."
                     level = 0.95
-                    p  = 2
+                    p = 3
                     @show GLMM_CI_β = hcat(gm1.β + MixedModels.stderror(gm1) * quantile(Normal(), (1. - level) / 2.), gm1.β - MixedModels.stderror(gm1) * quantile(Normal(), (1. - level) / 2.))
                     @show GLMM_mse = [sum(abs2, gm1.β .- βtrue) / p, sum(abs2, (gm1.θ.^2) .- Σtrue[1]) / 1]
                     # glmm
@@ -142,10 +136,10 @@ function runtest()
                     fittimes_GLMM[currentind] = fittime_GLMM
                     currentind += 1
                  catch
-                    # βMseResults[currentind] = NaN
-                    # ΣMseResults[currentind] = NaN
-                    # fittimes[currentind] = NaN
-                    println("random seed is $(j + 100000k + 1000t + i), rep $j obs per person $ni samplesize $m ")
+                    println("error occured with MixedModels.jl, random seed = $(1000000000 * t + 10000000 * j + 1000000 * k), rep $j obs per person $ni samplesize $m ")
+#                     βMseResults[currentind] = NaN
+#                     ΣMseResults[currentind] = NaN
+#                     fittimes[currentind] = NaN
                     # glmm
                     βMseResults_GLMM[currentind] = NaN
                     ΣMseResults_GLMM[currentind] = NaN
@@ -161,16 +155,15 @@ function runtest()
     @show en - st #seconds
     @info "writing to file..."
     ftail = "multivariate_poisson_vcm$(nsims)reps_sim.csv"
-    writedlm("poisson2/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("poisson2/mse_Sigma_" * ftail, ΣMseResults, ',')
-    writedlm("poisson2/fittimes_" * ftail, fittimes, ',')
+    writedlm("poisson_sim_ours_vs_glmm/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("poisson_sim_ours_vs_glmm/mse_Sigma_" * ftail, ΣMseResults, ',')
+    writedlm("poisson_sim_ours_vs_glmm/fittimes_" * ftail, fittimes, ',')
 
-    writedlm("poisson2/beta_sigma_coverage_" * ftail, βΣcoverage, ',')
+    writedlm("poisson_sim_ours_vs_glmm/beta_sigma_coverage_" * ftail, βΣcoverage, ',')
 
 #     # glmm
-    writedlm("poisson2/mse_beta_GLMM_" * ftail, βMseResults_GLMM, ',')
-    writedlm("poisson2/mse_Sigma_GLMM_" * ftail, ΣMseResults_GLMM, ',')
-    writedlm("poisson2/fittimes_GLMM_" * ftail, fittimes_GLMM, ',')
+    writedlm("poisson_sim_ours_vs_glmm/mse_beta_GLMM_" * ftail, βMseResults_GLMM, ',')
+    writedlm("poisson_sim_ours_vs_glmm/mse_Sigma_GLMM_" * ftail, ΣMseResults_GLMM, ',')
+    writedlm("poisson_sim_ours_vs_glmm/fittimes_GLMM_" * ftail, fittimes_GLMM, ',')
 end
 runtest()
-
