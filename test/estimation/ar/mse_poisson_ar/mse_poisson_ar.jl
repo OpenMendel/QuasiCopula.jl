@@ -103,7 +103,7 @@ function run_test()
                     @show gcm.θ
                     @show gcm.∇θ
                     loglikelihood!(gcm, true, true)
-                    vcov!(gcm)
+                    vcov!(gcm) 
                     @show GLMCopula.confint(gcm)
                     # mse and time under our model
                     coverage!(gcm, trueparams, intervals, curcoverage)
