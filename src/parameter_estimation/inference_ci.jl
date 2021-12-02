@@ -1,7 +1,7 @@
 export vcov!, coef, stderror, confint, MSE, coverage!
 """
     vcov!(gcm::GLMCopulaVCModel)
-Calculate the asymptotic covariance of the parameters, 
+Calculate the asymptotic covariance of the parameters,
 based on values `gcm.Hββ`, `gcm.HΣ`, `gcm.data[i].∇β`,
 `gcm.data[i].∇Σ`, and `gcm.vcov` is updated and returned.
 """
@@ -29,7 +29,7 @@ end
 
 """
     vcov!(gcm::GaussianCopulaVCModel)
-For the Gaussian base, calculate the asymptotic covariance of the parameters, 
+For the Gaussian base, calculate the asymptotic covariance of the parameters,
 based on expected information `gcm.Hββ`, `gcm.HΣ`, `gcm.data[i].∇β`,
 `gcm.data[i].∇Σ`, and `gcm.vcov` is updated and returned.
 """
@@ -70,14 +70,14 @@ function vcov!(gcm::GaussianCopulaVCModel{T}) where {T <: BlasReal}
     gcm.Ainv .= Aevec * inv(Diagonal(Aeval)) * Aevec
     fill!(gcm.vcov, 0.0)
     mul!(gcm.Aevec, gcm.Ainv, gcm.M) # use Avec as scratch space
-    # vcov = Ainv * M * Ainv 
+    # vcov = Ainv * M * Ainv
     mul!(gcm.vcov, gcm.Aevec, gcm.Ainv)
     nothing
 end
 
 """
     vcov!(gcm::NBCopulaVCModel)
-Calculate the asymptotic covariance of the parameters, 
+Calculate the asymptotic covariance of the parameters,
 based on values `gcm.Hββ`, `gcm.HΣ`, `gcm.Hr`, `gcm.data[i].∇β`,
 `gcm.data[i].∇Σ`, `gcm.data[i].∇r`, and `gcm.vcov` is updated and returned.
 """
@@ -101,14 +101,14 @@ function sandwich!(gcm::NBCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Li
     gcm.Ainv .= Aevec * pinv(Diagonal(Aeval)) * Aevec
     fill!(gcm.vcov, 0.0)
     mul!(gcm.Aevec, gcm.Ainv, gcm.M) # use Avec as scratch space
-    # vcov = Ainv * M * Ainv 
+    # vcov = Ainv * M * Ainv
     mul!(gcm.vcov, gcm.Aevec, gcm.Ainv)
     nothing
 end
 
 """
     vcov!(gcm::GLMCopulaARModel)
-Calculate the asymptotic covariance of the parameters, 
+Calculate the asymptotic covariance of the parameters,
 based on values `gcm.Hββ`, `gcm.Hρ`, `gcm.Hσ2`, `gcm.data[i].∇β`,
 `gcm.data[i].∇ρ`, `gcm.data[i].∇σ2`, and `gcm.vcov` is updated and returned.
 """
@@ -132,7 +132,40 @@ function vcov!(gcm::GLMCopulaARModel{T, D, Link}) where {T <: BlasReal, D<:Union
     gcm.Ainv .= Aevec * inv(Diagonal(Aeval)) * Aevec
     fill!(gcm.vcov, 0.0)
     mul!(gcm.Aevec, gcm.Ainv, gcm.M) # use Avec as scratch space
-    # vcov = Ainv * M * Ainv 
+    # vcov = Ainv * M * Ainv
+    mul!(gcm.vcov, gcm.Aevec, gcm.Ainv)
+    nothing
+end
+
+"""
+    vcov!(gcm::GaussianCopulaARModel)
+Calculate the asymptotic covariance of the parameters,
+based on values `gcm.Hββ`, `gcm.Hτ`, `gcm.Hρ`, `gcm.Hσ2`, `gcm.data[i].∇β`, `gcm.data[i].∇τ`,
+`gcm.data[i].∇ρ`, `gcm.data[i].∇σ2`, and `gcm.vcov` is updated and returned.
+"""
+function vcov!(gcm::GaussianCopulaARModel{T}) where {T <: BlasReal}
+    p = gcm.p
+    # form A matrix in the sandwich formula
+    fill!(gcm.Ainv, 0.0)
+    gcm.Ainv[1:p, 1:p] = gcm.Hβ
+    gcm.Ainv[(p + 1) : (p + 1), (p + 1) : (p + 1)] = gcm.Hρ
+    gcm.Ainv[(p + 2) : (p + 2), (p + 2) : (p + 2)] = gcm.Hσ2
+    gcm.Ainv[(p + 3) : (p + 3), (p + 3) : (p + 3)] = gcm.Hτ
+    # form M matrix in the sandwich formula
+    fill!(gcm.M, 0.0)
+    for obs in gcm.data
+        copyto!(gcm.ψ, 1, obs.∇β)
+        copyto!(gcm.ψ, p + 1, obs.∇ρ)
+        copyto!(gcm.ψ, p + 2, obs.∇σ2)
+        copyto!(gcm.ψ, p + 3, obs.∇τ)
+        BLAS.syr!('U', T(1), gcm.ψ, gcm.M)
+    end
+    copytri!(gcm.M, 'U')
+    Aeval, Aevec = eigen(Symmetric(gcm.Ainv))
+    gcm.Ainv .= Aevec * inv(Diagonal(Aeval)) * Aevec
+    fill!(gcm.vcov, 0.0)
+    mul!(gcm.Aevec, gcm.Ainv, gcm.M) # use Avec as scratch space
+    # vcov = Ainv * M * Ainv
     mul!(gcm.vcov, gcm.Aevec, gcm.Ainv)
     nothing
 end
@@ -143,7 +176,7 @@ Get the estimated parameter coefficients from the model.
 """
 function coef(gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
     [gcm.β; gcm.Σ]
-end 
+end
 
 """
     coef(gcm::GLMCopulaVCModel)
@@ -151,7 +184,7 @@ Get the estimated parameter coefficients from the model.
 """
 function coef(gcm::GaussianCopulaVCModel{T}) where {T <: BlasReal}
     [gcm.β; gcm.τ; gcm.Σ]
-end 
+end
 
 """
     coef(gcm::NBCopulaVCModel)
@@ -167,7 +200,15 @@ Get the estimated parameter coefficients from the model.
 """
 function coef(gcm::GLMCopulaARModel{T, D, Link}) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
     [gcm.β; gcm.ρ; gcm.σ2]
-end 
+end
+
+"""
+    coef(gcm::GaussianCopulaARModel)
+Get the estimated parameter coefficients from the model.
+"""
+function coef(gcm::GaussianCopulaARModel{T}) where {T <: BlasReal}
+    [gcm.β; gcm.ρ; gcm.σ2; gcm.τ]
+end
 
 """
     stderror(gcm::GLMCopulaVCModel)
@@ -202,12 +243,21 @@ function stderror(gcm::GLMCopulaARModel{T, D, Link}) where {T <: BlasReal, D<:Un
 end
 
 """
-    confint(gcm::Union{GLMCopulaVCModel, GLMCopulaARModel}, level::Real) 
+    stderror(gcm::GaussianCopulaARModel)
+Get the estimated standard errors from the asymptotic variance covariance matrix of the parameters.
+"""
+function stderror(gcm::GaussianCopulaARModel{T}) where {T <: BlasReal}
+    [sqrt(abs(gcm.vcov[i, i])) for i in 1:(gcm.p + 3)]
+end
+
+
+"""
+    confint(gcm::Union{GLMCopulaVCModel, GLMCopulaARModel}, level::Real)
 Get the confidence interval for each of the estimated parameters at level (default level = 95%).
 """
-confint(gcm::Union{GLMCopulaVCModel, GaussianCopulaVCModel, GLMCopulaARModel, NBCopulaVCModel}, level::Real) = hcat(GLMCopula.coef(gcm) + GLMCopula.stderror(gcm) * quantile(Normal(), (1. - level) / 2.), GLMCopula.coef(gcm) - GLMCopula.stderror(gcm) * quantile(Normal(), (1. - level) / 2.))
+confint(gcm::Union{GLMCopulaVCModel, GaussianCopulaVCModel, GLMCopulaARModel, NBCopulaVCModel, GaussianCopulaARModel}, level::Real) = hcat(GLMCopula.coef(gcm) + GLMCopula.stderror(gcm) * quantile(Normal(), (1. - level) / 2.), GLMCopula.coef(gcm) - GLMCopula.stderror(gcm) * quantile(Normal(), (1. - level) / 2.))
 
-confint(gcm::Union{GLMCopulaVCModel, GaussianCopulaVCModel, GLMCopulaARModel, NBCopulaVCModel}) = confint(gcm, 0.95)
+confint(gcm::Union{GLMCopulaVCModel, GaussianCopulaVCModel, GLMCopulaARModel, NBCopulaVCModel, GaussianCopulaARModel}) = confint(gcm, 0.95)
 
 """
     MSE(gcm::GLMCopulaVCModel, β::Vector, Σ::Vector)
@@ -232,7 +282,7 @@ end
 
 """
     MSE(gcm::NBCopulaVCModel, β::Vector, r::T, Σ::Vector)
-Get the mean squared error of the parameters `β`, `r` and `Σ`. 
+Get the mean squared error of the parameters `β`, `r` and `Σ`.
 """
 function MSE(gcm::NBCopulaVCModel{T, D, Link}, β::Vector, r::T, Σ::Vector) where {T <: BlasReal, D, Link}
     mseβ = sum(abs2, gcm.β .- β) / gcm.p
@@ -264,18 +314,30 @@ function MSE(gcm::NBCopulaARModel{T, D, Link}, β::Vector, r::T, ρ::Vector, σ2
     return mseβ, mser, mseρ, mseσ2
 end
 
+"""
+    MSE(gcm::GLMCopulaVCModel, β::Vector, τ::Float64, Σ::Vector)
+Get the mean squared error of the parameters `β`, `τ` and `Σ`.
+"""
+function MSE(gcm::GaussianCopulaVCModel{T}, β::Vector, invτ::T, ρ::Vector, σ2::Vector) where {T <: BlasReal}
+    mseβ = sum(abs2, gcm.β .- β) / gcm.p
+    mseρ = sum(abs2, gcm.ρ .- ρ)
+    mseσ2 = sum(abs2, gcm.σ2 .- σ2)
+    mseτ = sum(abs2, sqrt.(inv.(gcm.τ)) .- invτ)
+    return mseβ, mseρ, mseσ2, mseτ
+end
+
 
 """
-    coverage!(gcm::Union{GLMCopulaVCModel, GLMCopulaARModel}, trueparams::Vector, 
+    coverage!(gcm::Union{GLMCopulaVCModel, GLMCopulaARModel}, trueparams::Vector,
 intervals::Matrix, curcoverage::Vector)
 Find the coverage of the estimated parameters `β` and `Σ`, given the true parameters.
 """
-function coverage!(gcm::Union{GLMCopulaVCModel, GaussianCopulaVCModel, GLMCopulaARModel, NBCopulaVCModel}, trueparams::Vector, 
+function coverage!(gcm::Union{GLMCopulaVCModel, GaussianCopulaVCModel, GLMCopulaARModel, NBCopulaVCModel, GaussianCopulaARModel}, trueparams::Vector,
     intervals::Matrix, curcoverage::Vector)
     copyto!(intervals, confint(gcm))
     lbs = @views intervals[:, 1]
     ubs = @views intervals[:, 2]
-    map!((val, lb, ub) -> val >= lb && 
+    map!((val, lb, ub) -> val >= lb &&
         val <= ub, curcoverage, trueparams, lbs, ubs)
     return curcoverage
 end
