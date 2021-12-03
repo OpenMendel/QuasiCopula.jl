@@ -15,7 +15,7 @@ p = 3
 β = ones(p)
 X = [ones(n) randn(n, p - 1)]
 η = X * β
-μ = exp.(η) 
+μ = exp.(η)
 vecd = Vector{DiscreteUnivariateDistribution}(undef, length(μ))
 
 for i in 1:length(μ)
@@ -76,7 +76,7 @@ gcm2 = deepcopy(gcm);
 # gcm5 = deepcopy(gcm);
 # use quasi-newton
 
-### Quasi-Newton ### 
+### Quasi-Newton ###
 @time GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
 println("estimated beta = $(gcm.β); true beta value= $β")
 println("estimated AR rho = $(gcm.ρ[1]); true AR rho = $ρ")
@@ -89,6 +89,6 @@ println("estimated AR variance = $(gcm2.σ2[1]); true AR variance = $σ2");
 
 @info "get standard errors"
 
-sandwich!(gcm)
+vcov!(gcm)
 @show GLMCopula.confint(gcm)
 @show gcm.θ
