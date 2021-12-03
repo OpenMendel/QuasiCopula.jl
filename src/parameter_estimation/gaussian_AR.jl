@@ -324,11 +324,13 @@ function loglikelihood!(
     n, p = size(gc.X, 1), size(gc.X, 2)
     needgrad = needgrad || needhess
     if needgrad
-        fill!(gc.∇β, 0)
-        fill!(gc.∇τ, 0)
+        fill!(gc.∇β, 0.0)
+        fill!(gc.∇τ, 0.0)
+        fill!(gc.∇σ2, 0.0)
+        fill!(gc.∇ρ, 0.0)
         get_∇V!(ρ, gc)
     end
-    needhess && fill!(gc.Hβ, 0)
+    needhess && fill!(gc.Hβ, 0.0)
     sqrtτ = sqrt(abs(τ))
     update_res!(gc, β)
     standardize_res!(gc, sqrtτ)
@@ -366,10 +368,9 @@ function loglikelihood!(
         # gradient with respect to rho
         mul!(gc.storage_n, gc.∇ARV, gc.res) # storage_n = ∇ARV * res
         q2 = dot(gc.res, gc.storage_n) #
-        # gc.∇ρ .= inv(c2) * 0.5 * σ2 * transpose(gc.res) * gc.∇ARV * gc.res
         gc.∇ρ .= inv(c2) * 0.5 * σ2 * q2
         # gradient with respect to sigma2
-        gc.∇σ2 .= -0.5 * n * inv(c1) .+ inv(c2) * 0.5 * q
+        gc.∇σ2 .= -(0.5 * n * inv(c1)) .+ (inv(c2) * 0.5 * q)
         if penalized
             gc.∇σ2 .-= σ2
         end

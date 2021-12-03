@@ -68,10 +68,8 @@ initialize_model!(gcm)
 @show gcm.τ
 @show gcm.ρ
 @show gcm.σ2
-loglikelihood!(gcm, true, true)
-
-gcm2 = deepcopy(gcm);
-fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, derivative_test = "first-order", max_iter = 200, tol = 10^-4, hessian_approximation = "limited-memory"))
+# loglikelihood!(gcm, true, true)
+fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 300, tol = 10^-8, limited_memory_max_history = 20, accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
 @show fittime
 @show gcm.θ
 @show gcm.∇θ

@@ -187,7 +187,7 @@ end
 # use ToeplitzMatrices
 """
     get_V!(ρ, gc)
-Forms the AR(1) covariance structure given ρ (correlation parameter), gc (single cluster observation) object. 
+Forms the AR(1) covariance structure given ρ (correlation parameter), gc (single cluster observation) object.
 """
 function get_V!(ρ, gc)
     gc.vec[1] = 1.0
@@ -214,17 +214,22 @@ function get_∇V!(ρ, gc)
 end
 
 """
-    get_∇2V!(n, ρ, σ2, V)
-Forms the second derivative of AR(1) covariance structure wrt to ρ, given n (size of cluster), ρ (correlation parameter), σ2 (noise parameter)
+    get_∇2V!(ρ, gc)
+Forms the second derivative of AR(1) covariance structure wrt to ρ, given ρ (correlation parameter) and gc object
 """
 function get_∇2V!(ρ, gc)
-    gc.vec[1] = 0.0
-    gc.vec[2] = 0.0
-    gc.vec[3] = 2.0
-    for i in 4:Integer(gc.n)
-        gc.vec[i] = (i - 1) * inv(i - 3) * gc.vec[i-1] * ρ
+    n = gc.n
+    if n <= 2
+        fill!(gc.∇2ARV, 0.0)
+    else
+        gc.vec[1] = 0.0
+        gc.vec[2] = 0.0
+        gc.vec[3] = 2.0
+        for i in 4:Integer(gc.n)
+            gc.vec[i] = (i - 1) * inv(i - 3) * gc.vec[i-1] * ρ
+        end
+        gc.∇2ARV .= ToeplitzMatrices.SymmetricToeplitz(gc.vec)
     end
-    gc.∇2ARV .= ToeplitzMatrices.SymmetricToeplitz(gc.vec)
     nothing
 end
 
@@ -235,7 +240,7 @@ function loglikelihood!(
     σ2::T,
     needgrad::Bool = false,
     needhess::Bool = false;
-    penalized::Bool = true
+    penalized::Bool = false
     ) where {T <: BlasReal, D, Link}
     n, p = size(gc.X, 1), size(gc.X, 2)
     needgrad = needgrad || needhess
@@ -268,7 +273,7 @@ function loglikelihood!(
     #     BLAS.gemv!('T', σ2, gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
     # end
     # q = dot(gc.res, gc.storage_n)
-    
+
     # @show q
     c1 = 1 + 0.5 * n * σ2
     c2 = 1 + 0.5 * σ2 * q
@@ -286,7 +291,7 @@ function loglikelihood!(
         inv1pq = inv(c2)
         # gradient with respect to rho
         mul!(gc.storage_n, gc.∇ARV, gc.res) # storage_n = ∇ARV * res
-        q2 = dot(gc.res, gc.storage_n) # 
+        q2 = dot(gc.res, gc.storage_n) #
         # gc.∇ρ .= inv(c2) * 0.5 * σ2 * transpose(gc.res) * gc.∇ARV * gc.res
         gc.∇ρ .= inv(c2) * 0.5 * σ2 * q2
 
@@ -299,10 +304,10 @@ function loglikelihood!(
             # gc.∇2ARV .= get_∇2ARV(n, ρ, σ2, gc.∇2ARV)
             get_∇2V!(ρ, gc)
             mul!(gc.storage_n, gc.∇2ARV, gc.res) # storage_n = ∇ARV * res
-            q3 = dot(gc.res, gc.storage_n) # 
+            q3 = dot(gc.res, gc.storage_n) #
             # hessian for rho
             gc.Hρ .= 0.5 * σ2 * (inv(c2) * q3 - inv(c2)^2 * 0.5 * σ2 * q2^2)
-            
+
             # hessian for sigma2
             gc.Hσ2 .= 0.25 * n^2 * inv(c1)^2 - inv(c2)^2 * (0.25 * q^2)
 
@@ -314,7 +319,7 @@ function loglikelihood!(
 
             #  hessian cross term for beta and rho
             # gc.Hβρ .= inv1pq * σ2 * transpose(gc.∇resβ) * gc.∇ARV * gc.res - 0.5 * σ2^2 * inv1pq^2 * q2 * transpose(gc.∇resβ) * gc.V * gc.res
-            
+
             BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 0.0, gc.Hβ) # only lower triangular
             fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
             fill!(gc.added_term2, 0.0) # fill hessian with 0
@@ -370,5 +375,3 @@ function loglikelihood!(
     end
     logl
 end
-  
-  

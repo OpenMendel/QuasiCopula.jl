@@ -306,19 +306,19 @@ end
     MSE(gcm::NBCopulaARModel, β::Vector, ρ::Vector, σ2::Vector)
 Get the mean squared error of the parameters `β` , `ρ` and `σ2`.
 """
-function MSE(gcm::NBCopulaARModel{T, D, Link}, β::Vector, r::T, ρ::Vector, σ2::Vector) where {T <: BlasReal, D, Link}
+function MSE(gcm::NBCopulaARModel{T, D, Link}, β::Vector, invτ::T, ρ::Vector, σ2::Vector) where {T <: BlasReal, D, Link}
     mseβ = sum(abs2, gcm.β .- β) / gcm.p
-    mser = sum(abs2, gcm.r .- r)
+    mseτ = sum(abs2, sqrt.(inv.(gcm.τ)) .- invτ)
     mseρ = sum(abs2, gcm.ρ .- ρ)
     mseσ2 = sum(abs2, gcm.σ2 .- σ2)
-    return mseβ, mser, mseρ, mseσ2
+    return mseβ, mseτ, mseρ, mseσ2
 end
 
 """
-    MSE(gcm::GLMCopulaVCModel, β::Vector, τ::Float64, Σ::Vector)
+    MSE(gcm::GLMCopulaARModel, β::Vector, τ::Float64, Σ::Vector)
 Get the mean squared error of the parameters `β`, `τ` and `Σ`.
 """
-function MSE(gcm::GaussianCopulaVCModel{T}, β::Vector, invτ::T, ρ::Vector, σ2::Vector) where {T <: BlasReal}
+function MSE(gcm::GaussianCopulaARModel{T}, β::Vector, invτ::T, ρ::Vector, σ2::Vector) where {T <: BlasReal}
     mseβ = sum(abs2, gcm.β .- β) / gcm.p
     mseρ = sum(abs2, gcm.ρ .- ρ)
     mseσ2 = sum(abs2, gcm.σ2 .- σ2)
