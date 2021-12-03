@@ -117,8 +117,8 @@ function initialize_model!(gcm::NBCopulaARModel{T, D, Link}) where {T <: BlasRea
       gcsPoisson[i] = GLMCopulaARObs(gc.y, gc.X, Poisson(), LogLink())
   end
   gcmPoisson = GLMCopulaARModel(gcsPoisson)
-  GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0, max_iter = 100, 
-    tol = 10^-5, hessian_approximation = "limited-memory", limited_memory_max_history = 20))
+  GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0, max_iter = 20, 
+    tol = 10^-2, hessian_approximation = "limited-memory", limited_memory_max_history = 20))
   for i in 1:nsample
       copyto!(gcm.data[i].μ, gcmPoisson.data[i].μ)
       copyto!(gcm.data[i].η, gcmPoisson.data[i].η)
@@ -136,15 +136,11 @@ function initialize_model!(gcm::NBCopulaARModel{T, D, Link}) where {T <: BlasRea
     # fill!(gc.HΣ, 0)
     get_V!(gcm.ρ[1], gc)
   end
-
-  # gcm.r .= 10
-  # gcm.β .= 1
-
   update_r!(gcm)
 
   println("initializing variance parameters in AR model using MM-Algorithm")
   fill!(gcm.Σ, 1.0)
-  fill!(gcm.ρ, 1)
+  fill!(gcm.ρ, 1) # initial guess for rho is 1
   update_Σ!(gcm)
   copyto!(gcm.σ2, gcm.Σ)
 
