@@ -129,18 +129,13 @@ function initialize_model!(gcm::NBCopulaARModel{T, D, Link}) where {T <: BlasRea
   for gc in gcm.data
     fill!(gcm.τ, 1.0)
     fill!(gc.∇β, 0)
-    # fill!(gc.∇τ, 0)
-    # fill!(gc.∇Σ, 0)
     fill!(gc.Hβ, 0)
-    # fill!(gc.Hτ, 0)
-    # fill!(gc.HΣ, 0)
-    get_V!(gcm.ρ[1], gc)
   end
   update_r!(gcm)
 
   println("initializing variance parameters in AR model using MM-Algorithm")
   fill!(gcm.Σ, 1.0)
-  fill!(gcm.ρ, 1) # initial guess for rho is 1
+  fill!(gcm.ρ, 1.0) # initial guess for rho is 1, because it's a random intercept model?
   update_Σ!(gcm)
   copyto!(gcm.σ2, gcm.Σ)
 

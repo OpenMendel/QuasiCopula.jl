@@ -77,6 +77,7 @@ function fit!(
     modelpar_to_optimpar!(par0, gcm)
     MathProgBase.setwarmstart!(optm, par0)
     logl0 = MathProgBase.getobjval(optm)
+    println("Converging when tol ≤ $tol (max block iter = $maxBlockIter)")
     # optimize
     for i in 1:maxBlockIter
         MathProgBase.optimize!(optm)
