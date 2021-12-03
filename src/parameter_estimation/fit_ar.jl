@@ -42,7 +42,7 @@ Translate model parameters in `gcm` to optimization variables in `par`.
 """
 function modelpar_to_optimpar!(
         par :: Vector,
-        gcm :: GLMCopulaARModel
+        gcm :: Union{GLMCopulaARModel, NBCopulaARModel}
     )
     # β
     copyto!(par, gcm.β)
@@ -58,7 +58,7 @@ end
 Translate optimization variables in `par` to the model parameters in `gcm`.
 """
 function optimpar_to_modelpar!(
-        gcm :: GLMCopulaARModel, 
+        gcm :: Union{GLMCopulaARModel, NBCopulaARModel}, 
         par :: Vector
     )
     # β
@@ -71,7 +71,7 @@ function optimpar_to_modelpar!(
 end
 
 function MathProgBase.initialize(
-    gcm::GLMCopulaARModel,
+    gcm::Union{GLMCopulaARModel, NBCopulaARModel},
     requested_features::Vector{Symbol})
     for feat in requested_features
         if !(feat in [:Grad, :Hess])
@@ -80,10 +80,10 @@ function MathProgBase.initialize(
     end
 end
 
-MathProgBase.features_available(gcm::GLMCopulaARModel) = [:Grad, :Hess]
+MathProgBase.features_available(gcm::Union{GLMCopulaARModel, NBCopulaARModel}) = [:Grad, :Hess]
 
 function MathProgBase.eval_f(
-        gcm :: GLMCopulaARModel, 
+        gcm :: Union{GLMCopulaARModel, NBCopulaARModel}, 
         par :: Vector
     )
     optimpar_to_modelpar!(gcm, par)
@@ -91,7 +91,7 @@ function MathProgBase.eval_f(
 end
 
 function MathProgBase.eval_grad_f(
-        gcm    :: GLMCopulaARModel, 
+        gcm  :: Union{GLMCopulaARModel, NBCopulaARModel}, 
         grad :: Vector, 
         par  :: Vector
     )
@@ -111,9 +111,9 @@ function MathProgBase.eval_grad_f(
     obj
 end
 
-MathProgBase.eval_g(gcm::GLMCopulaARModel, g, par) = nothing
-MathProgBase.jac_structure(gcm::GLMCopulaARModel) = Int[], Int[]
-MathProgBase.eval_jac_g(gcm::GLMCopulaARModel, J, par) = nothing
+MathProgBase.eval_g(gcm::Union{GLMCopulaARModel, NBCopulaARModel}, g, par) = nothing
+MathProgBase.jac_structure(gcm::Union{GLMCopulaARModel, NBCopulaARModel}) = Int[], Int[]
+MathProgBase.eval_jac_g(gcm::Union{GLMCopulaARModel, NBCopulaARModel}, J, par) = nothing
 
 """
     ◺(n::Integer)
@@ -121,7 +121,7 @@ Triangular number n * (n+1) / 2
 """
 @inline ◺(n::Integer) = (n * (n + 1)) >> 1
 
-function MathProgBase.hesslag_structure(gcm::GLMCopulaARModel)
+function MathProgBase.hesslag_structure(gcm::Union{GLMCopulaARModel, NBCopulaARModel})
     # we work on the upper triangular part of the Hessian
     arr1 = Vector{Int}(undef, ◺(gcm.p) + ◺(2) + gcm.p)
     arr2 = Vector{Int}(undef, ◺(gcm.p) + ◺(2) + gcm.p)
@@ -157,7 +157,7 @@ function MathProgBase.hesslag_structure(gcm::GLMCopulaARModel)
 end
     
 function MathProgBase.eval_hesslag(
-        gcm   :: GLMCopulaARModel, 
+        gcm :: Union{GLMCopulaARModel, NBCopulaARModel}, 
         H   :: Vector{T},
         par :: Vector{T}, 
         σ   :: T, 

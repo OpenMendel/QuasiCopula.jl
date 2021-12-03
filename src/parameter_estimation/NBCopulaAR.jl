@@ -30,6 +30,8 @@ mutable struct NBCopulaARObs{T <: BlasReal, D, Link} # d changes, so must be mut
     q::Vector{T}    # q[k] = res_i' * V_i[k] * res_i / 2
     xtx::Matrix{T}  # Xi'Xi
     storage_n::Vector{T}
+    storage_n2::Vector{T}
+    storage_n3::Vector{T}
     storage_p1::Vector{T}
     storage_np::Matrix{T}
     storage_pp::Matrix{T}
@@ -77,6 +79,8 @@ function NBCopulaARObs(
     q   = Vector{T}(undef, 1)
     xtx = transpose(X) * X
     storage_n = Vector{T}(undef, n)
+    storage_n2 = Vector{T}(undef, n)
+    storage_n3 = Vector{T}(undef, n)
     storage_p1 = Vector{T}(undef, p)
     storage_np = Matrix{T}(undef, n, p)
     storage_pp = Matrix{T}(undef, p, p)
@@ -91,14 +95,16 @@ function NBCopulaARObs(
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
-    NBCopulaARObs{T, D, Link}(n, p, y, X, V, vec, ∇ARV, ∇2ARV, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇ρ, ∇σ2, ∇r, Hβ, Hρ, Hr, Hσ2, Hρσ2, Hβσ2,# Hβρ,
-       res, t, q, xtx, storage_n, storage_p1, storage_np, storage_pp, added_term_numerator, added_term2,
+    NBCopulaARObs{T, D, Link}(n, p, y, X, V, vec, ∇ARV, ∇2ARV, ∇β, ∇μβ, ∇σ2β,
+        ∇resβ, ∇ρ, ∇σ2, ∇r, Hβ, Hρ, Hr, Hσ2, Hρσ2, Hβσ2, # Hβρ,
+        res, t, q, xtx, storage_n, storage_n2, storage_n3, storage_p1, storage_np,
+        storage_pp, added_term_numerator, added_term2,
         η, μ, varμ, dμ, d, link, wt, w1, w2)
 end
 
 """
-NBCopulaARModel
-NBCopulaARModel(gcs)
+    NBCopulaARModel(gcs)
+
 Negative Binomial copula variance component model, which contains a vector of
 `NBCopulaARObs` as data, model parameters, and working arrays.
 """
@@ -110,7 +116,7 @@ struct NBCopulaARModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalua
     p::Int          # number of mean parameters in linear regression
     # parameters
     β::Vector{T}    # p-vector of mean regression coefficients
-    τ::Vector{T}    # inverse of linear regression variance parameter
+    τ::Vector{T}    # inverse of linear regression variance parameter (IS THIS NEEDED??)
     ρ::Vector{T}            # autocorrelation parameter
     σ2::Vector{T}           # autoregressive noise parameter
     Σ::Vector{T}
@@ -147,10 +153,11 @@ end
 function NBCopulaARModel(gcs::Vector{NBCopulaARObs{T, D, Link}}) where {T <: BlasReal, D, Link}
     n, p = length(gcs), size(gcs[1].X, 2)
     β   = Vector{T}(undef, p)
-    τ   = [1.0]
-    ρ = [1.0]
-    σ2 = [1.0]
-    r = [1.0]
+    τ   = [one(T)]
+    ρ = [one(T)]
+    σ2 = [one(T)]
+    Σ = [one(T)]
+    r = [one(T)]
     θ = Vector{T}(undef, p + 2)
     ∇β  = Vector{T}(undef, p)
     ∇ρ  = Vector{T}(undef, 1)
@@ -172,8 +179,8 @@ function NBCopulaARModel(gcs::Vector{NBCopulaARObs{T, D, Link}}) where {T <: Bla
     # Hβρ = Vector{T}(undef, p)
     TR  = Matrix{T}(undef, n, 1) # collect trace terms
     QF  = Matrix{T}(undef, n, 1)
-    Ytotal = 0.0
-    ntotal = 0.0
+    Ytotal = zero(T)
+    ntotal = 0
     d = Vector{D}(undef, n)
     link = Vector{Link}(undef, n)
     for i in eachindex(gcs)
@@ -187,7 +194,7 @@ function NBCopulaARModel(gcs::Vector{NBCopulaARObs{T, D, Link}}) where {T <: Bla
     storage_n = Vector{T}(undef, n)
     storage_m = Vector{T}(undef, 1)
     storage_Σ = Vector{T}(undef, 1)
-    NBCopulaARModel{T, D, Link}(gcs, Ytotal, ntotal, p, β, τ, ρ, σ2, r, θ,
+    NBCopulaARModel{T, D, Link}(gcs, Ytotal, ntotal, p, β, τ, ρ, σ2, Σ, r, θ,
         ∇β, ∇ρ, ∇σ2, ∇r, ∇θ, XtX, Hβ, Hρ, Hσ2, Hr, Hρσ2, Hβσ2, Ainv, Aevec,  M, vcov, ψ,
         TR, QF, storage_n, storage_m, storage_Σ, d, link)
 end
@@ -262,7 +269,7 @@ function loglikelihood!(
         end
 
         # gradient with respect to r
-        gc.∇r .= nb_first_derivative(gc, Σ, r)
+        gc.∇r .= nb_first_derivative(gc, ρ, σ2, r)
 
       if needhess
             # gc.∇2ARV .= get_∇2ARV(n, ρ, σ2, gc.∇2ARV)
@@ -294,7 +301,7 @@ function loglikelihood!(
             gc.Hβ .+= gc.added_term2
             gc.Hβ .+= GLMCopula.glm_hessian(gc, β)
             # hessian for r
-            gc.Hr .= nb_second_derivative(gc, Σ, r)
+            gc.Hr .= nb_second_derivative(gc, ρ, σ2, r)
       end
       gc.∇β .= gc.∇β .* inv1pq
       gc.res .= gc.y .- gc.μ

@@ -117,34 +117,36 @@ function initialize_model!(gcm::NBCopulaARModel{T, D, Link}) where {T <: BlasRea
       gcsPoisson[i] = GLMCopulaARObs(gc.y, gc.X, Poisson(), LogLink())
   end
   gcmPoisson = GLMCopulaARModel(gcsPoisson)
-  GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0, max_iter = 10, 
-    tol = 10^-2, hessian_approximation = "limited-memory"))
+  GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0, max_iter = 100, 
+    tol = 10^-5, hessian_approximation = "limited-memory", limited_memory_max_history = 20))
   for i in 1:nsample
       copyto!(gcm.data[i].μ, gcmPoisson.data[i].μ)
       copyto!(gcm.data[i].η, gcmPoisson.data[i].η)
   end
-  copyto!(gcm.τ, gcmPoisson.τ)
   copyto!(gcm.β, gcmPoisson.β)
 
   # update r using maximum likelihood with Newton's method
   for gc in gcm.data
     fill!(gcm.τ, 1.0)
-    fill!(gcm.Σ, 1.0)
     fill!(gc.∇β, 0)
     # fill!(gc.∇τ, 0)
     # fill!(gc.∇Σ, 0)
     fill!(gc.Hβ, 0)
     # fill!(gc.Hτ, 0)
     # fill!(gc.HΣ, 0)
+    get_V!(gcm.ρ[1], gc)
   end
+
+  # gcm.r .= 10
+  # gcm.β .= 1
+
   update_r!(gcm)
 
-  println("Fdsafdsa")
-  fff
-
-  println("initializing variance components using MM-Algorithm")
-  fill!(gcm.Σ, 1)
+  println("initializing variance parameters in AR model using MM-Algorithm")
+  fill!(gcm.Σ, 1.0)
+  fill!(gcm.ρ, 1)
   update_Σ!(gcm)
+  copyto!(gcm.σ2, gcm.Σ)
 
   nothing
 end

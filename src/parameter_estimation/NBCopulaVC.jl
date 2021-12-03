@@ -7,7 +7,7 @@ mutable struct NBCopulaVCObs{T <: BlasReal, D, Link} # d changes, so must be mut
     V::Vector{Matrix{T}}
     n::Int
     p::Int
-    m::Int
+    m::Int # number of variance components
     # working arrays
     ∇β::Vector{T}   # gradient wrt β
     ∇μβ::Matrix{T}

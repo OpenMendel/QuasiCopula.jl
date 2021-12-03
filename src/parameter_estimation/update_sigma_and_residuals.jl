@@ -4,7 +4,7 @@ update_Σ_jensen!(gcm)
 Update Σ using the MM algorithm and Jensens inequality, given β.
 """
 function update_Σ_jensen!(
-    gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}},
+    gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, NBCopulaARModel{T, D, Link}},
     maxiter::Integer=50000,
     reltol::Number=1e-6,
     verbose::Bool=false) where {T <: BlasReal, D<:Union{Poisson, Bernoulli, NegativeBinomial}, Link}
@@ -119,6 +119,7 @@ end
 
 """
     update_quadform!(gc)
+
 Update the quadratic forms `(r^T V[k] r) / 2` according to the current residual `r`.
 """
 function update_quadform!(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}}) where {T<:Real, D, Link}
@@ -131,14 +132,14 @@ end
 
 """
     update_quadform!(gc)
+
 Update the quadratic forms `(r^T V[k] r) / 2` according to the current residual `r`.
 """
-function update_quadform!(gc::GLMCopulaARObs{T, D, Link}) where {T<:Real, D, Link}
+function update_quadform!(gc::Union{GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}}) where {T<:Real, D, Link}
     mul!(gc.storage_n, gc.V, gc.res)
     gc.q .= dot(gc.res, gc.storage_n) / 2
     gc.q
 end
-
 
 """
     update_r!(gc::GLMCopulaVCObs{T, D, Link})
@@ -201,7 +202,7 @@ function update_r!(gcm::Union{NBCopulaVCModel, NBCopulaARModel})
     return nothing
 end
 
-function first_derivative(gcm, r::T) where T <: AbstractFloat
+function first_derivative(gcm::NBCopulaVCModel, r::T) where T <: AbstractFloat
     s = zero(T)
     @inbounds for i in eachindex(gcm.data)
         # 2nd term of logl
@@ -235,7 +236,42 @@ function first_derivative(gcm, r::T) where T <: AbstractFloat
     return s
 end
 
-function second_derivative(gcm, r::T) where T <: AbstractFloat
+function first_derivative(gcm::NBCopulaARModel, r::T) where T <: AbstractFloat
+    s = zero(T)
+    @inbounds for i in eachindex(gcm.data)
+        # 2nd term of logl
+        y = gcm.data[i].y
+        μ = gcm.data[i].μ
+        for j in eachindex(y)
+            s += dLdr_2ndterm(y[j], μ[j], r)
+        end
+        # 3rd term of logl
+        get_V!(gcm.ρ[1], gcm.data[i])
+        Γ = gcm.σ2[1] * gcm.data[i].V
+        η = gcm.data[i].η
+        resid = gcm.data[i].res
+        # Γ = gcm.Σ' * gcm.data[i].V 
+        # D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
+        # dD = Diagonal([-exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r))) for j in 1:length(η)])
+        # dresid = -inv(D)*dD*resid
+        # s += resid'*Γ*dresid / (1 + 0.5resid'*Γ*resid)
+        for j in 1:length(η)
+            gcm.data[i].storage_n[j] = inv(sqrt(exp(η[j])*(exp(η[j])+r) / r)) # storage_n[i] = 1 / Di = 1 / sqrt(var(yi))
+        end
+        for j in 1:length(η)
+            gcm.data[i].storage_n[j] *= -exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r))) # storage_n = inv(D) * dD
+        end
+        gcm.data[i].storage_n .*= -1.0 .* resid # storage_n = dr(β) (derivative of residuals)
+        mul!(gcm.data[i].storage_n2, Γ, gcm.data[i].storage_n) # storage_n2 = Γ * dresid
+        numer = dot(resid, gcm.data[i].storage_n2) # numer = r' * Γ * dr
+        mul!(gcm.data[i].storage_n2, Γ, resid) # storage_n = Γ * resid
+        denom = 1 + 0.5 * dot(resid, gcm.data[i].storage_n2) # denom = 1 + 0.5(r * Γ * r)
+        s += numer / denom
+    end
+    return s
+end
+
+function second_derivative(gcm::NBCopulaVCModel, r::T) where T <: AbstractFloat
     s = zero(T)
     @inbounds for i in eachindex(gcm.data)
         # 2nd term of logl
@@ -292,6 +328,63 @@ function second_derivative(gcm, r::T) where T <: AbstractFloat
     return s
 end
 
+function second_derivative(gcm::NBCopulaARModel, r::T) where T <: AbstractFloat
+    s = zero(T)
+    @inbounds for i in eachindex(gcm.data)
+        # 2nd term of logl
+        y = gcm.data[i].y
+        μ = gcm.data[i].μ
+        for j in eachindex(y)
+            s += dLdr2_2ndterm(y[j], μ[j], r)
+        end
+        # 3rd term of logl
+        get_V!(gcm.ρ[1], gcm.data[i])
+        Γ = gcm.σ2[1] * gcm.data[i].V
+        η = gcm.data[i].η
+        resid = gcm.data[i].res
+        # Γ = gcm.Σ' * gcm.data[i].V 
+        # D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
+        # dD = Diagonal([-exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r))) for j in 1:length(η)])
+        # d2D = Diagonal([(exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) + 
+        #     (3exp(2η[j]) / (4r^(2.5)*sqrt(exp(η[j])*(exp(η[j])+r)))) for j in 1:length(η)])
+        # resid = gcm.data[i].res
+        # dresid = -inv(D)*dD*resid
+        # d2resid = (2inv(D)*dD*inv(D)*dD - inv(D)*d2D)*resid
+        # denom = 1 + 0.5resid'*Γ*resid
+        # term1 = (resid'*Γ*dresid / denom)^2
+        # term2 = dresid'*Γ*dresid / denom
+        # term3 = resid'*Γ*d2resid / denom
+        # s += -term1 + term2 + term3
+        for j in 1:length(η)
+            gcm.data[i].storage_n[j] = inv(sqrt(exp(η[j])*(exp(η[j])+r) / r)) # storage_n = inv(Di) = 1 / sqrt(var(yi))
+        end
+        for j in 1:length(η)
+            # storage_n2 = -inv(D) * d2D
+            gcm.data[i].storage_n2[j] = -gcm.data[i].storage_n[j] * 
+                ((exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) + 
+                (3exp(2η[j]) / (4r^(2.5)*sqrt(exp(η[j])*(exp(η[j])+r)))))
+        end
+        for j in 1:length(η)
+            # storage_n = inv(D) * dD
+            gcm.data[i].storage_n[j] *= -exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r)))
+        end
+        for j in 1:length(η)
+            # storage_n2 = 2inv(D)*dD*inv(D)*dD -inv(D)*d2D
+            gcm.data[i].storage_n2[j] += 2 * abs2(gcm.data[i].storage_n[j])
+        end
+        gcm.data[i].storage_n .*= -1.0 .* resid # storage_n = dr(β) = derivative of residuals
+        gcm.data[i].storage_n2 .*= resid # storage_n2 = dr²(β) = 2nd derivative of residuals
+        mul!(gcm.data[i].storage_n3, Γ, resid) # storage_n3 = Γ * resid
+        denom = 1 + 0.5 * dot(resid, gcm.data[i].storage_n3)
+        mul!(gcm.data[i].storage_n3, Γ, gcm.data[i].storage_n) # storage_n3 = Γ * dresid
+        term1 = (dot(resid, gcm.data[i].storage_n3) / denom)^2 # (resid'*Γ*dresid / denom)^2
+        term2 = dot(gcm.data[i].storage_n, gcm.data[i].storage_n3) / denom # term2 = dresid'*Γ*dresid / denom
+        mul!(gcm.data[i].storage_n3, Γ, gcm.data[i].storage_n2) # storage_n3 = Γ * d2resid
+        term3 = dot(resid, gcm.data[i].storage_n3) / denom # term3 = resid'*Γ*d2resid / denom
+        s += -term1 + term2 + term3
+    end
+    return s
+end
 
 function negbin_component_loglikelihood(gcm::NBCopulaARModel, r::T) where T <: AbstractFloat
     return loglikelihood!(gcm)

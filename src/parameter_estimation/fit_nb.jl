@@ -76,13 +76,10 @@ function fit!(
     par0 = zeros(npar)
     modelpar_to_optimpar!(par0, gcm)
     MathProgBase.setwarmstart!(optm, par0)
+    logl0 = MathProgBase.getobjval(optm)
     # optimize
     for i in 1:maxBlockIter
         MathProgBase.optimize!(optm)
-
-        println("reached here!")
-        fdsafff
-
         logl = MathProgBase.getobjval(optm)
         update_r!(gcm)
         if abs(logl - logl0) / (1 + abs(logl0)) ≤ tol # this is faster but has wider confidence intervals
