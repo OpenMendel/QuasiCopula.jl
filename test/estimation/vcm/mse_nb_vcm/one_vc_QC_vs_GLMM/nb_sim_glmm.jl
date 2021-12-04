@@ -16,7 +16,7 @@ function runtest()
     m = 1    # number of variance components
     # true parameter values
     βtrue = ones(p)
-    Σtrue = [0.2]
+    Σtrue = [0.1]
     rtrue = 10.0
 
     # generate data
@@ -27,7 +27,7 @@ function runtest()
     #simulation parameters
     samplesizes = [1000; 10000; 100000]
     ns = [2; 5; 10; 20; 50]
-    nsims = 50
+    nsims = 100
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
