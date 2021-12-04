@@ -3,12 +3,11 @@ using Random, Roots, SpecialFunctions, StatsFuns, Distributions, DataFrames, Toe
 
 function run_test()
     p_fixed = 3    # number of fixed effects, including intercept
-
     # true parameter values
-    βtrue = ones(p)
+    βtrue = ones(p_fixed)
     σ2true = [0.1]
     ρtrue = [0.9]
-    rtrue = 10
+    rtrue = 10.0
 
     function get_V(ρ, n)
         vec = zeros(n)
@@ -21,18 +20,14 @@ function run_test()
     end
 
     # generate data
-    intervals = zeros(p + 3, 2) #hold intervals
-    curcoverage = zeros(p + 3) #hold current coverage resutls
-    trueparams = [βtrue; ρtrue; σ2true; τtrue] #hold true parameters
+    intervals = zeros(p_fixed + 3, 2) #hold intervals
+    curcoverage = zeros(p_fixed + 3) #hold current coverage resutls
+    trueparams = [βtrue; ρtrue; σ2true; rtrue] #hold true parameters
 
     #simulation parameters
-    samplesizes = [10000]
-    ns = [10]
-    nsims = 1
     samplesizes = [100; 1000; 10000]
-    # ns = [10]
     ns = [2; 5; 10; 15; 20; 25]
-    nsims = 100
+    nsims = 5
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -40,7 +35,7 @@ function run_test()
     ρMseResults = ones(nsims * length(ns) * length(samplesizes))
     rMseResults = ones(nsims * length(ns) * length(samplesizes))
 
-    βρσ2rcoverage = Matrix{Float64}(undef, p + 3, nsims * length(ns) * length(samplesizes))
+    βρσ2rcoverage = Matrix{Float64}(undef, p_fixed + 3, nsims * length(ns) * length(samplesizes))
     fittimes = zeros(nsims * length(ns) * length(samplesizes))
 
     solver = Ipopt.IpoptSolver(print_level = 5)
@@ -55,7 +50,7 @@ function run_test()
 
     for t in 1:length(samplesizes)
         m = samplesizes[t]
-        gcs = Vector{NBCopulaARObs{T, D, link}}(undef, m)
+        gcs = Vector{NBCopulaARObs{T, D, Link}}(undef, m)
         for k in 1:length(ns)
             ni = ns[k] # number of observations per individual
             V = get_V(ρtrue[1], ni)
@@ -67,8 +62,8 @@ function run_test()
                 Y_nsample = []
                 for i in 1:m
                     Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-                    X = [ones(ni) randn(ni, p - 1)]
-                    η = X * β
+                    X = [ones(ni) randn(ni, p_fixed - 1)]
+                    η = X * βtrue
                     μ = exp.(η)
                     p = rtrue ./ (μ .+ rtrue)
                     vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
@@ -84,7 +79,7 @@ function run_test()
                     res = Vector{Float64}(undef, ni)
                     Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     rand(nonmixed_multivariate_dist, y, res)
-                    gcs[i] = NBCopulaARObs(y, X)
+                    gcs[i] = NBCopulaARObs(y, X, d,link)
                     push!(Y_nsample, y)
                 end
 
@@ -98,25 +93,28 @@ function run_test()
                 @show gcm.r
 
                 # ### now sigma2 is initialized now we need rho
-                # Y_1 = [Y_nsample[i][1] for i in 1:m]
-                # Y_2 = [Y_nsample[i][2] for i in 1:m]
-                #
-                # update_rho!(gcm, Y_1, Y_2)
+#                 Y_1 = [Y_nsample[i][1] for i in 1:m]
+#                 Y_2 = [Y_nsample[i][2] for i in 1:m]
+
+#                 update_rho!(gcm, Y_1, Y_2)
                 # @show gcm.ρ
                 # @show gcm.σ2
                 try
-                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, derivative_test = "first-order", tol = 10^-8, limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
+                    fittime = @elapsed GLMCopula.fit!(gcm)
+#                     fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, tol = 10^-8, limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
                     # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
                     @show fittime
                     @show gcm.θ
                     @show gcm.∇θ
+                    @show gcm.r
+                    @show gcm.∇r
                     loglikelihood!(gcm, true, true)
                     vcov!(gcm)
                     @show GLMCopula.confint(gcm)
 
                 # mse and time under our model
-                coverage!(gcm, trueparams, intervals, curcoverage)
-                mseβ, mser, mseρ, mseσ2 = MSE(gcm, βtrue, inv(τtrue), ρtrue, σ2true)
+                # coverage!(gcm, trueparams, intervals, curcoverage)
+                mseβ, mseρ, mseσ2, mser = MSE(gcm, βtrue, ρtrue, σ2true, rtrue)
                 @show mseβ
                 @show mser
                 @show mseσ2
@@ -124,7 +122,7 @@ function run_test()
                 # global currentind
                 @views copyto!(βρσ2rcoverage[:, currentind], curcoverage)
                 βMseResults[currentind] = mseβ
-                rMseResults[currentind] = mseτ
+                rMseResults[currentind] = mser
                 σ2MseResults[currentind] = mseσ2
                 ρMseResults[currentind] = mseρ
                 fittimes[currentind] = fittime
@@ -149,9 +147,11 @@ function run_test()
     @info "writing to file..."
     ftail = "multivariate_nb_AR$(nsims)reps_sim.csv"
     writedlm("nb_ar/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("nb_ar/mse_r_" * ftail, rMseResults, ',')
     writedlm("nb_ar/mse_sigma_" * ftail, σ2MseResults, ',')
     writedlm("nb_ar/mse_rho_" * ftail, ρMseResults, ',')
     writedlm("nb_ar/fittimes_" * ftail, fittimes, ',')
 
     writedlm("nb_ar/beta_rho_sigma_coverage_" * ftail, βρσ2rcoverage, ',')
 end
+run_test()

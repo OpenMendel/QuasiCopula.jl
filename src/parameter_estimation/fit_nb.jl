@@ -55,9 +55,9 @@ end
 
 function fit!(
     gcm::NBCopulaARModel,
-    solver=Ipopt.IpoptSolver(print_level=0, max_iter=10,
+    solver=Ipopt.IpoptSolver(print_level=0, max_iter=15,
                              hessian_approximation = "limited-memory");
-    tol::Float64 = 1e-6,
+    tol::Float64 = 1e-7,
     maxBlockIter::Int=100
     )
     npar = gcm.p + 2 # rho and sigma squared

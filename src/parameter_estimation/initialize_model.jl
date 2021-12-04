@@ -117,8 +117,8 @@ function initialize_model!(gcm::NBCopulaARModel{T, D, Link}) where {T <: BlasRea
       gcsPoisson[i] = GLMCopulaARObs(gc.y, gc.X, Poisson(), LogLink())
   end
   gcmPoisson = GLMCopulaARModel(gcsPoisson)
-  GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0, max_iter = 20, 
-    tol = 10^-2, hessian_approximation = "limited-memory", limited_memory_max_history = 20))
+  GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0, max_iter = 20,
+    tol = 10^-3, hessian_approximation = "limited-memory", limited_memory_max_history = 20))
   for i in 1:nsample
       copyto!(gcm.data[i].μ, gcmPoisson.data[i].μ)
       copyto!(gcm.data[i].η, gcmPoisson.data[i].η)
@@ -222,7 +222,7 @@ function glm_score_statistic(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaAROb
    gc.∇β .= glm_gradient(gc, β, τ)
    gc.Hβ .= GLMCopula.glm_hessian(gc, β)
    gc
-end 
+end
 
 """
 glm_score_statistic(gcm)
