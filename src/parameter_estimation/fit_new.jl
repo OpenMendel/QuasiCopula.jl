@@ -33,6 +33,7 @@ function fit!(
     optimpar_to_modelpar!(gcm, MathProgBase.getsolution(optm))
     loglikelihood!(gcm, true, false)
     # gcm
+    return optm
 end
 
 """

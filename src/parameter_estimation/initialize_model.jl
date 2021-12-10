@@ -75,27 +75,31 @@ function initialize_model!(
         gcsPoisson[i] = GLMCopulaVCObs(gc.y, gc.X, gc.V, Poisson(), LogLink())
     end
     gcmPoisson = GLMCopulaVCModel(gcsPoisson)
-    GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0, max_iter = 10, tol = 10^-2, hessian_approximation = "limited-memory"))
+    optm = GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0,
+        max_iter = 100, tol = 10^-2, hessian_approximation = "limited-memory"))
 
-    for i in 1:nsample
-        copyto!(gcm.data[i].μ, gcmPoisson.data[i].μ)
-        copyto!(gcm.data[i].η, gcmPoisson.data[i].η)
-    end
-    copyto!(gcm.τ, gcmPoisson.τ)
-    copyto!(gcm.β, gcmPoisson.β)
+    # use poisson regression values of β, μ, η to initialize r, if poisson fit was successful
+    if MathProgBase.status(optm) == :Optimal
+        for i in 1:nsample
+            copyto!(gcm.data[i].μ, gcmPoisson.data[i].μ)
+            copyto!(gcm.data[i].η, gcmPoisson.data[i].η)
+        end
+        copyto!(gcm.τ, gcmPoisson.τ)
+        copyto!(gcm.β, gcmPoisson.β)
 
-    # update r using maximum likelihood with Newton's method
-    for gc in gcm.data
-      fill!(gcm.τ, 1.0)
-      fill!(gcm.Σ, 1.0)
-      fill!(gc.∇β, 0)
-      fill!(gc.∇τ, 0)
-      fill!(gc.∇Σ, 0)
-      fill!(gc.Hβ, 0)
-      fill!(gc.Hτ, 0)
-      fill!(gc.HΣ, 0)
+        # update r using maximum likelihood with Newton's method
+        for gc in gcm.data
+          fill!(gcm.τ, 1.0)
+          fill!(gcm.Σ, 1.0)
+          fill!(gc.∇β, 0)
+          fill!(gc.∇τ, 0)
+          fill!(gc.∇Σ, 0)
+          fill!(gc.Hβ, 0)
+          fill!(gc.Hτ, 0)
+          fill!(gc.HΣ, 0)
+        end
+        update_r!(gcm)
     end
-    update_r!(gcm)
 
     println("initializing variance components using MM-Algorithm")
     fill!(gcm.Σ, 1)
