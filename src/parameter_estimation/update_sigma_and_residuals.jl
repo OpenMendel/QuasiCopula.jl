@@ -162,10 +162,11 @@ function update_r_newton!(gcm::Union{NBCopulaVCModel, NBCopulaARModel};
         increment = newton_increment(gcm, r)
         new_r = r - stepsize * increment
 
-        # restart r if r < 0
-        # if new_r <= 0 
-        #     new_r = 1
-        # end
+        if new_r <= 0
+            new_r = 1.0
+            @warn "New r estimated to be negative, restarting at r = 1..."
+        end
+
         # linesearch
         # for j in 1:20
         #     if new_r <= 0
@@ -189,7 +190,6 @@ function update_r_newton!(gcm::Union{NBCopulaVCModel, NBCopulaARModel};
             r = new_r
         end
     end
-
     return new_r
 end
 

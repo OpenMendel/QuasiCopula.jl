@@ -25,7 +25,7 @@ function update_rho!(gcm, Y_1, Y_2)
     N = length(gcm.data)
     empirical_covariance_mat = scattermat(hcat(Y_1, Y_2))/N
     n1 = length(gcm.data[1].y)
-    ρhat = abs(empirical_covariance_mat[1, 2] /(inv(1 + 0.5 * n1 * gcm.σ2[1]) * sqrt(abs(Statistics.mean(Y_1))) * sqrt(abs(Statistics.mean(Y_2))) * gcm.σ2[1]))
+    ρhat = abs(empirical_covariance_mat[1, 2] / (inv(1 + 0.5 * n1 * gcm.σ2[1]) * sqrt(abs(Statistics.mean(Y_1))) * sqrt(abs(Statistics.mean(Y_2))) * gcm.σ2[1]))
     if ρhat > 1
       copyto!(gcm.ρ, 1.0)
     else
@@ -108,6 +108,44 @@ function initialize_model!(gcm::NBCopulaARModel{T, D, Link}) where {T <: BlasRea
 
   # initial guess for r = 1
   fill!(gcm.r, 1)
+  # data::Vector{NBCopulaARObs{T, D, Link}}
+  # println("Ytotal = $(gcm.Ytotal)")
+  # println("ntotal = $(gcm.ntotal)")
+  # println("p = $(gcm.p)")
+  # # parameters
+  # println("β = $(gcm.β)")
+  # println("τ = $(gcm.τ)")
+  # println("ρ = $(gcm.ρ)")
+  # println("σ2 = $(gcm.σ2)")
+  # println("Σ = $(gcm.Σ)")
+  # println("r = $(gcm.r)")
+  # println("θ = $(gcm.θ)")
+  # working arrays
+  # ∇β::Vector{T}   # gradient of beta from all observations
+  # ∇ρ::Vector{T}           # gradient of rho from all observations
+  # ∇σ2::Vector{T}          # gradient of sigmasquared from all observations
+  # ∇r::Vector{T}
+  # ∇θ::Vector{T}
+  # XtX::Matrix{T}  # X'X = sum_i Xi'Xi
+  # Hβ::Matrix{T}    # Hessian from all observations
+  # Hρ::Matrix{T}    # Hessian from all observations
+  # Hσ2::Matrix{T}    # Hessian from all observations
+  # Hr::Matrix{T}
+  # Hρσ2::Matrix{T}
+  # Hβσ2::Vector{T}
+  # Ainv::Matrix{T}
+  # Aevec::Matrix{T}
+  # M::Matrix{T}
+  # vcov::Matrix{T}
+  # ψ::Vector{T}
+  # # Hβρ::Vector{T}
+  # TR::Matrix{T}
+  # QF::Matrix{T}         # n-by-1 matrix with qik = res_i' Vi res_i
+  # storage_n::Vector{T}
+  # storage_m::Vector{T}
+  # storage_Σ::Vector{T}
+  # d::Vector{D}
+  # link::Vector{Link}
 
   # fit a Poisson regression model to estimate μ, η, β, τ
   println("Initializing NegBin r to Poisson regression values")
@@ -117,21 +155,28 @@ function initialize_model!(gcm::NBCopulaARModel{T, D, Link}) where {T <: BlasRea
       gcsPoisson[i] = GLMCopulaARObs(gc.y, gc.X, Poisson(), LogLink())
   end
   gcmPoisson = GLMCopulaARModel(gcsPoisson)
-  GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0, max_iter = 20,
-    tol = 10^-3, hessian_approximation = "limited-memory", limited_memory_max_history = 20))
-  for i in 1:nsample
-      copyto!(gcm.data[i].μ, gcmPoisson.data[i].μ)
-      copyto!(gcm.data[i].η, gcmPoisson.data[i].η)
-  end
-  copyto!(gcm.β, gcmPoisson.β)
+  optm = GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0, max_iter = 100,
+      tol = 10^-3, hessian_approximation = "limited-memory", 
+      limited_memory_max_history = 20))
+  
+  # use poisson regression values of β, μ, η to initialize r, if poisson fit was successful
+  if MathProgBase.status(optm) == :Optimal
+      for i in 1:nsample
+          copyto!(gcm.data[i].μ, gcmPoisson.data[i].μ)
+          copyto!(gcm.data[i].η, gcmPoisson.data[i].η)
+      end
+      copyto!(gcm.β, gcmPoisson.β)
 
-  # update r using maximum likelihood with Newton's method
-  for gc in gcm.data
-    fill!(gcm.τ, 1.0)
-    fill!(gc.∇β, 0)
-    fill!(gc.Hβ, 0)
+      # update r using maximum likelihood with Newton's method
+      for gc in gcm.data
+        fill!(gcm.τ, 1.0)
+        fill!(gc.∇β, 0)
+        fill!(gc.Hβ, 0)
+        fill!(gc.varμ, 1)
+        fill!(gc.res, 0)
+      end
+      update_r!(gcm)
   end
-  update_r!(gcm)
 
   println("initializing variance parameters in AR model using MM-Algorithm")
   fill!(gcm.Σ, 1.0)
