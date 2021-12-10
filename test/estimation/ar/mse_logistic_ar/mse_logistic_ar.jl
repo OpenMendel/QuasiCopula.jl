@@ -5,8 +5,11 @@ function run_test()
     p = 3    # number of fixed effects, including intercept
 
     # true parameter values
-    βtrue = ones(p)
-    σ2true = [0.1]
+    # βtrue = ones(p)
+    Random.seed!(1234)
+    # try next
+    βtrue = rand(Uniform(-0.2, 0.2), p)
+    σ2true = [0.5]
     ρtrue = [0.9]
 
     function get_V(ρ, n)
@@ -27,7 +30,7 @@ function run_test()
     #simulation parameters
     samplesizes = [100; 1000; 10000]
     ns = [2; 5; 10; 15; 20; 25]
-    nsims = 100
+    nsims = 5
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -96,19 +99,19 @@ function run_test()
                 update_rho!(gcm, Y_1, Y_2)
                 @show gcm.ρ
                 @show gcm.σ2
-                try
-                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-7, limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
+                 try
+                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
                     # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
                     @show fittime
                     @show gcm.θ
                     @show gcm.∇θ
                     loglikelihood!(gcm, true, true)
-                    vcov!(gcm) 
+                    vcov!(gcm)
                     @show GLMCopula.confint(gcm)
 
                 # mse and time under our model
                 coverage!(gcm, trueparams, intervals, curcoverage)
-                mseβ, mseσ2, mseρ = MSE(gcm, βtrue, ρtrue, σ2true)
+                mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
                 @show mseβ
                 @show mseσ2
                 @show mseρ
@@ -137,12 +140,12 @@ function run_test()
     @show en - st #seconds
     @info "writing to file..."
     ftail = "multivariate_bernoulli_AR$(nsims)reps_sim.csv"
-    writedlm("bernoulli_ar/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("bernoulli_ar/mse_sigma_" * ftail, σ2MseResults, ',')
-    writedlm("bernoulli_ar/mse_rho_" * ftail, ρMseResults, ',')
-    writedlm("bernoulli_ar/fittimes_" * ftail, fittimes, ',')
+    writedlm("autoregressive/bernoulli_ar/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("autoregressive/bernoulli_ar/mse_sigma_" * ftail, σ2MseResults, ',')
+    writedlm("autoregressive/bernoulli_ar/mse_rho_" * ftail, ρMseResults, ',')
+    writedlm("autoregressive/bernoulli_ar/fittimes_" * ftail, fittimes, ',')
 
-    writedlm("bernoulli_ar/beta_rho_sigma_coverage_" * ftail, βρσ2coverage, ',')
+    writedlm("autoregressive/bernoulli_ar/beta_rho_sigma_coverage_" * ftail, βρσ2coverage, ',')
 end
 
 run_test()
