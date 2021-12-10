@@ -7,8 +7,11 @@ function runtest()
     p  = 3    # number of fixed effects, including intercept
     m  = 1    # number of variance components
     # true parameter values
-    βtrue = ones(p)
-    Σtrue = [0.2]
+    # βtrue = ones(p)
+    Random.seed!(1234)
+    # βtrue = rand(Uniform(-1, 1), p)
+    βtrue = randn(p)
+    Σtrue = [0.1]
 
     # generate data
     intervals = zeros(p + m, 2) #hold intervals
@@ -18,7 +21,7 @@ function runtest()
     #simulation parameters
     samplesizes = [100; 1000; 10000]
     ns = [2; 5; 10; 15; 20; 25]
-    nsims = 50
+    nsims = 100
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -47,7 +50,6 @@ function runtest()
         gcs = Vector{GLMCopulaVCObs{T, D, Link}}(undef, m)
         for k in 1:length(ns)
             ni = ns[k] # number of observations per individual
-            β = ones(p)
             Γ = Σtrue[1] * ones(ni, ni)
             for j in 1:nsims
                 println("rep $j obs per person $ni samplesize $m")
@@ -61,7 +63,7 @@ function runtest()
                     # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     X = [ones(ni) randn(ni, p - 1)]
-                    η = X * β
+                    η = X * βtrue
                     μ = exp.(η)
                     vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
                     for i in 1:ni
@@ -155,15 +157,15 @@ function runtest()
     @show en - st #seconds
     @info "writing to file..."
     ftail = "multivariate_poisson_vcm$(nsims)reps_sim.csv"
-    writedlm("poisson_sim_ours_vs_glmm/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("poisson_sim_ours_vs_glmm/mse_Sigma_" * ftail, ΣMseResults, ',')
-    writedlm("poisson_sim_ours_vs_glmm/fittimes_" * ftail, fittimes, ',')
+    writedlm("sim_ours_vs_glmm_random_int/poisson_randbeta/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("sim_ours_vs_glmm_random_int/poisson_randbeta/mse_Sigma_" * ftail, ΣMseResults, ',')
+    writedlm("sim_ours_vs_glmm_random_int/poisson_randbeta/fittimes_" * ftail, fittimes, ',')
 
-    writedlm("poisson_sim_ours_vs_glmm/beta_sigma_coverage_" * ftail, βΣcoverage, ',')
+    writedlm("sim_ours_vs_glmm_random_int/poisson_randbeta/beta_sigma_coverage_" * ftail, βΣcoverage, ',')
 
 #     # glmm
-    writedlm("poisson_sim_ours_vs_glmm/mse_beta_GLMM_" * ftail, βMseResults_GLMM, ',')
-    writedlm("poisson_sim_ours_vs_glmm/mse_Sigma_GLMM_" * ftail, ΣMseResults_GLMM, ',')
-    writedlm("poisson_sim_ours_vs_glmm/fittimes_GLMM_" * ftail, fittimes_GLMM, ',')
+    writedlm("sim_ours_vs_glmm_random_int/poisson_randbeta/mse_beta_GLMM_" * ftail, βMseResults_GLMM, ',')
+    writedlm("sim_ours_vs_glmm_random_int/poisson_randbeta/mse_Sigma_GLMM_" * ftail, ΣMseResults_GLMM, ',')
+    writedlm("sim_ours_vs_glmm_random_int/poisson_randbeta/fittimes_GLMM_" * ftail, fittimes_GLMM, ',')
 end
 runtest()

@@ -7,8 +7,11 @@ function runtest()
     p = 3    # number of fixed effects, including intercept
     m = 1    # number of variance components
     # true parameter values
-    βtrue = ones(p)
-    Σtrue = [0.2]
+    #   βtrue = ones(p)
+    Random.seed!(1234)
+    # try next
+    βtrue = rand(Uniform(-0.2, 0.2), p)
+    Σtrue = [0.1]
 
     # generate data
     intervals = zeros(p + m, 2) #hold intervals
@@ -16,9 +19,9 @@ function runtest()
     trueparams = [βtrue; Σtrue] #hold true parameters
 
     #simulation parameters
-    samplesizes = [1000; 10000; 100000]
-    ns = [2; 5; 10; 20; 50]
-    nsims = 50
+    samplesizes = [100; 1000; 10000]
+    ns = [2; 5; 10; 15; 20; 25]
+    nsims = 100
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -47,7 +50,6 @@ function runtest()
         gcs = Vector{GLMCopulaVCObs{T, D, Link}}(undef, m)
         for k in 1:length(ns)
             ni = ns[k] # number of observations per individual
-            β = ones(p)
             Γ = Σtrue[1] * ones(ni, ni)
             for j in 1:nsims
                 println("rep $j obs per person $ni samplesize $m")
@@ -59,10 +61,11 @@ function runtest()
                 groupstack = vcat(group...)
                 Xstack = []
                 Ystack = []
+
                 for i in 1:m
                     Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     X = [ones(ni) randn(ni, p - 1)]
-                    η = X * β
+                    η = X * βtrue
                     μ = exp.(η) ./ (1 .+ exp.(η))
                     vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
                     for i in 1:ni
@@ -90,8 +93,14 @@ function runtest()
                 # p = 3
                 df = (Y = Ystack, X2 = Xstack[:, 2], X3 = Xstack[:, 3], group = string.(groupstack))
                 form = @formula(Y ~ 1 + X2 + X3 + (1|group));
+                # p = 2
+                # df = (Y = Ystack, X2 = Xstack[:, 2], group = string.(groupstack))
+                # form = @formula(Y ~ 1 + X2 + (1|group));
 
-                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-6, limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
+                # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "exact"))
+                # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 20, hessian_approximation = "limited-memory"))
+
+                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-7, limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
                 @show fittime
                 @show gcm.β
                 @show gcm.Σ
@@ -105,6 +114,8 @@ function runtest()
                 mseβ, mseΣ = MSE(gcm, βtrue, Σtrue)
                 @show mseβ
                 @show mseΣ
+                #index = Int(nsims * length(ns) * (t - 1) + nsims * (k - 1) + j)
+                # global currentind
                 @views copyto!(βΣcoverage[:, currentind], curcoverage)
                 βMseResults[currentind] = mseβ
                 ΣMseResults[currentind] = mseΣ
@@ -130,7 +141,10 @@ function runtest()
                     fittimes_GLMM[currentind] = fittime_GLMM
                     currentind += 1
                 catch
-                    println("random seed is $(1000000000 * t + 10000000 * j + 1000000 * k), rep $j obs per person $ni samplesize $m ")
+                    println("random seed is $(100 * j + k), rep $j obs per person $ni samplesize $m ")
+                    # βMseResults[currentind] = NaN
+                    # ΣMseResults[currentind] = NaN
+                    # fittimes[currentind] = NaN
                     # glmm
                     βMseResults_GLMM[currentind] = NaN
                     ΣMseResults_GLMM[currentind] = NaN
@@ -146,15 +160,15 @@ function runtest()
     @show en - st #seconds
     @info "writing to file..."
     ftail = "multivariate_logistic_vcm$(nsims)reps_sim.csv"
-    writedlm("bernoulli/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("bernoulli/mse_Sigma_" * ftail, ΣMseResults, ',')
-    writedlm("bernoulli/fittimes_" * ftail, fittimes, ',')
+    writedlm("sim_ours_vs_glmm_random_int/bernoulli_randbeta/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("sim_ours_vs_glmm_random_int/bernoulli_randbeta/mse_Sigma_" * ftail, ΣMseResults, ',')
+    writedlm("sim_ours_vs_glmm_random_int/bernoulli_randbeta/fittimes_" * ftail, fittimes, ',')
 
-    writedlm("bernoulli/beta_sigma_coverage_" * ftail, βΣcoverage, ',')
+    writedlm("sim_ours_vs_glmm_random_int/bernoulli_randbeta/beta_sigma_coverage_" * ftail, βΣcoverage, ',')
 
-#     # glmm
-    writedlm("bernoulli/mse_beta_GLMM_" * ftail, βMseResults_GLMM, ',')
-    writedlm("bernoulli/mse_Sigma_GLMM_" * ftail, ΣMseResults_GLMM, ',')
-    writedlm("bernoulli/fittimes_GLMM_" * ftail, fittimes_GLMM, ',')
+    # glmm
+    writedlm("sim_ours_vs_glmm_random_int/bernoulli_randbeta/mse_beta_GLMM_" * ftail, βMseResults_GLMM, ',')
+    writedlm("sim_ours_vs_glmm_random_int/bernoulli_randbeta/mse_Sigma_GLMM_" * ftail, ΣMseResults_GLMM, ',')
+    writedlm("sim_ours_vs_glmm_random_int/bernoulli_randbeta/fittimes_GLMM_" * ftail, fittimes_GLMM, ',')
 end
 runtest()
