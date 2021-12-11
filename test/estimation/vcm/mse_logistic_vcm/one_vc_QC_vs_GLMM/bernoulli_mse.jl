@@ -63,7 +63,6 @@ function runtest()
                 Ystack = []
 
                 for i in 1:m
-                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     X = [ones(ni) randn(ni, p - 1)]
                     η = X * βtrue
                     μ = exp.(η) ./ (1 .+ exp.(η))
@@ -75,7 +74,6 @@ function runtest()
                     # simuate single vector y
                     y = Vector{Float64}(undef, ni)
                     res = Vector{Float64}(undef, ni)
-                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     rand(nonmixed_multivariate_dist, y, res)
                     V = [ones(ni, ni)]
                     gcs[i] = GLMCopulaVCObs(y, X, V, d, link)
@@ -93,12 +91,6 @@ function runtest()
                 # p = 3
                 df = (Y = Ystack, X2 = Xstack[:, 2], X3 = Xstack[:, 3], group = string.(groupstack))
                 form = @formula(Y ~ 1 + X2 + X3 + (1|group));
-                # p = 2
-                # df = (Y = Ystack, X2 = Xstack[:, 2], group = string.(groupstack))
-                # form = @formula(Y ~ 1 + X2 + (1|group));
-
-                # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "exact"))
-                # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 20, hessian_approximation = "limited-memory"))
 
                 fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-7, limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
                 @show fittime
@@ -124,7 +116,6 @@ function runtest()
                     # glmm
                     # fit glmm
                     @info "Fit with MixedModels..."
-                    # fittime_GLMM = @elapsed gm1 = fit(MixedModel, form, df, Bernoulli(); nAGQ = 25)
                     fittime_GLMM = @elapsed gm1 = fit(MixedModel, form, df, Bernoulli(), contrasts = Dict(:group => Grouping()); nAGQ = 25)
                     @show fittime_GLMM
                     display(gm1)
@@ -141,10 +132,6 @@ function runtest()
                     fittimes_GLMM[currentind] = fittime_GLMM
                     currentind += 1
                 catch
-                    println("random seed is $(100 * j + k), rep $j obs per person $ni samplesize $m ")
-                    # βMseResults[currentind] = NaN
-                    # ΣMseResults[currentind] = NaN
-                    # fittimes[currentind] = NaN
                     # glmm
                     βMseResults_GLMM[currentind] = NaN
                     ΣMseResults_GLMM[currentind] = NaN
