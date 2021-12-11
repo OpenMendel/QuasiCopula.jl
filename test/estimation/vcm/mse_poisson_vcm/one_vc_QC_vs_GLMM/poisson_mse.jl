@@ -60,8 +60,6 @@ function runtest()
                 Xstack = []
                 Ystack = []
                 for i in 1:m
-                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     X = [ones(ni) randn(ni, p - 1)]
                     η = X * βtrue
                     μ = exp.(η)
@@ -73,8 +71,6 @@ function runtest()
                     # simuate single vector y
                     y = Vector{Float64}(undef, ni)
                     res = Vector{Float64}(undef, ni)
-                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     rand(nonmixed_multivariate_dist, y, res)
                     V = [ones(ni, ni)]
                     gcs[i] = GLMCopulaVCObs(y, X, V, d, link)
