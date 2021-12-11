@@ -240,7 +240,7 @@ function loglikelihood!(
     σ2::T,
     needgrad::Bool = false,
     needhess::Bool = false;
-    penalized::Bool = true
+    penalized::Bool = false
     ) where {T <: BlasReal, D, Link}
     n, p = size(gc.X, 1), size(gc.X, 2)
     needgrad = needgrad || needhess
