@@ -89,16 +89,19 @@ function initialize_model!(
 
         # update r using maximum likelihood with Newton's method
         for gc in gcm.data
-          fill!(gcm.τ, 1.0)
-          fill!(gcm.Σ, 1.0)
-          fill!(gc.∇β, 0)
-          fill!(gc.∇τ, 0)
-          fill!(gc.∇Σ, 0)
-          fill!(gc.Hβ, 0)
-          fill!(gc.Hτ, 0)
-          fill!(gc.HΣ, 0)
+            fill!(gcm.τ, 1.0)
+            fill!(gcm.Σ, 1.0)
+            fill!(gc.∇β, 0)
+            fill!(gc.∇τ, 0)
+            fill!(gc.∇Σ, 0)
+            fill!(gc.Hβ, 0)
+            fill!(gc.Hτ, 0)
+            fill!(gc.HΣ, 0)
         end
         update_r!(gcm)
+    else
+        fill!(gcm.τ, 1)
+        fill!(gcm.β, 0)
     end
 
     println("initializing variance components using MM-Algorithm")
@@ -173,13 +176,16 @@ function initialize_model!(gcm::NBCopulaARModel{T, D, Link}) where {T <: BlasRea
 
       # update r using maximum likelihood with Newton's method
       for gc in gcm.data
-        fill!(gcm.τ, 1.0)
-        fill!(gc.∇β, 0)
-        fill!(gc.Hβ, 0)
-        fill!(gc.varμ, 1)
-        fill!(gc.res, 0)
+          fill!(gcm.τ, 1.0)
+          fill!(gc.∇β, 0)
+          fill!(gc.Hβ, 0)
+          fill!(gc.varμ, 1)
+          fill!(gc.res, 0)
       end
       update_r!(gcm)
+  else
+      fill!(gcm.τ, 1)
+      fill!(gcm.β, 0)
   end
 
   println("initializing variance parameters in AR model using MM-Algorithm")
