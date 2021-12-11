@@ -5,8 +5,9 @@ function run_test()
     p = 3    # number of fixed effects, including intercept
 
     # true parameter values
-    βtrue = ones(p)
-    σ2true = [0.1]
+    Random.seed!(1234)
+    βtrue = randn(p)
+    σ2true = [0.5]
     ρtrue = [0.9]
 
     function get_V(ρ, n)
@@ -27,7 +28,7 @@ function run_test()
     #simulation parameters
     samplesizes = [100; 1000; 10000]
     ns = [2; 5; 10; 15; 20; 25]
-    nsims = 50
+    nsims = 100
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -61,7 +62,7 @@ function run_test()
                 Y_nsample = []
                 for i in 1:m
                     # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
+                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     X = [ones(ni) randn(ni, p - 1)]
                     η = X * βtrue
                     μ = exp.(η)
@@ -74,7 +75,7 @@ function run_test()
                     y = Vector{Float64}(undef, ni)
                     res = Vector{Float64}(undef, ni)
                     # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
+                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     rand(nonmixed_multivariate_dist, y, res)
                     V = [ones(ni, ni)]
                     gcs[i] = GLMCopulaARObs(y, X, d, link)
@@ -97,17 +98,17 @@ function run_test()
                 @show gcm.ρ
                 @show gcm.σ2
                 try
-                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 20, hessian_approximation = "limited-memory"))
+                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, hessian_approximation = "limited-memory"))
                     # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
                     @show fittime
                     @show gcm.θ
                     @show gcm.∇θ
                     loglikelihood!(gcm, true, true)
-                    vcov!(gcm) 
+                    vcov!(gcm)
                     @show GLMCopula.confint(gcm)
                     # mse and time under our model
                     coverage!(gcm, trueparams, intervals, curcoverage)
-                    mseβ, mseσ2, mseρ = MSE(gcm, βtrue, ρtrue, σ2true)
+                    mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
                     @show mseβ
                     @show mseσ2
                     @show mseρ
@@ -119,7 +120,6 @@ function run_test()
                     fittimes[currentind] = fittime
                     currentind += 1
                 catch
-                    println("random seed is $(1000000000 * t + 10000000 * j + 1000000 * k), rep $j obs per person $ni samplesize $m ")
                     βMseResults[currentind] = NaN
                     σ2MseResults[currentind] = NaN
                     ρMseResults[currentind] = NaN
@@ -135,12 +135,12 @@ function run_test()
     @show en - st #seconds
     @info "writing to file..."
     ftail = "multivariate_poisson_AR$(nsims)reps_sim.csv"
-    writedlm("poisson_ar/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("poisson_ar/mse_sigma_" * ftail, σ2MseResults, ',')
-    writedlm("poisson_ar/mse_rho_" * ftail, ρMseResults, ',')
-    writedlm("poisson_ar/fittimes_" * ftail, fittimes, ',')
+    writedlm("autoregressive/poisson_ar/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("autoregressive/poisson_ar/mse_sigma_" * ftail, σ2MseResults, ',')
+    writedlm("autoregressive/poisson_ar/mse_rho_" * ftail, ρMseResults, ',')
+    writedlm("autoregressive/poisson_ar/fittimes_" * ftail, fittimes, ',')
 
-    writedlm("poisson_ar/beta_sigma_coverage_" * ftail, βρσ2coverage, ',')
+    writedlm("autoregressive/poisson_ar/beta_sigma_coverage_" * ftail, βρσ2coverage, ',')
 end
 
 run_test()

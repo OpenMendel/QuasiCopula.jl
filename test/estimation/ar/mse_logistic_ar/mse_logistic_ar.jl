@@ -5,7 +5,6 @@ function run_test()
     p = 3    # number of fixed effects, including intercept
 
     # true parameter values
-    # βtrue = ones(p)
     Random.seed!(1234)
     # try next
     βtrue = rand(Uniform(-0.2, 0.2), p)
@@ -30,7 +29,7 @@ function run_test()
     #simulation parameters
     samplesizes = [100; 1000; 10000]
     ns = [2; 5; 10; 15; 20; 25]
-    nsims = 5
+    nsims = 100
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -63,8 +62,6 @@ function run_test()
                 println("rep $j obs per person $ni samplesize $m")
                 Y_nsample = []
                 for i in 1:m
-                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     X = [ones(ni) randn(ni, p - 1)]
                     η = X * βtrue
                     μ = exp.(η) ./ (1 .+ exp.(η))
@@ -76,8 +73,6 @@ function run_test()
                     # simuate single vector y
                     y = Vector{Float64}(undef, ni)
                     res = Vector{Float64}(undef, ni)
-                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     rand(nonmixed_multivariate_dist, y, res)
                     V = [ones(ni, ni)]
                     gcs[i] = GLMCopulaARObs(y, X, d, link)
