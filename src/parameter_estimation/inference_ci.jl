@@ -20,7 +20,7 @@ function vcov!(gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D<:Union
     end
     copytri!(gcm.M, 'U')
     Aeval, Aevec = eigen(Symmetric(gcm.Ainv))
-    gcm.Ainv .= Aevec * inv(Diagonal(Aeval)) * Aevec
+    gcm.Ainv .= Aevec * pinv(Diagonal(Aeval)) * Aevec
     fill!(gcm.vcov, 0.0)
     mul!(gcm.Aevec, gcm.Ainv, gcm.M) # use Avec as scratch space
     mul!(gcm.vcov, gcm.Aevec, gcm.Ainv)
@@ -67,7 +67,7 @@ function vcov!(gcm::GaussianCopulaVCModel{T}) where {T <: BlasReal}
     end
     copytri!(gcm.M, 'U')
     Aeval, Aevec = eigen(Symmetric(gcm.Ainv))
-    gcm.Ainv .= Aevec * inv(Diagonal(Aeval)) * Aevec
+    gcm.Ainv .= Aevec * pinv(Diagonal(Aeval)) * Aevec
     fill!(gcm.vcov, 0.0)
     mul!(gcm.Aevec, gcm.Ainv, gcm.M) # use Avec as scratch space
     # vcov = Ainv * M * Ainv
@@ -129,7 +129,7 @@ function vcov!(gcm::GLMCopulaARModel{T, D, Link}) where {T <: BlasReal, D<:Union
     end
     copytri!(gcm.M, 'U')
     Aeval, Aevec = eigen(Symmetric(gcm.Ainv))
-    gcm.Ainv .= Aevec * inv(Diagonal(Aeval)) * Aevec
+    gcm.Ainv .= Aevec * pinv(Diagonal(Aeval)) * Aevec
     fill!(gcm.vcov, 0.0)
     mul!(gcm.Aevec, gcm.Ainv, gcm.M) # use Avec as scratch space
     # vcov = Ainv * M * Ainv
@@ -162,7 +162,7 @@ function vcov!(gcm::GaussianCopulaARModel{T}) where {T <: BlasReal}
     end
     copytri!(gcm.M, 'U')
     Aeval, Aevec = eigen(Symmetric(gcm.Ainv))
-    gcm.Ainv .= Aevec * inv(Diagonal(Aeval)) * Aevec
+    gcm.Ainv .= Aevec * pinv(Diagonal(Aeval)) * Aevec
     fill!(gcm.vcov, 0.0)
     mul!(gcm.Aevec, gcm.Ainv, gcm.M) # use Avec as scratch space
     # vcov = Ainv * M * Ainv
@@ -194,7 +194,7 @@ function vcov!(gcm::NBCopulaARModel{T, D, Link}) where {T <: BlasReal, D, Link}
     end
     copytri!(gcm.M, 'U')
     Aeval, Aevec = eigen(Symmetric(gcm.Ainv))
-    gcm.Ainv .= Aevec * inv(Diagonal(Aeval)) * Aevec
+    gcm.Ainv .= Aevec * pinv(Diagonal(Aeval)) * Aevec
     fill!(gcm.vcov, 0.0)
     mul!(gcm.Aevec, gcm.Ainv, gcm.M) # use Avec as scratch space
     # vcov = Ainv * M * Ainv
