@@ -21,7 +21,7 @@ function runtest()
     #simulation parameters
     samplesizes = [100; 1000; 10000]
     ns = [2; 5; 10; 15; 20; 25]
-    nsims = 5
+    nsims = 100
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -65,7 +65,6 @@ function runtest()
                 Ystack = []
                 # df = DataFrame(Y = Ystack, X1 = Xstack[:, 1], X2 = Xstack[:, 2], X3 = Xstack[:, 3], group = CategoricalArray(groupstack))
                 for i in 1:m
-                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     X = [ones(ni) randn(ni, p_fixed - 1)]
                     η = X * βtrue
                     μ = exp.(η)
@@ -76,7 +75,6 @@ function runtest()
                     # simuate single vector y
                     y = Vector{Float64}(undef, ni)
                     res = Vector{Float64}(undef, ni)
-                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     rand(nonmixed_multivariate_dist, y, res)
                     V = [ones(ni, ni)]
                     gcs[i] = NBCopulaVCObs(y, X, V, d, link)
@@ -94,12 +92,6 @@ function runtest()
                 # p = 3
                 df = (Y = Ystack, X2 = Xstack[:, 2], X3 = Xstack[:, 3], group = string.(groupstack))
                 form = @formula(Y ~ 1 + X2 + X3 + (1|group));
-                # p = 2
-                # df = (Y = Ystack, X2 = Xstack[:, 2], group = string.(groupstack))
-                # form = @formula(Y ~ 1 + X2 + (1|group));
-
-                # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "exact"))
-                # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 20, hessian_approximation = "limited-memory"))
                 try
                     fittime = @elapsed GLMCopula.fit!(gcm, tol = 1e-5, maxBlockIter = 50)
                     @show fittime
