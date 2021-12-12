@@ -5,8 +5,9 @@ function run_test()
     p = 3    # number of fixed effects, including intercept
 
     # true parameter values
-    βtrue = ones(p)
-    σ2true = [0.1]
+    Random.seed!(1234)
+    βtrue = randn(p)
+    σ2true = [0.5]
     ρtrue = [0.9]
     τtrue = 10
 
@@ -30,7 +31,7 @@ function run_test()
     samplesizes = [100; 1000; 10000]
     # ns = [10]
     ns = [2; 5; 10; 15; 20; 25]
-    nsims = 50
+    nsims = 100
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -60,7 +61,6 @@ function run_test()
                 println("rep $j obs per person $ni samplesize $m")
                 Y_nsample = []
                 for i in 1:m
-                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     X = [ones(ni) randn(ni, p - 1)]
                     μ = X * βtrue
                     vecd = Vector{ContinuousUnivariateDistribution}(undef, length(μ))
@@ -71,12 +71,10 @@ function run_test()
                     # simuate single vector y
                     y = Vector{Float64}(undef, ni)
                     res = Vector{Float64}(undef, ni)
-                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
                     # simuate single vector y
                     y = Vector{Float64}(undef, ni)
                     res = Vector{Float64}(undef, ni)
-                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     rand(nonmixed_multivariate_dist, y, res)
                     gcs[i] = GaussianCopulaARObs(y, X)
                     push!(Y_nsample, y)
@@ -90,16 +88,8 @@ function run_test()
                 @show gcm.ρ
                 @show gcm.σ2
                 @show gcm.τ
-
-                # ### now sigma2 is initialized now we need rho
-                # Y_1 = [Y_nsample[i][1] for i in 1:m]
-                # Y_2 = [Y_nsample[i][2] for i in 1:m]
-                #
-                # update_rho!(gcm, Y_1, Y_2)
-                # @show gcm.ρ
-                # @show gcm.σ2
                 try
-                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, derivative_test = "first-order", tol = 10^-8, limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
+                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-6, limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
                     # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
                     @show fittime
                     @show gcm.θ
@@ -130,7 +120,7 @@ function run_test()
                     τMseResults[currentind] = NaN
                     σ2MseResults[currentind] = NaN
                     ρMseResults[currentind] = NaN
-                    βρσ2coverage[:, currentind] .= NaN
+                    βρσ2τcoverage[:, currentind] .= NaN
                     fittimes[currentind] = NaN
                     currentind += 1
                  end
@@ -141,13 +131,14 @@ function run_test()
 
     @show en - st #seconds
     @info "writing to file..."
-    ftail = "multivariate_bernoulli_AR$(nsims)reps_sim.csv"
-    writedlm("normal_ar/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("normal_ar/mse_sigma_" * ftail, σ2MseResults, ',')
-    writedlm("normal_ar/mse_rho_" * ftail, ρMseResults, ',')
-    writedlm("normal_ar/fittimes_" * ftail, fittimes, ',')
+    ftail = "multivariate_normal_AR$(nsims)reps_sim.csv"
+    writedlm("autoregressive/normal_ar/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("autoregressive/normal_ar/mse_tau_" * ftail, τMseResults, ',')
+    writedlm("autoregressive/normal_ar/mse_sigma_" * ftail, σ2MseResults, ',')
+    writedlm("autoregressive/normal_ar/mse_rho_" * ftail, ρMseResults, ',')
+    writedlm("autoregressive/normal_ar/fittimes_" * ftail, fittimes, ',')
 
-    writedlm("normal_ar/beta_rho_sigma_coverage_" * ftail, βρσ2coverage, ',')
+    writedlm("autoregressive/normal_ar/beta_rho_sigma_coverage_" * ftail, βρσ2τcoverage, ',')
 end
 
 run_test()
