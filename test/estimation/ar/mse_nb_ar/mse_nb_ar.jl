@@ -1,13 +1,15 @@
-using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, CategoricalArrays
-using Random, Roots, SpecialFunctions, StatsFuns, Distributions, DataFrames, ToeplitzMatrices
+using DataFrames, Random, GLM, GLMCopula, LinearAlgebra, DelimitedFiles
+using LinearAlgebra: BlasReal, copytri!
+using ToeplitzMatrices
 
 function run_test()
     p_fixed = 3    # number of fixed effects, including intercept
     # true parameter values
-    βtrue = ones(p_fixed)
-    σ2true = [0.1]
-    ρtrue = [0.9]
+    Random.seed!(1234)
+    βtrue = randn(p_fixed)
     rtrue = 10.0
+    σ2true = [0.5]
+    ρtrue = [0.9]
 
     function get_V(ρ, n)
         vec = zeros(n)
@@ -27,7 +29,7 @@ function run_test()
     #simulation parameters
     samplesizes = [100; 1000; 10000]
     ns = [2; 5; 10; 15; 20; 25]
-    nsims = 5
+    nsims = 100
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -61,7 +63,7 @@ function run_test()
                 println("rep $j obs per person $ni samplesize $m")
                 Y_nsample = []
                 for i in 1:m
-                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
+                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     X = [ones(ni) randn(ni, p_fixed - 1)]
                     η = X * βtrue
                     μ = exp.(η)
@@ -77,7 +79,7 @@ function run_test()
                     # simuate single vector y
                     y = Vector{Float64}(undef, ni)
                     res = Vector{Float64}(undef, ni)
-                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
+                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     rand(nonmixed_multivariate_dist, y, res)
                     gcs[i] = NBCopulaARObs(y, X, d,link)
                     push!(Y_nsample, y)
@@ -86,23 +88,13 @@ function run_test()
                 # form model
                 gcm = NBCopulaARModel(gcs);
                 fittime = NaN
-                initialize_model!(gcm)
-                @show gcm.β
-                @show gcm.ρ
-                @show gcm.σ2
-                @show gcm.r
-
-                # ### now sigma2 is initialized now we need rho
-#                 Y_1 = [Y_nsample[i][1] for i in 1:m]
-#                 Y_2 = [Y_nsample[i][2] for i in 1:m]
-
-#                 update_rho!(gcm, Y_1, Y_2)
-                # @show gcm.ρ
-                # @show gcm.σ2
                 try
-                    fittime = @elapsed GLMCopula.fit!(gcm)
-#                     fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, tol = 10^-8, limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
-                    # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
+                    initialize_model!(gcm)
+                    @show gcm.β
+                    @show gcm.ρ
+                    @show gcm.σ2
+                    @show gcm.r
+                    fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter = 30, tol=1e-6)
                     @show fittime
                     @show gcm.θ
                     @show gcm.∇θ
@@ -113,7 +105,7 @@ function run_test()
                     @show GLMCopula.confint(gcm)
 
                 # mse and time under our model
-                # coverage!(gcm, trueparams, intervals, curcoverage)
+                coverage!(gcm, trueparams, intervals, curcoverage)
                 mseβ, mseρ, mseσ2, mser = MSE(gcm, βtrue, ρtrue, σ2true, rtrue)
                 @show mseβ
                 @show mser
@@ -146,12 +138,12 @@ function run_test()
     @show en - st #seconds
     @info "writing to file..."
     ftail = "multivariate_nb_AR$(nsims)reps_sim.csv"
-    writedlm("nb_ar/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("nb_ar/mse_r_" * ftail, rMseResults, ',')
-    writedlm("nb_ar/mse_sigma_" * ftail, σ2MseResults, ',')
-    writedlm("nb_ar/mse_rho_" * ftail, ρMseResults, ',')
-    writedlm("nb_ar/fittimes_" * ftail, fittimes, ',')
+    writedlm("autoregressive/nb_ar/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("autoregressive/nb_ar/mse_r_" * ftail, rMseResults, ',')
+    writedlm("autoregressive/nb_ar/mse_sigma_" * ftail, σ2MseResults, ',')
+    writedlm("autoregressive/nb_ar/mse_rho_" * ftail, ρMseResults, ',')
+    writedlm("autoregressive/nb_ar/fittimes_" * ftail, fittimes, ',')
 
-    writedlm("nb_ar/beta_rho_sigma_coverage_" * ftail, βρσ2rcoverage, ',')
+    writedlm("autoregressive/nb_ar/beta_rho_sigma_coverage_" * ftail, βρσ2rcoverage, ',')
 end
 run_test()
