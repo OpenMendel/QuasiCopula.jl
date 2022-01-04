@@ -16,36 +16,8 @@ function initialize_model!(
     nothing
 end
 
-"""
-    update_rho!(gcm, empirical_covariance_mat)
-
-Given initial estimates for 'σ2' and 'β', initialize the AR parameter 'ρ' using empirical covariance matrix of Y_1 and Y_2.
-"""
-function update_rho!(gcm, Y_1, Y_2)
-    N = length(gcm.data)
-    empirical_covariance_mat = scattermat(hcat(Y_1, Y_2))/N
-    n1 = length(gcm.data[1].y)
-    ρhat = abs(empirical_covariance_mat[1, 2] / (inv(1 + 0.5 * n1 * gcm.σ2[1]) * sqrt(abs(Statistics.mean(Y_1))) * sqrt(abs(Statistics.mean(Y_2))) * gcm.σ2[1]))
-    if ρhat > 1
-      copyto!(gcm.ρ, 1.0)
-    else
-      @inbounds for i in eachindex(gcm.data)
-        get_V!(ρhat, gcm.data[i])
-      end
-      fill!(gcm.Σ, 1.0)
-      update_Σ!(gcm)
-        if gcm.Σ[1] < 10
-          copyto!(gcm.σ2, gcm.Σ)
-        else
-          copyto!(gcm.σ2, 1.0)
-        end
-      copyto!(gcm.ρ, ρhat)
-    end
-    nothing
-end
-
 function initialize_model!(
-    gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
+    gcm::Union{GLMCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}}) where {T <: BlasReal, D, Link, VD, VL}
     println("initializing β using Newton's Algorithm under Independence Assumption")
     glm_regress_model(gcm)
     @show gcm.β
@@ -163,9 +135,9 @@ function initialize_model!(gcm::NBCopulaARModel{T, D, Link}) where {T <: BlasRea
   end
   gcmPoisson = GLMCopulaARModel(gcsPoisson)
   optm = GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0, max_iter = 100,
-      tol = 10^-3, hessian_approximation = "limited-memory", 
+      tol = 10^-3, hessian_approximation = "limited-memory",
       limited_memory_max_history = 20))
-  
+
   # use poisson regression values of β, μ, η to initialize r, if poisson fit was successful
   if MathProgBase.status(optm) == :Optimal
       for i in 1:nsample
@@ -265,17 +237,84 @@ function glm_regress_model(gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARM
 end # function glm_regress
 
 """
+    glm_regress_model(gcm)
+
+Initialize beta for glm model for the poisson and bernoulli mixed distribution.
+"""
+function glm_regress_model(gcm::Poisson_Bernoulli_VCModel{T, VD, VL})  where {T <:BlasReal, VD, VL}
+  (n, p) = gcm.ntotal, gcm.p
+   fill!(gcm.β, 0.0)
+   y1bar = gcm.Y1total / n
+   y2bar = gcm.Y2total / n
+   ybar = [y1bar; y2bar]
+   veclink = gcm.veclink[1]
+   for k in 1:2 # each of the distributions
+       for iteration = 1:20 # find the intercept by Newton's method
+         g1 = GLM.linkinv(veclink[k], gcm.β[Integer(p - (p / k) + 1)]) #  mu
+         g2 = GLM.mueta(veclink[k], gcm.β[Integer(p - (p / k) + 1)])  # dmu
+         gcm.β[Integer(p - (p / k) + 1)] =  gcm.β[Integer(p - (p / k) + 1)] - clamp((g1 - ybar[k]) / g2, -1.0, 1.0)
+         if abs(g1 - ybar[k]) < 1e-10
+           break
+         end
+       end
+   end
+   (obj, old_obj, c) = (0.0, 0.0, 0.0)
+   epsilon = 1e-8
+   for iteration = 1:100 # scoring algorithm
+    fill!(gcm.∇β, 0.0)
+    fill!(gcm.Hβ, 0.0)
+    gcm = glm_score_statistic(gcm)
+    increment = gcm.Hβ \ gcm.∇β
+    BLAS.axpy!(1, increment, gcm.β)
+    steps = -1
+    for step_halve = 0:3 # step halving
+      obj = 0.0
+      fill!(gcm.∇β, 0.0)
+      fill!(gcm.Hβ, 0.0)
+           for i in 1:length(gcm.data)
+               gc = gcm.data[i]
+               x = zeros(p)
+              update_res!(gc, gcm.β)
+              steps = steps + 1
+                  for j = 1:length(gc.y)
+                    c = gc.res[j] * gc.w1[j]
+                    copyto!(x, gc.X[j, :])
+                    BLAS.axpy!(c, x, gcm.∇β) # score = score + c * x
+                    obj = obj + GLMCopula.loglik_obs(gc.vecd[j], gc.y[j], gc.μ[j], gc.wt[j], 1)
+                   end
+           end
+      if obj > old_obj
+        break
+      else
+        BLAS.axpy!(-1, increment, gcm.β)
+        increment = 0.5 * increment
+      end
+    end
+    # println(iteration," ",old_obj," ",obj," ",steps)
+    if iteration > 1 && abs(obj - old_obj) < epsilon * (abs(old_obj) + 1.0)
+      return gcm.β
+    else
+      old_obj = obj
+    end
+   end
+    gcm = glm_score_statistic(gcm)
+    increment = gcm.Hβ \ gcm.∇β
+    BLAS.axpy!(1, increment, gcm.β)
+    return gcm.β
+end # function glm_regress
+
+"""
 glm_score_statistic(gc, β, τ)
 
 Get gradient and hessian of beta to for a single independent vector of observations.
 """
-function glm_score_statistic(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaVCObs{T, D, Link}},
-  β::Vector{T}, τ::T) where {T<: BlasReal, D, Link}
+function glm_score_statistic(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}},
+  β::Vector{T}, τ::T) where {T<: BlasReal, D, Link, VD, VL}
    fill!(gc.∇β, 0.0)
    fill!(gc.Hβ, 0.0)
    update_res!(gc, β)
-   gc.∇β .= glm_gradient(gc, β, τ)
-   gc.Hβ .= GLMCopula.glm_hessian(gc, β)
+   gc.∇β .= glm_gradient(gc)
+   gc.Hβ .= GLMCopula.glm_hessian(gc)
    gc
 end
 
@@ -284,7 +323,7 @@ glm_score_statistic(gcm)
 
 Get gradient and hessian of beta to do newtons method on independent glm model for all observations in gcm model object.
 """
-function glm_score_statistic(gcm::Union{GLMCopulaVCModel{T, D}, GLMCopulaARModel{T, D}, NBCopulaVCModel{T, D, Link}}) where {T <: BlasReal, D, Link}
+function glm_score_statistic(gcm::Union{GLMCopulaVCModel{T, D}, GLMCopulaARModel{T, D}, NBCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}}) where {T <: BlasReal, D, Link, VD, VL}
   fill!(gcm.∇β, 0.0)
   fill!(gcm.Hβ, 0.0)
     for i in 1:length(gcm.data)
@@ -294,3 +333,31 @@ function glm_score_statistic(gcm::Union{GLMCopulaVCModel{T, D}, GLMCopulaARModel
     end
   return gcm
   end
+
+  # """
+  #     update_rho!(gcm, empirical_covariance_mat)
+  #
+  # Given initial estimates for 'σ2' and 'β', initialize the AR parameter 'ρ' using empirical covariance matrix of Y_1 and Y_2.
+  # """
+  # function update_rho!(gcm, Y_1, Y_2)
+  #     N = length(gcm.data)
+  #     empirical_covariance_mat = scattermat(hcat(Y_1, Y_2))/N
+  #     n1 = length(gcm.data[1].y)
+  #     ρhat = abs(empirical_covariance_mat[1, 2] / (inv(1 + 0.5 * n1 * gcm.σ2[1]) * sqrt(abs(Statistics.mean(Y_1))) * sqrt(abs(Statistics.mean(Y_2))) * gcm.σ2[1]))
+  #     if ρhat > 1
+  #       copyto!(gcm.ρ, 1.0)
+  #     else
+  #       @inbounds for i in eachindex(gcm.data)
+  #         get_V!(ρhat, gcm.data[i])
+  #       end
+  #       fill!(gcm.Σ, 1.0)
+  #       update_Σ!(gcm)
+  #         if gcm.Σ[1] < 10
+  #           copyto!(gcm.σ2, gcm.Σ)
+  #         else
+  #           copyto!(gcm.σ2, 1.0)
+  #         end
+  #       copyto!(gcm.ρ, ρhat)
+  #     end
+  #     nothing
+  # end

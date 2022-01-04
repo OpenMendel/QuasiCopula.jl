@@ -5,9 +5,9 @@ Fit an `GLMCopulaVCModel` object by MLE using a nonlinear programming solver. St
 should be provided in `gcm.β`, `gcm.Σ`, this is for Poisson and Bernoulli base with no additional parameters than the mean.
 """
 function fit!(
-        gcm::GLMCopulaVCModel{T, D, Link},
+        gcm::Union{GLMCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}},
         solver=Ipopt.IpoptSolver(print_level=5)
-    )  where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
+    )  where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link, VD, VL}
     initialize_model!(gcm)
     npar = gcm.p + gcm.m
     optm = MathProgBase.NonlinearModel(solver)
@@ -43,8 +43,8 @@ Translate model parameters in `gcm` to optimization variables in `par` for Poiss
 """
 function modelpar_to_optimpar!(
         par :: Vector,
-        gcm :: GLMCopulaVCModel{T, D, Link}
-    ) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
+        gcm :: Union{GLMCopulaVCModel{T, D, Link},  Poisson_Bernoulli_VCModel{T, VD, VL}}
+    ) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link, VD, VL}
     # β
     copyto!(par, gcm.β)
     # L
@@ -62,9 +62,9 @@ end
 Translate optimization variables in `par` to the model parameters in `gcm`.
 """
 function optimpar_to_modelpar!(
-        gcm :: GLMCopulaVCModel{T, D, Link},
+        gcm :: Union{GLMCopulaVCModel{T, D, Link},  Poisson_Bernoulli_VCModel{T, VD, VL}},
         par :: Vector
-    )  where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
+    )  where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link, VD, VL}
     # β
     copyto!(gcm.β, 1, par, 1, gcm.p)
     offset = gcm.p + 1
@@ -77,7 +77,7 @@ function optimpar_to_modelpar!(
 end
 
 function MathProgBase.initialize(
-    gcm::GLMCopulaVCModel,
+    gcm::Union{GLMCopulaVCModel, Poisson_Bernoulli_VCModel},
     requested_features::Vector{Symbol})
     for feat in requested_features
         if !(feat in [:Grad, :Hess])
@@ -86,10 +86,10 @@ function MathProgBase.initialize(
     end
 end
 
-MathProgBase.features_available(gcm::GLMCopulaVCModel) = [:Grad, :Hess]
+MathProgBase.features_available(gcm::Union{GLMCopulaVCModel, Poisson_Bernoulli_VCModel}) = [:Grad, :Hess]
 
 function MathProgBase.eval_f(
-        gcm :: GLMCopulaVCModel,
+        gcm :: Union{GLMCopulaVCModel, Poisson_Bernoulli_VCModel},
         par :: Vector
     )
     optimpar_to_modelpar!(gcm, par)
@@ -97,10 +97,10 @@ function MathProgBase.eval_f(
 end
 
 function MathProgBase.eval_grad_f(
-    gcm  :: GLMCopulaVCModel{T, D, Link},
+    gcm  :: Union{GLMCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}},
     grad :: Vector,
     par  :: Vector
-) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
+) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link, VD, VL}
 optimpar_to_modelpar!(gcm, par)
 obj = loglikelihood!(gcm, true, false)
 # gradient wrt β
@@ -119,11 +119,11 @@ copyto!(gcm.∇θ, grad)
 obj
 end
 
-MathProgBase.eval_g(gcm::GLMCopulaVCModel, g, par) = nothing
-MathProgBase.jac_structure(gcm::GLMCopulaVCModel) = Int[], Int[]
-MathProgBase.eval_jac_g(gcm::GLMCopulaVCModel, J, par) = nothing
+MathProgBase.eval_g(gcm::Union{GLMCopulaVCModel, Poisson_Bernoulli_VCModel}, g, par) = nothing
+MathProgBase.jac_structure(gcm::Union{GLMCopulaVCModel, Poisson_Bernoulli_VCModel}) = Int[], Int[]
+MathProgBase.eval_jac_g(gcm::Union{GLMCopulaVCModel, Poisson_Bernoulli_VCModel}, J, par) = nothing
 
-function MathProgBase.hesslag_structure(gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
+function MathProgBase.hesslag_structure(gcm::Union{GLMCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}}) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link, VD, VL}
     m◺ = ◺(gcm.m)
     # we work on the upper triangular part of the Hessian
     arr1 = Vector{Int}(undef, ◺(gcm.p) + m◺)
@@ -149,12 +149,12 @@ function MathProgBase.hesslag_structure(gcm::GLMCopulaVCModel{T, D, Link}) where
 end
 
 function MathProgBase.eval_hesslag(
-        gcm   :: GLMCopulaVCModel{T, D, Link},
+        gcm   :: Union{GLMCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}},
         H   :: Vector{T},
         par :: Vector{T},
         σ   :: T,
         μ   :: Vector{T}
-    )where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
+    )where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link, VD, VL}
     optimpar_to_modelpar!(gcm, par)
     loglikelihood!(gcm, true, true)
     # Hβ block

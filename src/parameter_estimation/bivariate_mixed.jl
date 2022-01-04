@@ -1,19 +1,5 @@
-module GLMCopula
-using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Distributions, StatsFuns, Statistics, StatsBase, ToeplitzMatrices
-using LinearAlgebra: BlasReal, copytri!
-using SpecialFunctions, Random
-@reexport using Ipopt
-@reexport using NLopt
-
-export fit!, fit2!, update_Σ_jensen!, init_β!, initialize_model!, loglikelihood!, standardize_res!, std_res_differential!
-export update_res!, update_Σ!
-export update_∇Σ!, update_HΣ! # update gradient and hessian of variance components
-export glm_regress_jl, glm_regress_model, glm_score_statistic!  # these are to initialize our model
-export component_loglikelihood, glm_gradient, hessian_glm
-export GLMCopulaVCObs, GLMCopulaVCModel
-export Poisson_Bernoulli_VCObs, Poisson_Bernoulli_VCModel
-
-mutable struct GLMCopulaVCObs{T <: BlasReal, D, Link}
+@reexport using Distributions
+mutable struct Poisson_Bernoulli_VCObs{T <: BlasReal, VD, VL}
     # data
     y::Vector{T}
     X::Matrix{T}
@@ -45,19 +31,20 @@ mutable struct GLMCopulaVCObs{T <: BlasReal, D, Link}
     μ::Vector{T}    # μ(β) = ginv(Xβ) # inverse link of the systematic component
     varμ::Vector{T} # v(μ_i) # variance as a function of the mean
     dμ::Vector{T}   # derivative of μ
-    d::D            # distribution()
-    link::Link      # link function ()
+    # d::D            # distribution()
+    vecd::VD
+    veclink::VL      # link function ()
     wt::Vector{T}   # weights wt for GLM.jl
     w1::Vector{T}   # working weights in the gradient = dμ/v(μ)
     w2::Vector{T}   # working weights in the information matrix = dμ^2/v(μ)
 end
 
-function GLMCopulaVCObs(
+function Poisson_Bernoulli_VCObs(
     y::Vector{T},
     X::Matrix{T},
     V::Vector{Matrix{T}},
-    d::D,
-    link::Link) where {T <: BlasReal, D, Link}
+    vecd::VD,
+    veclink::VL) where {T <: BlasReal, VD, VL}
     n, p, m = size(X, 1), size(X, 2), length(V)
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
@@ -92,20 +79,21 @@ function GLMCopulaVCObs(
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
-    GLMCopulaVCObs{T, D, Link}(y, X, V, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇τ, ∇Σ, Hβ, HΣ,
-        Hτ, res, t, q, xtx, storage_n, m1, m2, storage_p1, storage_p2, storage_np, storage_pp, added_term_numerator, added_term2, η, μ, varμ, dμ, d, link, wt, w1, w2)
+    Poisson_Bernoulli_VCObs{T, VD, VL}(y, X, V, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇τ, ∇Σ, Hβ, HΣ,
+        Hτ, res, t, q, xtx, storage_n, m1, m2, storage_p1, storage_p2, storage_np, storage_pp, added_term_numerator, added_term2, η, μ, varμ, dμ, vecd, veclink, wt, w1, w2)
 end
 
 """
-GLMCopulaVCModel
-GLMCopulaVCModel(gcs)
-Gaussian copula variance component model, which contains a vector of
-`GLMCopulaVCObs` as data, model parameters, and working arrays.
+Poisson_Bernoulli_VCModel
+Poisson_Bernoulli_VCModel(gcs)
+Bivariate Mixed Poisson, Bernoulli variance component model, which contains a vector of
+`Poisson_Bernoulli_VCObs` as data, model parameters, and working arrays.
 """
-struct GLMCopulaVCModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvaluator
+struct Poisson_Bernoulli_VCModel{T <: BlasReal, VD, VL} <: MathProgBase.AbstractNLPEvaluator
     # data
-    data::Vector{GLMCopulaVCObs{T, D, Link}}
-    Ytotal::T
+    data::Vector{Poisson_Bernoulli_VCObs{T, VD, VL}}
+    Y1total::T
+    Y2total::T
     ntotal::Int     # total number of singleton observations
     p::Int          # number of mean parameters in linear regression
     m::Int          # number of variance components
@@ -133,53 +121,12 @@ struct GLMCopulaVCModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalu
     storage_n::Vector{T}
     storage_m::Vector{T}
     storage_Σ::Vector{T}
-    d::Vector{D}
-    link::Vector{Link}
-end
-
-function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
-    n, p, m = length(gcs), size(gcs[1].X, 2), length(gcs[1].V)
-    β       = Vector{T}(undef, p)
-    τ       = [1.0]
-    Σ       = Vector{T}(undef, m)
-    θ       = Vector{T}(undef, m + p)
-    ∇β      = Vector{T}(undef, p)
-    ∇τ      = Vector{T}(undef, 1)
-    ∇Σ      = Vector{T}(undef, m)
-    ∇θ      = Vector{T}(undef, m + p)
-    XtX     = zeros(T, p, p) # sum_i xi'xi
-    Hβ      = Matrix{T}(undef, p, p)
-    HΣ      = Matrix{T}(undef, m, m)
-    Hτ      = Matrix{T}(undef, 1, 1)
-    Ainv    = zeros(T, p + m, p + m)
-    Aevec   = zeros(T, p + m, p + m)
-    M       = zeros(T, p + m, p + m)
-    vcov    = zeros(T, p + m, p + m)
-    ψ       = Vector{T}(undef, p + m)
-    TR      = Matrix{T}(undef, n, m) # collect trace terms
-    Ytotal  = 0.0
-    ntotal  = 0.0
-    d       = Vector{D}(undef, n)
-    link    = Vector{Link}(undef, n)
-    for i in eachindex(gcs)
-        ntotal  += length(gcs[i].y)
-        Ytotal  += sum(gcs[i].y)
-        BLAS.axpy!(one(T), gcs[i].xtx, XtX)
-        TR[i, :] = gcs[i].t
-        d[i] = gcs[i].d
-        link[i] = gcs[i].link
-    end
-    QF        = Matrix{T}(undef, n, m)
-    storage_n = Vector{T}(undef, n)
-    storage_m = Vector{T}(undef, m)
-    storage_Σ = Vector{T}(undef, m)
-    GLMCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, p, m, β, τ, Σ, θ,
-        ∇β, ∇τ, ∇Σ, ∇θ, XtX, Hβ, HΣ, Hτ, Ainv, Aevec, M, vcov, ψ, TR, QF,
-        storage_n, storage_m, storage_Σ, d, link)
+    vecd::Vector{VD}
+    veclink::Vector{VL}
 end
 
 
-function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: BlasReal, D<:Normal, Link}
+function Poisson_Bernoulli_VCModel(gcs::Vector{Poisson_Bernoulli_VCObs{T, VD, VL}}) where {T <: BlasReal, VD, VL}
     n, p, m = length(gcs), size(gcs[1].X, 2), length(gcs[1].V)
     β       = Vector{T}(undef, p)
     τ       = [1.0]
@@ -199,43 +146,70 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: B
     vcov    = zeros(T, p + m + 1, p + m + 1)
     ψ       = Vector{T}(undef, p + m + 1)
     TR      = Matrix{T}(undef, n, m) # collect trace terms
-    Ytotal  = 0.0
+    Y1total  = 0.0
+    Y2total  = 0.0
     ntotal  = 0.0
-    d       = Vector{D}(undef, n)
-    link    = Vector{Link}(undef, n)
+    vecd       = Vector{VD}(undef, n)
+    veclink    = Vector{VL}(undef, n)
     for i in eachindex(gcs)
         ntotal  += length(gcs[i].y)
-        Ytotal  += sum(gcs[i].y)
+        Y1total  += sum(gcs[i].y[1])
+        Y2total  += sum(gcs[i].y[2])
         BLAS.axpy!(one(T), gcs[i].xtx, XtX)
         TR[i, :] = gcs[i].t
-        d[i] = gcs[i].d
-        link[i] = gcs[i].link
+        vecd[i] = gcs[i].vecd
+        veclink[i] = gcs[i].veclink
     end
     QF        = Matrix{T}(undef, n, m)
     storage_n = Vector{T}(undef, n)
     storage_m = Vector{T}(undef, m)
     storage_Σ = Vector{T}(undef, m)
-    GLMCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, p, m, β, τ, Σ, θ,
+    Poisson_Bernoulli_VCModel{T, VD, VL}(gcs, Y1total, Y2total, ntotal, p, m, β, τ, Σ, θ,
         ∇β, ∇τ, ∇Σ, ∇θ, XtX, Hβ, HΣ, Hτ, Ainv, Aevec, M, vcov, ψ, TR, QF,
-        storage_n, storage_m, storage_Σ, d, link)
+        storage_n, storage_m, storage_Σ, vecd, veclink)
 end
-include("parameter_estimation/bivariate_mixed.jl")
-include("parameter_estimation/gaussian_VC.jl")
-include("parameter_estimation/autoregressive.jl")
-include("parameter_estimation/gaussian_AR.jl")
-include("parameter_estimation/NBCopulaAR.jl")
-include("parameter_estimation/NBCopulaVC.jl")
-include("generate_random_deviates/discrete_rand.jl")
-include("generate_random_deviates/continuous_rand.jl")
-include("generate_random_deviates/multivariate_rand.jl")
-include("parameter_estimation/initialize_model.jl")
-include("parameter_estimation/splitting_loglikelihood.jl")
-include("parameter_estimation/gradient_hessian.jl")
-include("parameter_estimation/update_sigma_and_residuals.jl")
-include("parameter_estimation/fit_ar.jl")
-include("parameter_estimation/fit_gaussian_ar.jl")
-include("parameter_estimation/fit_new.jl") # only initializes using MM-algorithm does joint estimation using newton after
-include("parameter_estimation/fit_nb.jl")
-include("parameter_estimation/inference_ci.jl")
-include("parameter_estimation/fit_newton_normal.jl")
-end # module
+#
+# """
+#     update_res!(gc, β)
+# Update the residual vector according to `β` given link functions and distributions.
+# """
+# function update_res!(
+#    gc::Poisson_Bernoulli_VCObs{T, VD, VL},
+#    β::Vector{T}) where {T <: BlasReal, VD, VL}
+#    mul!(gc.η, gc.X, β)
+#    @inbounds for i in 1:length(gc.y)
+#        gc.μ[i] = GLM.linkinv(gc.veclink[i], gc.η[i])
+#        gc.varμ[i] = GLM.glmvar(gc.vecd[i], gc.μ[i]) # Note: for negative binomial, d.r is used
+#        gc.dμ[i] = GLM.mueta(gc.veclink[i], gc.η[i])
+#        gc.w1[i] = gc.dμ[i] / gc.varμ[i]
+#        gc.w2[i] = gc.w1[i] * gc.dμ[i]
+#        gc.res[i] = gc.y[i] - gc.μ[i]
+#    end
+#    return gc.res
+# end
+#
+# function standardize_res!(
+#     gc::Poisson_Bernoulli_VCObs{T, VD, VL},
+#     ) where {T <: BlasReal, VD, VL}
+#     @inbounds for j in eachindex(gc.y)
+#         σinv = inv(sqrt(gc.varμ[j]))
+#         gc.res[j] *= σinv
+#     end
+# end
+#
+#
+# #
+# """
+# glm_score_statistic(gc, β, τ)
+#
+# Get gradient and hessian of beta to for a single independent vector of observations.
+# """
+# function glm_score_statistic(gc::Poisson_Bernoulli_VCObs{T, VD, VL},
+#   β::Vector{T}, τ::T) where {T<: BlasReal, VD, VL}
+#    fill!(gc.∇β, 0.0)
+#    fill!(gc.Hβ, 0.0)
+#    update_res!(gc, β)
+#    gc.∇β .= glm_gradient(gc)
+#    gc.Hβ .= GLMCopula.glm_hessian(gc)
+#    gc
+# end

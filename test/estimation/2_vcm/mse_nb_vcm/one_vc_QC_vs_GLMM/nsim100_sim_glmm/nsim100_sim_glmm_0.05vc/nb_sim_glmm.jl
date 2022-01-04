@@ -2,6 +2,7 @@ using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, Catego
 using Random, Roots, SpecialFunctions
 using DataFrames, DelimitedFiles, Statistics
 import StatsBase: sem
+import GLMCopula.initialize_model!
 
 function __get_distribution(dist::Type{D}, μ) where D <: UnivariateDistribution
     return dist(μ)
@@ -11,12 +12,27 @@ function __get_distribution(dist::Type{D}, μ, r) where D <: UnivariateDistribut
     return dist(r, μ)
 end
 
+function initialize_model!(
+    gcm::NBCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
+
+    # initial guess for r = 1
+    fill!(gcm.r, 1)
+    fill!(gcm.τ, 1)
+    fill!(gcm.β, 0)
+
+    println("initializing variance components using MM-Algorithm")
+    fill!(gcm.Σ, 1)
+    update_Σ!(gcm)
+    nothing
+end
+
 function runtest()
     p = 3    # number of fixed effects, including intercept
     m = 1    # number of variance components
     # true parameter values
-    βtrue = ones(p)
-    Σtrue = [0.1]
+    Random.seed!(1234)
+    βtrue = rand(Uniform(-0.2, 0.2), p)
+    Σtrue = [0.05]
     rtrue = 10.0
 
     # generate data
@@ -25,8 +41,8 @@ function runtest()
     trueparams = [βtrue; rtrue; Σtrue] #hold true parameters
 
     #simulation parameters
-    samplesizes = [1000; 10000; 100000]
-    ns = [2; 5; 10; 20; 50]
+    samplesizes = [100; 1000; 10000]
+    ns = [2; 5; 10; 15; 20; 25]
     nsims = 100
 
     #storage for our results
@@ -58,7 +74,6 @@ function runtest()
         gcs = Vector{NBCopulaVCObs{T, D, Link}}(undef, m)
         for k in 1:length(ns)
             ni = ns[k] # number of observations per individual
-            β = ones(p)
             Γ = Σtrue[1] * ones(ni, ni) + 0.00000000001 * Matrix(I, ni, ni)
             for j in 1:nsims
                 println("rep $j obs per person $ni samplesize $m")
@@ -71,9 +86,9 @@ function runtest()
                 Xstack = []
                 Ystack = []
                 for i in 1:m
-                    Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
+                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     X = [ones(ni) randn(ni, p - 1)]
-                    η = X * β
+                    η = X * βtrue
                     V = [ones(ni, ni)]
                     # generate mvn response
                     mvn_d = MvNormal(η, Γ)
@@ -98,7 +113,7 @@ function runtest()
                 df = (Y = Ystack, X2 = Xstack[:, 2], X3 = Xstack[:, 3], group = string.(groupstack))
                 form = @formula(Y ~ 1 + X2 + X3 + (1|group));
 
-                fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter=100)
+                fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter=30, tol=1e-8)
                 @show fittime
                 @show gcm.β
                 @show gcm.Σ
@@ -124,7 +139,7 @@ function runtest()
                     # fit glmm
                     @info "Fit with MixedModels..."
                     # fittime_GLMM = @elapsed gm1 = fit(MixedModel, form, df, Bernoulli(); nAGQ = 25)
-                    fittime_GLMM = @elapsed gm1 = fit(MixedModel, form, df, NegativeBinomial(), LogLink(), contrasts = Dict(:group => Grouping()); nAGQ = 25)
+                    fittime_GLMM = @elapsed gm1 = fit(MixedModel, form, df, NegativeBinomial(rtrue), LogLink(), contrasts = Dict(:group => Grouping()); nAGQ = 25)
                     @show fittime_GLMM
                     display(gm1)
                     @show gm1.β
@@ -156,17 +171,17 @@ function runtest()
     @show en - st #seconds
     @info "writing to file..."
     ftail = "multivariate_NB_vcm$(nsims)reps_sim.csv"
-    writedlm("nb_sim_glmm/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("nb_sim_glmm/mse_Sigma_" * ftail, ΣMseResults, ',')
-    writedlm("nb_sim_glmm/mse_r_" * ftail, rMseResults, ',')
-    writedlm("nb_sim_glmm/fittimes_" * ftail, fittimes, ',')
+    writedlm("sim_glmm_vs_ours_random_int/nb_sim_glmm/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("sim_glmm_vs_ours_random_int/nb_sim_glmm/mse_Sigma_" * ftail, ΣMseResults, ',')
+    writedlm("sim_glmm_vs_ours_random_int/nb_sim_glmm/mse_r_" * ftail, rMseResults, ',')
+    writedlm("sim_glmm_vs_ours_random_int/nb_sim_glmm/fittimes_" * ftail, fittimes, ',')
 
-    writedlm("nb_sim_glmm/beta_r_sigma_coverage_" * ftail, βrΣcoverage, ',')
+    writedlm("sim_glmm_vs_ours_random_int/nb_sim_glmm/beta_r_sigma_coverage_" * ftail, βrΣcoverage, ',')
 
     # glmm
-    writedlm("nb_sim_glmm/mse_beta_GLMM_" * ftail, βMseResults_GLMM, ',')
-    writedlm("nb_sim_glmm/mse_Sigma_GLMM_" * ftail, ΣMseResults_GLMM, ',')
-    writedlm("nb_sim_glmm/mse_r_GLMM" * ftail, rMseResults_GLMM, ',')
-    writedlm("nb_sim_glmm/fittimes_GLMM_" * ftail, fittimes_GLMM, ',')
+    writedlm("sim_glmm_vs_ours_random_int/nb_sim_glmm/mse_beta_GLMM_" * ftail, βMseResults_GLMM, ',')
+    writedlm("sim_glmm_vs_ours_random_int/nb_sim_glmm/mse_Sigma_GLMM_" * ftail, ΣMseResults_GLMM, ',')
+    writedlm("sim_glmm_vs_ours_random_int/nb_sim_glmm/mse_r_GLMM" * ftail, rMseResults_GLMM, ',')
+    writedlm("sim_glmm_vs_ours_random_int/nb_sim_glmm/fittimes_GLMM_" * ftail, fittimes_GLMM, ',')
 end
 runtest()

@@ -10,20 +10,6 @@ end
 
 """
     std_res_differential!(gc)
-compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Poisson.
-"""
-function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}}) where {T<: BlasReal, D<:Poisson{T}, Link}
-    @inbounds for i in 1:size(gc.X, 2)
-        @simd for j in 1:length(gc.y)
-            gc.∇resβ[j, i] = gc.X[j, i]
-            gc.∇resβ[j, i] *= -(inv(sqrt(gc.varμ[j])) + (0.5 * inv(gc.varμ[j])) * gc.res[j]) * gc.dμ[j]
-        end
-    end
-    nothing
-end
-
-"""
-    std_res_differential!(gc)
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Negative Binomial.
 """
 function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}}
@@ -32,6 +18,40 @@ function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCO
         gc.∇μβ[j, :] .= gc.dμ[j] .* @view(gc.X[j, :])
         gc.∇σ2β[j, :] .= (gc.μ[j] * inv(gc.d.r) + (1 + inv(gc.d.r) * gc.μ[j])) .* @view(gc.∇μβ[j, :])
         gc.∇resβ[j, :] .= -inv(sqrt(gc.varμ[j])) .* @view(gc.∇μβ[j, :]) .- (0.5 * inv(gc.varμ[j])) .* gc.res[j] .* @view(gc.∇σ2β[j, :])
+    end
+    nothing
+end
+
+
+"""
+    std_res_differential!(gc)
+compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Poisson.
+"""
+function std_res_differential!(gc::Poisson_Bernoulli_VCObs{T, VD, VL}) where {T<: BlasReal, VD, VL}
+    fill!(gc.∇resβ, 0.0)
+    fill!(gc.∇μβ, 0.0)
+    @inbounds for i in 1:Integer(size(gc.X, 2) / 2)
+            # first is poisson
+            gc.∇resβ[1, i] = gc.X[1, i]
+            gc.∇resβ[1, i] *= -(inv(sqrt(gc.varμ[1])) + (0.5 * inv(gc.varμ[1])) * gc.res[1]) * gc.dμ[1]
+        end
+            # second is bernoulli
+            gc.∇μβ[2, Integer((size(gc.X, 2) / 2) + 1):Integer((size(gc.X, 2)))] .= gc.varμ[2] .* @view(gc.X[2, Integer((size(gc.X, 2) / 2) + 1):Integer((size(gc.X, 2)))])
+            gc.∇σ2β[2, Integer((size(gc.X, 2) / 2) + 1):Integer((size(gc.X, 2)))].= gc.varμ[2] * (1 - 2 * gc.μ[2]) .* @view(gc.X[2, Integer((size(gc.X, 2) / 2) + 1):Integer((size(gc.X, 2)))])
+            gc.∇resβ[2, Integer((size(gc.X, 2) / 2) + 1):Integer((size(gc.X, 2)))] .= -inv(sqrt(gc.varμ[2])) .* @view(gc.∇μβ[2, Integer((size(gc.X, 2) / 2) + 1):Integer(size(gc.X, 2))]).- (0.5 * inv(sqrt(gc.varμ[2]))) .* gc.res[2] .* @view(gc.∇σ2β[2, Integer((size(gc.X, 2) / 2) + 1):Integer((size(gc.X, 2)))])
+    nothing
+end
+
+"""
+    std_res_differential!(gc)
+compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Poisson.
+"""
+function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}}) where {T<: BlasReal, D<:Poisson{T}, Link}
+    @inbounds for i in 1:size(gc.X, 2)
+        @simd for j in 1:length(gc.y)
+            gc.∇resβ[j, i] = gc.X[j, i]
+            gc.∇resβ[j, i] *= -(inv(sqrt(gc.varμ[j])) + (0.5 * inv(gc.varμ[j])) * gc.res[j]) * gc.dμ[j]
+        end
     end
     nothing
 end
@@ -63,14 +83,13 @@ function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaAR
 end
 
 """
-    glm_gradient(gc::GLMCopulaVCObs{T, D, Link})
+    glm_gradient(gc::GLMCopulaVCObs{T, D, Link}, β)
 Calculates the gradient with respect to beta for our the glm portion for one obs. Keeps the residuals standardized.
 """
-function glm_gradient(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}}, β::Vector, τ) where {T<:Real, D, Link}
+function glm_gradient(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}}) where {T<:Real, D, Link, VD, VL}
     (n, p) = size(gc.X)
     gc.storage_n .= gc.w1 .* gc.res
     mul!(gc.storage_p1, transpose(gc.X), gc.storage_n)
-    gc.storage_p1 .*= τ[1]
     gc.storage_p1
 end
 
@@ -79,8 +98,8 @@ end
 
 Compute the part of the hessian relevant to the glm density with respect to beta for a single obs
 """
-function glm_hessian(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}}, β) where {T <: BlasReal, D, Link}
-    mul!(gc.storage_np, Diagonal(gc.w2), gc.X) 
+function glm_hessian(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}}) where {T <: BlasReal, D, Link, VD, VL}
+    mul!(gc.storage_np, Diagonal(gc.w2), gc.X)
     BLAS.gemm!('T', 'N', -1.0, gc.X, gc.storage_np, 0.0, gc.storage_pp)
 end
 

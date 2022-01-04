@@ -4,10 +4,10 @@ update_Σ_jensen!(gcm)
 Update Σ using the MM algorithm and Jensens inequality, given β.
 """
 function update_Σ_jensen!(
-    gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, NBCopulaARModel{T, D, Link}},
+    gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, NBCopulaARModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}},
     maxiter::Integer=50000,
     reltol::Number=1e-6,
-    verbose::Bool=false) where {T <: BlasReal, D<:Union{Poisson, Bernoulli, NegativeBinomial}, Link}
+    verbose::Bool=false) where {T <: BlasReal, D<:Union{Poisson, Bernoulli, NegativeBinomial}, Link, VD, VL}
     rsstotal = zero(T)
     for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
@@ -73,27 +73,45 @@ function update_res!(
    return gc.res
 end
 
+"""
+    update_res!(gc, β)
+Update the residual vector according to `β` given link functions and distributions.
+"""
 function update_res!(
-    gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}}
-    ) where {T <: BlasReal, D, Link}
+   gc::Poisson_Bernoulli_VCObs{T, VD, VL},
+   β::Vector{T}) where {T <: BlasReal, VD, VL}
+   mul!(gc.η, gc.X, β)
+   @inbounds for i in 1:length(gc.y)
+       gc.μ[i] = GLM.linkinv(gc.veclink[i], gc.η[i])
+       gc.varμ[i] = GLM.glmvar(gc.vecd[i], gc.μ[i]) # Note: for negative binomial, d.r is used
+       gc.dμ[i] = GLM.mueta(gc.veclink[i], gc.η[i])
+       gc.w1[i] = gc.dμ[i] / gc.varμ[i]
+       gc.w2[i] = gc.w1[i] * gc.dμ[i]
+       gc.res[i] = gc.y[i] - gc.μ[i]
+   end
+   return gc.res
+end
+
+function update_res!(
+    gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}}
+    ) where {T <: BlasReal, D, Link, VD, VL}
     @inbounds for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
     end
     nothing
 end
+# function standardize_res!(
+#     gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}},
+#     σinv::T
+#     ) where {T <: BlasReal, D, Link}
+#     @inbounds for j in eachindex(gc.y)
+#         gc.res[j] *= σinv
+#     end
+# end
 
 function standardize_res!(
-    gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}},
-    σinv::T
-    ) where {T <: BlasReal, D, Link}
-    @inbounds for j in eachindex(gc.y)
-        gc.res[j] *= σinv
-    end
-end
-
-function standardize_res!(
-    gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}}
-    ) where {T <: BlasReal, D, Link}
+    gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}}
+    ) where {T <: BlasReal, D, Link, VD, VL}
     @inbounds for j in eachindex(gc.y)
         σinv = inv(sqrt(gc.varμ[j]))
         gc.res[j] *= σinv
@@ -104,15 +122,8 @@ function standardize_res!(
     gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}}
     ) where {T <: BlasReal, D, Link}
     # standardize residual
-    if gcm.d[1] == Normal()
-        σinv = sqrt(gcm.τ[1])# general variance
-        @inbounds for i in eachindex(gcm.data)
-            standardize_res!(gcm.data[i], σinv)
-        end
-    else
-        @inbounds for i in eachindex(gcm.data)
-            standardize_res!(gcm.data[i])
-        end
+    @inbounds for i in eachindex(gcm.data)
+        standardize_res!(gcm.data[i])
     end
     nothing
 end
@@ -122,7 +133,7 @@ end
 
 Update the quadratic forms `(r^T V[k] r) / 2` according to the current residual `r`.
 """
-function update_quadform!(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}}) where {T<:Real, D, Link}
+function update_quadform!(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}}) where {T<:Real, D, Link, VD, VL}
     @inbounds for k in 1:length(gc.V)
         mul!(gc.storage_n, gc.V[k], gc.res)
         gc.q[k] = dot(gc.res, gc.storage_n) / 2
@@ -144,7 +155,7 @@ end
 """
     update_r!(gc::GLMCopulaVCObs{T, D, Link})
 
-Performs maximum loglikelihood estimation of the nuisance paramter for negative 
+Performs maximum loglikelihood estimation of the nuisance paramter for negative
 binomial model using Newton's algorithm. Will run a maximum of `maxIter` and
 convergence is defaulted to `convTol`.
 """
@@ -215,7 +226,7 @@ function first_derivative(gcm::NBCopulaVCModel, r::T) where T <: AbstractFloat
         resid = gcm.data[i].res
         Γ = gcm.data[i].storage_nn # Γ = a1*V1 + ... + am*Vm
         η = gcm.data[i].η
-        # Γ = gcm.Σ' * gcm.data[i].V 
+        # Γ = gcm.Σ' * gcm.data[i].V
         # D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
         # dD = Diagonal([-exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r))) for j in 1:length(η)])
         # dresid = -inv(D)*dD*resid
@@ -250,7 +261,7 @@ function first_derivative(gcm::NBCopulaARModel, r::T) where T <: AbstractFloat
         Γ = gcm.σ2[1] * gcm.data[i].V
         η = gcm.data[i].η
         resid = gcm.data[i].res
-        # Γ = gcm.Σ' * gcm.data[i].V 
+        # Γ = gcm.Σ' * gcm.data[i].V
         # D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
         # dD = Diagonal([-exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r))) for j in 1:length(η)])
         # dresid = -inv(D)*dD*resid
@@ -284,10 +295,10 @@ function second_derivative(gcm::NBCopulaVCModel, r::T) where T <: AbstractFloat
         Γ = gcm.data[i].storage_nn # Γ = a1*V1 + ... + am*Vm
         η = gcm.data[i].η
         resid = gcm.data[i].res
-        # Γ = gcm.Σ' * gcm.data[i].V 
+        # Γ = gcm.Σ' * gcm.data[i].V
         # D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
         # dD = Diagonal([-exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r))) for j in 1:length(η)])
-        # d2D = Diagonal([(exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) + 
+        # d2D = Diagonal([(exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) +
         #     (3exp(2η[j]) / (4r^(2.5)*sqrt(exp(η[j])*(exp(η[j])+r)))) for j in 1:length(η)])
         # resid = gcm.data[i].res
         # dresid = -inv(D)*dD*resid
@@ -302,8 +313,8 @@ function second_derivative(gcm::NBCopulaVCModel, r::T) where T <: AbstractFloat
         end
         for j in 1:length(η)
             # storage_n2 = -inv(D) * d2D
-            gcm.data[i].storage_n2[j] = -gcm.data[i].storage_n[j] * 
-                ((exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) + 
+            gcm.data[i].storage_n2[j] = -gcm.data[i].storage_n[j] *
+                ((exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) +
                 (3exp(2η[j]) / (4r^(2.5)*sqrt(exp(η[j])*(exp(η[j])+r)))))
         end
         for j in 1:length(η)
@@ -342,10 +353,10 @@ function second_derivative(gcm::NBCopulaARModel, r::T) where T <: AbstractFloat
         Γ = gcm.σ2[1] * gcm.data[i].V
         η = gcm.data[i].η
         resid = gcm.data[i].res
-        # Γ = gcm.Σ' * gcm.data[i].V 
+        # Γ = gcm.Σ' * gcm.data[i].V
         # D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
         # dD = Diagonal([-exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r))) for j in 1:length(η)])
-        # d2D = Diagonal([(exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) + 
+        # d2D = Diagonal([(exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) +
         #     (3exp(2η[j]) / (4r^(2.5)*sqrt(exp(η[j])*(exp(η[j])+r)))) for j in 1:length(η)])
         # resid = gcm.data[i].res
         # dresid = -inv(D)*dD*resid
@@ -360,8 +371,8 @@ function second_derivative(gcm::NBCopulaARModel, r::T) where T <: AbstractFloat
         end
         for j in 1:length(η)
             # storage_n2 = -inv(D) * d2D
-            gcm.data[i].storage_n2[j] = -gcm.data[i].storage_n[j] * 
-                ((exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) + 
+            gcm.data[i].storage_n2[j] = -gcm.data[i].storage_n[j] *
+                ((exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) +
                 (3exp(2η[j]) / (4r^(2.5)*sqrt(exp(η[j])*(exp(η[j])+r)))))
         end
         for j in 1:length(η)
@@ -403,7 +414,7 @@ function negbin_component_loglikelihood(gcm::NBCopulaVCModel, r::T) where T <: A
         @inbounds for k in 1:m
             mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
             gc.q[k] = dot(gc.res, gc.storage_n) / 2 # gc.q[k] = 0.5res' * V[k] * res
-            # BLAS.gemv!('T', gcm.Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # gc.∇β += ∇resβ*Γ*res (standardized residual) 
+            # BLAS.gemv!('T', gcm.Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # gc.∇β += ∇resβ*Γ*res (standardized residual)
             gc.storage_nn .+= gcm.Σ[k] .* gc.V[k] # compute Γ = a1*V1 + ... am*Vm
         end
         # 2nd term of logl
@@ -422,7 +433,7 @@ function newton_increment(gcm, r)
     # use gradient ascent if hessian not negative definite
     if dx2 < 0
         increment = dx / dx2
-    else 
+    else
         increment = dx
     end
     return increment
