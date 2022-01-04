@@ -28,7 +28,7 @@ ni = 2
 Γ = vc * ones(ni, ni)
 
 # sample size
-m = 10_000
+m = 100_000
 gcs = Vector{Poisson_Bernoulli_VCObs{T, VD, VL}}(undef, m)
 vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
 
@@ -54,4 +54,22 @@ end
 gcm = Poisson_Bernoulli_VCModel(gcs);
 # initialize_model!(gcm)
 
-fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 20, accept_after_max_steps = 10, hessian_approximation = "limited-memory"))
+fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-6, limited_memory_max_history = 12, accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
+
+@show fittime
+@show gcm.β
+@show gcm.Σ
+@show gcm.θ
+@show gcm.∇θ
+loglikelihood!(gcm, true, true)
+vcov!(gcm)
+@show GLMCopula.confint(gcm)
+# mse and time under our model
+intervals = zeros(2 * p + 1, 2) #hold intervals
+curcoverage = zeros(2 * p + 1) #hold current coverage resutls
+trueparams = [βtrue; vc] #hold true parameters
+
+coverage!(gcm, trueparams, intervals, curcoverage)
+mseβ, mseΣ = MSE(gcm, βtrue, [vc])
+@show mseβ
+@show mseΣ

@@ -13,8 +13,8 @@ function fit!(
     optm = MathProgBase.NonlinearModel(solver)
     # set lower bounds and upper bounds of parameters
     # diagonal entries of Cholesky factor L should be >= 0
-    lb   = fill(-Inf, npar)
-    ub   = fill( Inf, npar)
+    lb   = fill(-1, npar)
+    ub   = fill( 1, npar)
     offset = gcm.p + 1
     for k in 1:gcm.m
         lb[offset] = 0
