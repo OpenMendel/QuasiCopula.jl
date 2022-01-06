@@ -278,7 +278,7 @@ function loglikelihood!(
     c1 = 1 + 0.5 * n * σ2
     c2 = 1 + 0.5 * σ2 * q
     # loglikelihood
-    logl = GLMCopula.component_loglikelihood(gc, 1.0)
+    logl = GLMCopula.component_loglikelihood(gc)
     logl += -log(c1)
     # @show logl
     logl += log(c2)
@@ -328,11 +328,11 @@ function loglikelihood!(
             BLAS.gemm!('T', 'N', σ2, gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2)
             gc.added_term2 .*= inv1pq
             gc.Hβ .+= gc.added_term2
-            gc.Hβ .+= GLMCopula.glm_hessian(gc, β)
+            gc.Hβ .+= GLMCopula.glm_hessian(gc)
       end
       gc.∇β .= gc.∇β .* inv1pq
       gc.res .= gc.y .- gc.μ
-      gc.∇β .+= GLMCopula.glm_gradient(gc, β, 1.0)
+      gc.∇β .+= GLMCopula.glm_gradient(gc)
     end
     logl
 end

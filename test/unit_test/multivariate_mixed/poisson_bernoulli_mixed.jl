@@ -18,7 +18,8 @@ VL = typeof(veclink)
 
 p = 3    # number of fixed effects, including intercept
 Random.seed!(12345)
-β1true = rand(Uniform(-0.2, 0.2), p)
+# β1true = rand(Uniform(-0.2, 0.2), p)
+β1true = rand(p)
 Random.seed!(1234)
 β2true = rand(Uniform(-0.2, 0.2), p)
 βtrue = [β1true; β2true]
@@ -28,7 +29,7 @@ ni = 2
 Γ = vc * ones(ni, ni)
 
 # sample size
-m = 100_000
+m = 10_000
 gcs = Vector{Poisson_Bernoulli_VCObs{T, VD, VL}}(undef, m)
 vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
 
@@ -54,7 +55,7 @@ end
 gcm = Poisson_Bernoulli_VCModel(gcs);
 # initialize_model!(gcm)
 
-fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-6, limited_memory_max_history = 12, accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
+fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 12, accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
 
 @show fittime
 @show gcm.β
