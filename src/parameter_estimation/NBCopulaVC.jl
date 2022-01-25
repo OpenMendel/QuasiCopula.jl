@@ -131,8 +131,8 @@ struct NBCopulaVCModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalua
     ψ::Vector{T}
     TR::Matrix{T}         # n-by-m matrix with tik = tr(Vi[k]) / 2
     QF::Matrix{T}         # n-by-m matrix with qik = res_i' Vi[k] res_i
-    hess1::Matrix{T}      # holds transpose(gcm.QF) * Diagonal(gcm.storage_n) required for outer product in hessian term 1 
-    hess2::Matrix{T}      # holds transpose(gcm.TR) * Diagonal(gcm.storage_n2) required for outer product in hessian term 2 
+    hess1::Matrix{T}      # holds transpose(gcm.QF) * Diagonal(gcm.storage_n) required for outer product in hessian term 1
+    hess2::Matrix{T}      # holds transpose(gcm.TR) * Diagonal(gcm.storage_n2) required for outer product in hessian term 2
     storage_n::Vector{T}
     storage_n2::Vector{T}
     storage_m::Vector{T}
@@ -219,7 +219,7 @@ function loglikelihood!(
   if needgrad
       fill!(gc.∇β, 0)
       fill!(gc.∇τ, 0)
-      fill!(gc.∇Σ, 0) 
+      fill!(gc.∇Σ, 0)
   end
   needhess && fill!(gc.Hβ, 0)
   fill!(gc.∇β, 0.0)
@@ -232,7 +232,7 @@ function loglikelihood!(
   @inbounds for k in 1:m
       mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
       if needgrad
-          BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual) SHOULDNT THIS BE res^t*Γ*res? NOT ∇resβ*Γ*res 
+          BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual) SHOULDNT THIS BE res^t*Γ*res? NOT ∇resβ*Γ*res
       end
       gc.q[k] = dot(gc.res, gc.storage_n) / 2
   end
@@ -244,7 +244,7 @@ function loglikelihood!(
   # 3rd term of loglikelihood
   qsum  = dot(Σ, gc.q)
   logl += log(1 + qsum)
-  
+
   if needgrad
       inv1pq = inv(1 + qsum)
 
@@ -262,14 +262,14 @@ function loglikelihood!(
           end
           gc.added_term2 .*= inv1pq
           gc.Hβ .+= gc.added_term2
-          gc.Hβ .+= GLMCopula.glm_hessian(gc, β)
+          gc.Hβ .+= GLMCopula.glm_hessian(gc)
 
           # hessian for r
           gc.Hr .= nb_second_derivative(gc, Σ, r)
       end
       gc.storage_p2 .= gc.∇β .* inv1pq
       gc.res .= gc.y .- gc.μ
-      gc.∇β .= GLMCopula.glm_gradient(gc, β, τ)
+      gc.∇β .= GLMCopula.glm_gradient(gc)
       gc.∇β .+= gc.storage_p2
   end
   logl
@@ -347,7 +347,7 @@ function nb_second_derivative(gc::NBCopulaVCObs, Σ::Vector{T}, r::Number) where
     η = gc.η
     D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
     dD = Diagonal([-exp(2η[i]) / (2r^1.5 * sqrt(exp(η[i])*(exp(η[i])+r))) for i in 1:length(η)])
-    d2D = Diagonal([(exp(3η[i]) / (4r^1.5 * (exp(η[i])*(exp(η[i])+r))^(1.5))) + 
+    d2D = Diagonal([(exp(3η[i]) / (4r^1.5 * (exp(η[i])*(exp(η[i])+r))^(1.5))) +
         (3exp(2η[i]) / (4r^(2.5)*sqrt(exp(η[i])*(exp(η[i])+r)))) for i in 1:length(η)])
     resid = gc.res
     dresid = -inv(D)*dD*resid

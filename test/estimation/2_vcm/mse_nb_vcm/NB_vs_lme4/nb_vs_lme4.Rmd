@@ -15,34 +15,13 @@ library("glmmTMB")
 ```
 
 ```{r, echo = FALSE}
-data = read.csv("/Users/sarahji/.julia/dev/GLMCopula/test/estimation/vcm/mse_nb_vcm/NB_vs_lme4/N10k_ni5_NB.csv", header = TRUE)
+data = read.csv("/Users/sarahji/.julia/dev/GLMCopula/test/estimation/2_vcm/mse_nb_vcm/NB_vs_lme4/N10k_ni5_NB.csv", header = TRUE)
 ```
 
-I simulated a single dataset with sample size 10,000 and cluster size 5 under our NB base distribution model with betas = ones(3), single variance component Sigma = 0.5 and r = 10. Here I compare the fit of our NB regression with two most popular R packages for fitting Negative Binomial GLMM's with options to estimate "r":
+I simulated a single dataset with sample size 10,000 and cluster size 5 under our negative binomial random intercept GLMM with $\beta \sim$ Uniform(-0.2, 0.2), single variance component Sigma = 0.01 and r = 10. Here I compare the fit of our NB regression with two most popular R packages for fitting Negative Binomial GLMM's with options to estimate "r":
   
   1. lme4: The function glmer.nb estimates r pretty well, but very slowly. To get confidence intervals, it takes a significant amount of additional time, but no inference on r.
   2. glmmTMB: The function glmmTMB estimates r pretty well and a little faster than lme4 but still slow. We can get the CI for all parameters in much less time than lme4.
-
-## Comparing Parameter Estimates 
-Parameter     Truth                                Ours (CI)                                   lme4 (CI)                                   glmmTMB (CI)
-----------   -------------------------   -------------------------------------   ---------------------------------------  ------------------------------------
-Beta_1        \textcolor{blue}{1.000}         \textcolor{blue}{0.972} \newline        \textcolor{blue}{0.996}  \newline         \textcolor{blue}{0.998} \newline
-                                               (0.967, 0.977)                           (0.989, 1.004)                            (0.990, 1.005)
-Beta_2         \textcolor{blue}{1.000}        \textcolor{blue}{1.015} \newline        \textcolor{blue}{0.991} \newline          \textcolor{blue}{0.992} \newline
-                                                (1.012, 1.017)                                (0.985, 0.997)                          (0.986, 0.998)
-Beta_3         \textcolor{blue}{1.000}        \textcolor{blue}{1.016}\newline        \textcolor{blue}{1.009} \newline          \textcolor{blue}{1.010} \newline
-                                                (1.013, 1.019)                               (1.003,1.015)                             (1.004, 1.016)
-Sigma_1        \textcolor{blue}{0.500}       \textcolor{blue}{0.496} \newline       \textcolor{blue}{0.013} \newline          \textcolor{blue}{0.013} \newline
-                                                (0.472, 0.520)                               (0.011, 0.016)                           (0.011, 0.016)
-r             \textcolor{blue}{10.000}        \textcolor{blue}{8.926} \newline       \textcolor{blue}{9.199} \newline         \textcolor{blue}{9.183} \newline
-                                                  (8.886, 8.966)                               ( NA, NA )                           (8.844, 9.534)
-----------   -------------------------   -------------------------------------   ---------------------------------------  ------------------------------------
-
-## Comparing Fit Times (CI times) in Seconds
-Sample Size   Cluster Size      Ours (CI)             lme4 (CI)       glmmTMB (CI)
------------   --------------   ----------------   ----------------  -----------------
-   10000           5             6.28 (0.08)      126.18 (137.82)     104.59 (0.52)
------------   --------------   ----------------   ----------------  -----------------
 
 \newpage
 
@@ -54,6 +33,11 @@ ptm <- proc.time()
 m.nb <- glmer.nb(Y ~ 1 + X2 + X3 + (1|group), data = data, verbose = TRUE)
 # Stop the clock
 proc.time() - ptm
+```
+
+### Show estimates
+```{r}
+m.nb
 ```
 
 ### Show estimated r from lme4: glmer.nb
@@ -79,6 +63,11 @@ ptm <- proc.time()
 m.glmmtmb_nb <- glmmTMB(Y ~ 1 + X2 + X3 + (1|group), data = data, family=nbinom2)
 # Stop the clock
 proc.time() - ptm
+```
+
+### Show estimates
+```{r}
+m.glmmtmb_nb
 ```
 
 ### Show estimated r from glmmTMB
