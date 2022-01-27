@@ -44,10 +44,18 @@ glm99 <-  glm(binary99 ~ 1 + col.grad,
 ```
 
 ```{r}
+glm00
+```
+
+```{r}
+glm99
+```
+
+```{r}
 # install.packages("mvProbit")
 library(mvProbit)
 
-estResult <- mvProbit( cbind(binary00, binary99) ~ 1 + col.grad,
+estResult <- mvProbit(cbind(binary00, binary99) ~ 1 + col.grad,
    data = dat, iterlim = 1, nGHK = 50 )
 summary(estResult)
 ```

@@ -41,10 +41,11 @@ end
 
 function Poisson_Bernoulli_VCObs(
     y::Vector{T},
-    X::Matrix{T},
+    x::Vector{T},
     V::Vector{Matrix{T}},
     vecd::VD,
     veclink::VL) where {T <: BlasReal, VD, VL}
+    X = [transpose(x) zeros(size(transpose(x))); zeros(size(transpose(x))) transpose(x)]
     n, p, m = size(X, 1), size(X, 2), length(V)
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
@@ -168,48 +169,3 @@ function Poisson_Bernoulli_VCModel(gcs::Vector{Poisson_Bernoulli_VCObs{T, VD, VL
         ∇β, ∇τ, ∇Σ, ∇θ, XtX, Hβ, HΣ, Hτ, Ainv, Aevec, M, vcov, ψ, TR, QF,
         storage_n, storage_m, storage_Σ, vecd, veclink)
 end
-#
-# """
-#     update_res!(gc, β)
-# Update the residual vector according to `β` given link functions and distributions.
-# """
-# function update_res!(
-#    gc::Poisson_Bernoulli_VCObs{T, VD, VL},
-#    β::Vector{T}) where {T <: BlasReal, VD, VL}
-#    mul!(gc.η, gc.X, β)
-#    @inbounds for i in 1:length(gc.y)
-#        gc.μ[i] = GLM.linkinv(gc.veclink[i], gc.η[i])
-#        gc.varμ[i] = GLM.glmvar(gc.vecd[i], gc.μ[i]) # Note: for negative binomial, d.r is used
-#        gc.dμ[i] = GLM.mueta(gc.veclink[i], gc.η[i])
-#        gc.w1[i] = gc.dμ[i] / gc.varμ[i]
-#        gc.w2[i] = gc.w1[i] * gc.dμ[i]
-#        gc.res[i] = gc.y[i] - gc.μ[i]
-#    end
-#    return gc.res
-# end
-#
-# function standardize_res!(
-#     gc::Poisson_Bernoulli_VCObs{T, VD, VL},
-#     ) where {T <: BlasReal, VD, VL}
-#     @inbounds for j in eachindex(gc.y)
-#         σinv = inv(sqrt(gc.varμ[j]))
-#         gc.res[j] *= σinv
-#     end
-# end
-#
-#
-# #
-# """
-# glm_score_statistic(gc, β, τ)
-#
-# Get gradient and hessian of beta to for a single independent vector of observations.
-# """
-# function glm_score_statistic(gc::Poisson_Bernoulli_VCObs{T, VD, VL},
-#   β::Vector{T}, τ::T) where {T<: BlasReal, VD, VL}
-#    fill!(gc.∇β, 0.0)
-#    fill!(gc.Hβ, 0.0)
-#    update_res!(gc, β)
-#    gc.∇β .= glm_gradient(gc)
-#    gc.Hβ .= GLMCopula.glm_hessian(gc)
-#    gc
-# end

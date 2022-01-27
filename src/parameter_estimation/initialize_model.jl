@@ -1,8 +1,7 @@
 """
     initialize_model!(gcm{D}) where D<: Poisson, Bernoulli
 
-Initialize the linear regression parameters `β` by the weighted least
-squares solution.
+Initialize the linear regression parameters `β` using Newton's Algorithm under Independence Assumption, update variance components using MM-Algorithm.
 """
 function initialize_model!(
     gcm::GLMCopulaARModel{T, D}) where {T <: BlasReal, D}
@@ -11,13 +10,14 @@ function initialize_model!(
     fill!(gcm.τ, 1.0)
     fill!(gcm.ρ, 1.0)
     fill!(gcm.Σ, 1.0)
+    println("initializing variance components using MM-Algorithm")
     update_Σ!(gcm)
     copyto!(gcm.σ2, gcm.Σ)
     nothing
 end
 
 function initialize_model!(
-    gcm::Union{GLMCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}}) where {T <: BlasReal, D, Link, VD, VL}
+    gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link, VD, VL}
     println("initializing β using Newton's Algorithm under Independence Assumption")
     glm_regress_model(gcm)
     @show gcm.β
@@ -29,6 +29,50 @@ function initialize_model!(
       fill!(gcm.Σ, 1.0)
     end
     @show gcm.Σ
+    nothing
+end
+
+"""
+    initialize_model!(gcm{Poisson_Bernoulli_VCModel})
+
+Initialize the linear regression parameters `β` using GLM.jl, and update variance components using MM-Algorithm.
+"""
+function initialize_model!(
+    gcm::Poisson_Bernoulli_VCModel{T, VD, VL}) where {T <: BlasReal, VD, VL}
+    println("initializing β using GLM.jl")
+    initialize_beta!(gcm)
+    @show gcm.β
+    fill!(gcm.τ, 1.0)
+    println("initializing variance components using MM-Algorithm")
+    fill!(gcm.Σ, 1.0)
+    update_Σ!(gcm)
+    if sum(gcm.Σ) >= 20
+      fill!(gcm.Σ, 1.0)
+    end
+    @show gcm.Σ
+    nothing
+end
+
+"""
+    initialize_beta!(gcm{Poisson_Bernoulli_VCModel})
+
+Initialize the linear regression parameters `β` using GLM.jl
+"""
+function initialize_beta!(gcm::Poisson_Bernoulli_VCModel{T, VD, VL}) where {T <: BlasReal, VD, VL}
+    # form df
+    Xstack = []
+    Y1stack = zeros(length(gcm.data))
+    Y2stack = zeros(length(gcm.data))
+    for i in 1:length(gcm.data)
+        push!(Xstack, gcm.data[i].X[1, 1:Integer((gcm.p)/2)])
+        Y1stack[i] = gcm.data[i].y[1]
+        Y2stack[i] = gcm.data[i].y[2]
+    end
+    X = vcat(transpose(Xstack)...)
+
+    poisson_glm = GLM.glm(X, Y1stack, gcm.vecd[1][1], gcm.veclink[1][1])
+    bernoulli_glm = GLM.glm(X, Y2stack, gcm.vecd[1][2], gcm.veclink[1][2])
+    copyto!(gcm.β, [poisson_glm.pp.beta0; bernoulli_glm.pp.beta0])
     nothing
 end
 
@@ -87,44 +131,6 @@ function initialize_model!(gcm::NBCopulaARModel{T, D, Link}) where {T <: BlasRea
 
   # initial guess for r = 1
   fill!(gcm.r, 1)
-  # data::Vector{NBCopulaARObs{T, D, Link}}
-  # println("Ytotal = $(gcm.Ytotal)")
-  # println("ntotal = $(gcm.ntotal)")
-  # println("p = $(gcm.p)")
-  # # parameters
-  # println("β = $(gcm.β)")
-  # println("τ = $(gcm.τ)")
-  # println("ρ = $(gcm.ρ)")
-  # println("σ2 = $(gcm.σ2)")
-  # println("Σ = $(gcm.Σ)")
-  # println("r = $(gcm.r)")
-  # println("θ = $(gcm.θ)")
-  # working arrays
-  # ∇β::Vector{T}   # gradient of beta from all observations
-  # ∇ρ::Vector{T}           # gradient of rho from all observations
-  # ∇σ2::Vector{T}          # gradient of sigmasquared from all observations
-  # ∇r::Vector{T}
-  # ∇θ::Vector{T}
-  # XtX::Matrix{T}  # X'X = sum_i Xi'Xi
-  # Hβ::Matrix{T}    # Hessian from all observations
-  # Hρ::Matrix{T}    # Hessian from all observations
-  # Hσ2::Matrix{T}    # Hessian from all observations
-  # Hr::Matrix{T}
-  # Hρσ2::Matrix{T}
-  # Hβσ2::Vector{T}
-  # Ainv::Matrix{T}
-  # Aevec::Matrix{T}
-  # M::Matrix{T}
-  # vcov::Matrix{T}
-  # ψ::Vector{T}
-  # # Hβρ::Vector{T}
-  # TR::Matrix{T}
-  # QF::Matrix{T}         # n-by-1 matrix with qik = res_i' Vi res_i
-  # storage_n::Vector{T}
-  # storage_m::Vector{T}
-  # storage_Σ::Vector{T}
-  # d::Vector{D}
-  # link::Vector{Link}
 
   # fit a Poisson regression model to estimate μ, η, β, τ
   println("Initializing NegBin r to Poisson regression values")
