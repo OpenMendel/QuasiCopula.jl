@@ -13,8 +13,8 @@ function fit!(
     optm = MathProgBase.NonlinearModel(solver)
     # set lower bounds and upper bounds of parameters
     # diagonal entries of Cholesky factor L should be >= 0
-    lb   = fill(-1, npar)
-    ub   = fill( 1, npar)
+    lb   = fill(-Inf, npar)
+    ub   = fill(Inf, npar)
     offset = gcm.p + 1
     for k in 1:gcm.m
         lb[offset] = 0
@@ -72,7 +72,7 @@ function optimpar_to_modelpar!(
         gcm.Σ[k] = par[offset]
         offset   += 1
     end
-    copyto!(gcm.θ, par)
+    # copyto!(gcm.θ, par)
     gcm
 end
 
@@ -113,7 +113,7 @@ offset = gcm.p + 1
 end
 # update nuisance parameter
 # @show gcm.θ
-copyto!(gcm.∇θ, grad)
+# copyto!(gcm.∇θ, grad)
 # @show gcm.∇θ
 # return objective
 obj

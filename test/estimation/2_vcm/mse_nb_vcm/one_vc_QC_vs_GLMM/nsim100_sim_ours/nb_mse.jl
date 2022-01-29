@@ -9,8 +9,8 @@ function runtest()
     # true parameter values
     # βtrue = ones(p_fixed)
     Random.seed!(1234)
-    βtrue = randn(p_fixed)
-    Σtrue = [0.1]
+    βtrue = rand(Uniform(-0.2, 0.2), p_fixed)
+    Σtrue = [0.5]
     rtrue = 10.0
 
     # generate data
@@ -122,20 +122,20 @@ function runtest()
                     # fit glmm
                     @info "Fit with MixedModels..."
                     # fittime_GLMM = @elapsed gm1 = fit(MixedModel, form, df, NegativeBinomial(), LogLink(); nAGQ = 25)
-#                     fittime_GLMM = @elapsed gm1 = fit(MixedModel, form, df, NegativeBinomial(), LogLink(), contrasts = Dict(:group => Grouping()); nAGQ = 25)
-#                     @show fittime_GLMM
-#                     display(gm1)
-#                     @show gm1.β
-#                     # mse and time under glmm
-#                     @info "Get MSE under GLMM..."
-#                     level = 0.95
-#                     @show GLMM_CI_β = hcat(gm1.β + MixedModels.stderror(gm1) * quantile(Normal(), (1. - level) / 2.), gm1.β - MixedModels.stderror(gm1) * quantile(Normal(), (1. - level) / 2.))
-#                     @show GLMM_mse = [sum(abs2, gm1.β .- βtrue) / p_fixed, sum(abs2, inv(gm1.σ^2) - rtrue), sum(abs2, (gm1.θ.^2) .- Σtrue[1]) / 1]
-#                     # glmm
-#                     βMseResults_GLMM[currentind] = GLMM_mse[1]
-#                     rMseResults_GLMM[currentind] = GLMM_mse[2]
-#                     ΣMseResults_GLMM[currentind] = GLMM_mse[3]
-#                     fittimes_GLMM[currentind] = fittime_GLMM
+                     fittime_GLMM = @elapsed gm1 = fit(MixedModel, form, df, NegativeBinomial(), LogLink(), contrasts = Dict(:group => Grouping()); nAGQ = 25)
+                    @show fittime_GLMM
+                    display(gm1)
+                    @show gm1.β
+                    # mse and time under glmm
+                    @info "Get MSE under GLMM..."
+                    level = 0.95
+                    @show GLMM_CI_β = hcat(gm1.β + MixedModels.stderror(gm1) * quantile(Normal(), (1. - level) / 2.), gm1.β - MixedModels.stderror(gm1) * quantile(Normal(), (1. - level) / 2.))
+                    @show GLMM_mse = [sum(abs2, gm1.β .- βtrue) / p_fixed, sum(abs2, inv(gm1.σ^2) - rtrue), sum(abs2, (gm1.θ.^2) .- Σtrue[1]) / 1]
+                    # glmm
+                    βMseResults_GLMM[currentind] = GLMM_mse[1]
+                    rMseResults_GLMM[currentind] = GLMM_mse[2]
+                    ΣMseResults_GLMM[currentind] = GLMM_mse[3]
+                    fittimes_GLMM[currentind] = fittime_GLMM
                     currentind += 1
                 catch
                     # ours
