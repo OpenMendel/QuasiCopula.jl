@@ -10,7 +10,7 @@ function runtest()
     # βtrue = ones(p)
     Random.seed!(1234)
     # βtrue = rand(Uniform(-1, 1), p)
-    βtrue = [log(5.0)]
+    βtrue = [log(1.0)]
     Σtrue = [0.5]
 
     # generate data

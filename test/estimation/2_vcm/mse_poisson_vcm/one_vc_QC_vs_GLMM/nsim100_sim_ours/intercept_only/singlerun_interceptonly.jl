@@ -17,7 +17,7 @@ dist = Poisson
 vecd = [dist(mean) for i in 1:n]
 
 nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ2)
-nsample = 10_000
+nsample = 1_000
 Random.seed!(1234)
 @time Y_nsample = simulate_nobs_independent_vectors(nonmixed_multivariate_dist, nsample)
 
@@ -45,9 +45,10 @@ for i in 1:nsample
     gcs[i] = GLMCopulaVCObs(y, X, V, d, link)
 end
 gcm = GLMCopulaVCModel(gcs);
-
+gcm2 = deepcopy(gcm);
 
 @time GLMCopula.fit!(gcm, IpoptSolver(print_level = 5,  max_iter = 100, tol = 10^-7, limited_memory_max_history = 10, accept_after_max_steps = 1))
+
 println("estimated mean = $(exp.(gcm.β)[1]); true mean value= $mean")
 println("estimated variance component 1 = $(gcm.Σ[1]); true variance component 1 = $vc")
 
