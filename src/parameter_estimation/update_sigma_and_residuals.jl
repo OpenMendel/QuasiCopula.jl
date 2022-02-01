@@ -4,7 +4,7 @@ update_Σ_jensen!(gcm)
 Update Σ using the MM algorithm and Jensens inequality, given β.
 """
 function update_Σ_jensen!(
-    gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, NBCopulaARModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}},
+    gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, GLMCopulaCSModel{T, D, Link}, NBCopulaARModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}},
     maxiter::Integer=50000,
     reltol::Number=1e-6,
     verbose::Bool=false) where {T <: BlasReal, D<:Union{Poisson, Bernoulli, NegativeBinomial}, Link, VD, VL}
@@ -55,12 +55,12 @@ function update_Σ_jensen!(
 end
 
 """
-update_res!(gc, β)
+    update_res!(gc, β)
 Update the residual vector according to `β` given link function and distribution.
 """
 function update_res!(
-   gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}},
-   β::Vector{T}) where {T <: BlasReal, D, Link}
+   gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}, NBCopulaARObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}},
+   β::Vector{T}) where {T <: BlasReal, D, Link, VD, VL}
    mul!(gc.η, gc.X, β)
    @inbounds for i in 1:length(gc.y)
        gc.μ[i] = GLM.linkinv(gc.link, gc.η[i])
@@ -72,28 +72,28 @@ function update_res!(
    end
    return gc.res
 end
+#
+# """
+#     update_res!(gc, β)
+# Update the residual vector according to `β` given link functions and distributions.
+# """
+# function update_res!(
+#    gc::Poisson_Bernoulli_VCObs{T, VD, VL},
+#    β::Vector{T}) where {T <: BlasReal, VD, VL}
+#    mul!(gc.η, gc.X, β)
+#    @inbounds for i in 1:length(gc.y)
+#        gc.μ[i] = GLM.linkinv(gc.veclink[i], gc.η[i])
+#        gc.varμ[i] = GLM.glmvar(gc.vecd[i], gc.μ[i]) # Note: for negative binomial, d.r is used
+#        gc.dμ[i] = GLM.mueta(gc.veclink[i], gc.η[i])
+#        gc.w1[i] = gc.dμ[i] / gc.varμ[i]
+#        gc.w2[i] = gc.w1[i] * gc.dμ[i]
+#        gc.res[i] = gc.y[i] - gc.μ[i]
+#    end
+#    return gc.res
+# end
 
-"""
-    update_res!(gc, β)
-Update the residual vector according to `β` given link functions and distributions.
-"""
 function update_res!(
-   gc::Poisson_Bernoulli_VCObs{T, VD, VL},
-   β::Vector{T}) where {T <: BlasReal, VD, VL}
-   mul!(gc.η, gc.X, β)
-   @inbounds for i in 1:length(gc.y)
-       gc.μ[i] = GLM.linkinv(gc.veclink[i], gc.η[i])
-       gc.varμ[i] = GLM.glmvar(gc.vecd[i], gc.μ[i]) # Note: for negative binomial, d.r is used
-       gc.dμ[i] = GLM.mueta(gc.veclink[i], gc.η[i])
-       gc.w1[i] = gc.dμ[i] / gc.varμ[i]
-       gc.w2[i] = gc.w1[i] * gc.dμ[i]
-       gc.res[i] = gc.y[i] - gc.μ[i]
-   end
-   return gc.res
-end
-
-function update_res!(
-    gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}}
+    gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, GLMCopulaCSModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}}
     ) where {T <: BlasReal, D, Link, VD, VL}
     @inbounds for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
@@ -110,7 +110,7 @@ end
 # end
 
 function standardize_res!(
-    gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}}
+    gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}, NBCopulaARObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}}
     ) where {T <: BlasReal, D, Link, VD, VL}
     @inbounds for j in eachindex(gc.y)
         σinv = inv(sqrt(gc.varμ[j]))
@@ -119,7 +119,7 @@ function standardize_res!(
 end
 
 function standardize_res!(
-    gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}}
+    gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, GLMCopulaCSModel{T, D, Link}}
     ) where {T <: BlasReal, D, Link}
     # standardize residual
     @inbounds for i in eachindex(gcm.data)
@@ -146,14 +146,14 @@ end
 
 Update the quadratic forms `(r^T V[k] r) / 2` according to the current residual `r`.
 """
-function update_quadform!(gc::Union{GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}}) where {T<:Real, D, Link}
+function update_quadform!(gc::Union{GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}, NBCopulaARObs{T, D, Link}}) where {T<:Real, D, Link}
     mul!(gc.storage_n, gc.V, gc.res)
     gc.q .= dot(gc.res, gc.storage_n) / 2
     gc.q
 end
 
 """
-    update_r!(gc::GLMCopulaVCObs{T, D, Link})
+    update_r!(gc)
 
 Performs maximum loglikelihood estimation of the nuisance paramter for negative
 binomial model using Newton's algorithm. Will run a maximum of `maxIter` and

@@ -1,9 +1,9 @@
 export ◺
 """
-    fit!(gcm::GLMCopulaARModel{Bernoulli{Float64}}, solver=Ipopt.IpoptSolver(print_level=5))
+    fit!(gcm::GLMCopulaARModel)
 
-Fit an `GLMCopulaVCModel` object by MLE using a nonlinear programming solver. Start point 
-should be provided in `gcm.β`, `gcm.Σ`.
+Fit an `GLMCopulaVCModel` object by MLE using a nonlinear programming solver. Start point
+should be provided in `gcm.β`, `gcm.ρ`, `gcm.σ2`.
 """
 function fit!(
         gcm::GLMCopulaARModel,
@@ -37,13 +37,51 @@ function fit!(
 end
 
 """
+    fit!(gcm::GLMCopulaCSModel)
+
+Fit an `GLMCopulaCSModel` object by MLE using a nonlinear programming solver. Start point
+should be provided in `gcm.β`, `gcm.ρ`, `gcm.σ2`.
+"""
+function fit!(
+        gcm::GLMCopulaCSModel,
+        solver=Ipopt.IpoptSolver(print_level = 5)
+    )
+    npar = gcm.p + 2 # rho and sigma squared
+    optm = MathProgBase.NonlinearModel(solver)
+    # set lower bounds and upper bounds of parameters
+    lb   = fill(-Inf, npar)
+    ub   = fill(Inf, npar)
+    offset = gcm.p + 1
+    # rho
+    ub[offset] = 1
+    lb[offset] = -1
+    offset += 1
+    # sigma2
+    lb[offset] = 0
+    MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Max, gcm)
+    # starting point
+    par0 = zeros(npar)
+    modelpar_to_optimpar!(par0, gcm)
+    MathProgBase.setwarmstart!(optm, par0)
+    # optimize
+    MathProgBase.optimize!(optm)
+    optstat = MathProgBase.status(optm)
+    optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
+    # update parameters and refresh gradient
+    optimpar_to_modelpar!(gcm, MathProgBase.getsolution(optm))
+    loglikelihood!(gcm, true, false)
+    # gcm
+    return optm
+end
+
+"""
     modelpar_to_optimpar!(par, gcm)
 
 Translate model parameters in `gcm` to optimization variables in `par`.
 """
 function modelpar_to_optimpar!(
         par :: Vector,
-        gcm :: Union{GLMCopulaARModel, NBCopulaARModel}
+        gcm :: Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel}
     )
     # β
     copyto!(par, gcm.β)
@@ -59,7 +97,7 @@ end
 Translate optimization variables in `par` to the model parameters in `gcm`.
 """
 function optimpar_to_modelpar!(
-        gcm :: Union{GLMCopulaARModel, NBCopulaARModel}, 
+        gcm :: Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel},
         par :: Vector
     )
     # β
@@ -72,7 +110,7 @@ function optimpar_to_modelpar!(
 end
 
 function MathProgBase.initialize(
-    gcm::Union{GLMCopulaARModel, NBCopulaARModel},
+    gcm::Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel},
     requested_features::Vector{Symbol})
     for feat in requested_features
         if !(feat in [:Grad, :Hess])
@@ -81,10 +119,10 @@ function MathProgBase.initialize(
     end
 end
 
-MathProgBase.features_available(gcm::Union{GLMCopulaARModel, NBCopulaARModel}) = [:Grad, :Hess]
+MathProgBase.features_available(gcm::Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel}) = [:Grad, :Hess]
 
 function MathProgBase.eval_f(
-        gcm :: Union{GLMCopulaARModel, NBCopulaARModel}, 
+        gcm :: Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel},
         par :: Vector
     )
     optimpar_to_modelpar!(gcm, par)
@@ -92,11 +130,11 @@ function MathProgBase.eval_f(
 end
 
 function MathProgBase.eval_grad_f(
-        gcm  :: Union{GLMCopulaARModel, NBCopulaARModel}, 
-        grad :: Vector, 
+        gcm  :: Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel},
+        grad :: Vector,
         par  :: Vector
     )
-    optimpar_to_modelpar!(gcm, par) 
+    optimpar_to_modelpar!(gcm, par)
     obj = loglikelihood!(gcm, true, false)
     # gradient wrt β
     copyto!(grad, gcm.∇β)
@@ -112,9 +150,9 @@ function MathProgBase.eval_grad_f(
     obj
 end
 
-MathProgBase.eval_g(gcm::Union{GLMCopulaARModel, NBCopulaARModel}, g, par) = nothing
-MathProgBase.jac_structure(gcm::Union{GLMCopulaARModel, NBCopulaARModel}) = Int[], Int[]
-MathProgBase.eval_jac_g(gcm::Union{GLMCopulaARModel, NBCopulaARModel}, J, par) = nothing
+MathProgBase.eval_g(gcm::Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel}, g, par) = nothing
+MathProgBase.jac_structure(gcm::Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel}) = Int[], Int[]
+MathProgBase.eval_jac_g(gcm::Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel}, J, par) = nothing
 
 """
     ◺(n::Integer)
@@ -122,7 +160,7 @@ Triangular number n * (n+1) / 2
 """
 @inline ◺(n::Integer) = (n * (n + 1)) >> 1
 
-function MathProgBase.hesslag_structure(gcm::Union{GLMCopulaARModel, NBCopulaARModel})
+function MathProgBase.hesslag_structure(gcm::Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel})
     # we work on the upper triangular part of the Hessian
     arr1 = Vector{Int}(undef, ◺(gcm.p) + ◺(2) + gcm.p)
     arr2 = Vector{Int}(undef, ◺(gcm.p) + ◺(2) + gcm.p)
@@ -135,7 +173,7 @@ function MathProgBase.hesslag_structure(gcm::Union{GLMCopulaARModel, NBCopulaARM
             idx += 1
         end
     end
-    # rho and sigma2 
+    # rho and sigma2
     for j in 1:2
         arr1[idx] = gcm.p + j
         arr2[idx] = gcm.p + j
@@ -156,12 +194,12 @@ function MathProgBase.hesslag_structure(gcm::Union{GLMCopulaARModel, NBCopulaARM
     # end
     return (arr1, arr2)
 end
-    
+
 function MathProgBase.eval_hesslag(
-        gcm :: Union{GLMCopulaARModel, NBCopulaARModel}, 
+        gcm :: Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel},
         H   :: Vector{T},
-        par :: Vector{T}, 
-        σ   :: T, 
+        par :: Vector{T},
+        σ   :: T,
         μ   :: Vector{T}
     ) where {T}    
     optimpar_to_modelpar!(gcm, par)

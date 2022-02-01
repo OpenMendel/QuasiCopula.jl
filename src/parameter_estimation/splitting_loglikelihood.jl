@@ -17,7 +17,7 @@ loglik_obs(::Poisson, y, μ, wt, ϕ) = logpdf(Poisson(μ), y)
 Calculates the loglikelihood of observing `y` given mean `μ`, a distribution
 `d` using the GLM.jl package.
 """
-function component_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}}) where {T <: BlasReal, D, Link}
+function component_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}}) where {T <: BlasReal, D, Link}
   logl = zero(T)
     @inbounds for j in eachindex(gc.y)
       logl += GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], gc.wt[j], 1.0)

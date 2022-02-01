@@ -219,6 +219,8 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: B
         ∇β, ∇τ, ∇Σ, ∇θ, XtX, Hβ, HΣ, Hτ, Ainv, Aevec, M, vcov, ψ, TR, QF,
         storage_n, storage_m, storage_Σ, d, link)
 end
+
+include("parameter_estimation/compound_symmetric.jl")
 include("parameter_estimation/bivariate_mixed.jl")
 include("parameter_estimation/gaussian_VC.jl")
 include("parameter_estimation/autoregressive.jl")

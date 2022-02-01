@@ -6,8 +6,7 @@ function run_test()
 
     # true parameter values
     Random.seed!(1234)
-    # try next
-    βtrue = rand(Uniform(-0.2, 0.2), p)
+    βtrue = randn(p)
     σ2true = [0.5]
     ρtrue = [0.9]
 
@@ -24,7 +23,7 @@ function run_test()
     # generate data
     intervals = zeros(p + 2, 2) #hold intervals
     curcoverage = zeros(p + 2) #hold current coverage resutls
-    trueparams = [βtrue; ρtrue; σ2true] #hold true parameters
+    trueparams = [βtrue; σ2true; ρtrue] #hold true parameters
 
     #simulation parameters
     samplesizes = [100; 1000; 10000]
@@ -42,8 +41,8 @@ function run_test()
 
     st = time()
     currentind = 1
-    d = Bernoulli()
-    link = LogitLink()
+    d = Poisson()
+    link = LogLink()
     D = typeof(d)
     Link = typeof(link)
     T = Float64
@@ -62,17 +61,21 @@ function run_test()
                 println("rep $j obs per person $ni samplesize $m")
                 Y_nsample = []
                 for i in 1:m
+                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
+                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     X = [ones(ni) randn(ni, p - 1)]
                     η = X * βtrue
-                    μ = exp.(η) ./ (1 .+ exp.(η))
+                    μ = exp.(η)
                     vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
                     for i in 1:ni
-                        vecd[i] = Bernoulli(μ[i])
+                        vecd[i] = Poisson(μ[i])
                     end
                     nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
                     # simuate single vector y
                     y = Vector{Float64}(undef, ni)
                     res = Vector{Float64}(undef, ni)
+                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
+                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     rand(nonmixed_multivariate_dist, y, res)
                     V = [ones(ni, ni)]
                     gcs[i] = GLMCopulaARObs(y, X, d, link)
@@ -86,16 +89,8 @@ function run_test()
                 @show gcm.β
                 @show gcm.ρ
                 @show gcm.σ2
-
-                ### now sigma2 is initialized now we need rho
-                Y_1 = [Y_nsample[i][1] for i in 1:m]
-                Y_2 = [Y_nsample[i][2] for i in 1:m]
-
-                update_rho!(gcm, Y_1, Y_2)
-                @show gcm.ρ
-                @show gcm.σ2
-                 try
-                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
+                try
+                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, hessian_approximation = "limited-memory"))
                     # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
                     @show fittime
                     @show gcm.θ
@@ -103,30 +98,27 @@ function run_test()
                     loglikelihood!(gcm, true, true)
                     vcov!(gcm)
                     @show GLMCopula.confint(gcm)
-
-                # mse and time under our model
-                coverage!(gcm, trueparams, intervals, curcoverage)
-                mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
-                @show mseβ
-                @show mseσ2
-                @show mseρ
-                # global currentind
-                @views copyto!(βρσ2coverage[:, currentind], curcoverage)
-                βMseResults[currentind] = mseβ
-                σ2MseResults[currentind] = mseσ2
-                ρMseResults[currentind] = mseρ
-                fittimes[currentind] = fittime
-                currentind += 1
-
+                    # mse and time under our model
+                    coverage!(gcm, trueparams, intervals, curcoverage)
+                    mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
+                    @show mseβ
+                    @show mseσ2
+                    @show mseρ
+                    # global currentind
+                    @views copyto!(βρσ2coverage[:, currentind], curcoverage)
+                    βMseResults[currentind] = mseβ
+                    σ2MseResults[currentind] = mseσ2
+                    ρMseResults[currentind] = mseρ
+                    fittimes[currentind] = fittime
+                    currentind += 1
                 catch
-                    println("rep $j ni obs = $ni , samplesize = $m had an error")
                     βMseResults[currentind] = NaN
                     σ2MseResults[currentind] = NaN
                     ρMseResults[currentind] = NaN
-                    βρσ2coverage[:, currentind] .= NaN
                     fittimes[currentind] = NaN
                     currentind += 1
-                 end
+               end
+
             end
         end
     end
@@ -134,13 +126,13 @@ function run_test()
 
     @show en - st #seconds
     @info "writing to file..."
-    ftail = "multivariate_bernoulli_AR$(nsims)reps_sim.csv"
-    writedlm("autoregressive/bernoulli_ar/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("autoregressive/bernoulli_ar/mse_sigma_" * ftail, σ2MseResults, ',')
-    writedlm("autoregressive/bernoulli_ar/mse_rho_" * ftail, ρMseResults, ',')
-    writedlm("autoregressive/bernoulli_ar/fittimes_" * ftail, fittimes, ',')
+    ftail = "multivariate_poisson_AR$(nsims)reps_sim.csv"
+    writedlm("autoregressive/poisson_ar/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("autoregressive/poisson_ar/mse_sigma_" * ftail, σ2MseResults, ',')
+    writedlm("autoregressive/poisson_ar/mse_rho_" * ftail, ρMseResults, ',')
+    writedlm("autoregressive/poisson_ar/fittimes_" * ftail, fittimes, ',')
 
-    writedlm("autoregressive/bernoulli_ar/beta_rho_sigma_coverage_" * ftail, βρσ2coverage, ',')
+    writedlm("autoregressive/poisson_ar/beta_sigma_coverage_" * ftail, βρσ2coverage, ',')
 end
 
 run_test()

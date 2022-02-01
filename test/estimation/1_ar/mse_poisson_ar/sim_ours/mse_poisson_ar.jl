@@ -23,7 +23,7 @@ function run_test()
     # generate data
     intervals = zeros(p + 2, 2) #hold intervals
     curcoverage = zeros(p + 2) #hold current coverage resutls
-    trueparams = [βtrue; σ2true; ρtrue] #hold true parameters
+    trueparams = [βtrue; ρtrue; σ2true] #hold true parameters
 
     #simulation parameters
     samplesizes = [100; 1000; 10000]
@@ -87,14 +87,6 @@ function run_test()
                 fittime = NaN
                 initialize_model!(gcm)
                 @show gcm.β
-                @show gcm.ρ
-                @show gcm.σ2
-
-                ### now sigma2 is initialized now we need rho
-                Y_1 = [Y_nsample[i][1] for i in 1:m]
-                Y_2 = [Y_nsample[i][2] for i in 1:m]
-
-                update_rho!(gcm, Y_1, Y_2)
                 @show gcm.ρ
                 @show gcm.σ2
                 try
