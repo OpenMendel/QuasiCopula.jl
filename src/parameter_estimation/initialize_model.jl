@@ -385,35 +385,35 @@ end
 #     end
 #   return gcm
 #   end
-
-"""
-    update_rho!(gcm, empirical_covariance_mat)
-
-Given initial estimates for 'σ2' and 'β', initialize the AR parameter 'ρ' using empirical covariance matrix of Y_1 and Y_2.
-"""
-function update_rho!(gcm, Y_1, Y_2)
-    N = length(gcm.data)
-    empirical_covariance_mat = scattermat(hcat(Y_1, Y_2))/N
-    n1 = length(gcm.data[1].y)
-    ρhat = empirical_covariance_mat[1, 2] / (inv(1 + 0.5 * n1 * gcm.σ2[1]) * sqrt(abs(Statistics.mean(Y_1))) * sqrt(abs(Statistics.mean(Y_2))) * gcm.σ2[1])
-    if ρhat > 1
-      copyto!(gcm.ρ, 0.5)
-  elseif ρhat < -1
-      copyto!(gcm.ρ, -0.5)
-  else
-      copyto!(gcm.ρ, ρhat)
-  end
-      @inbounds for i in eachindex(gcm.data)
-        get_V!(gcm.ρ[1], gcm.data[i])
-     end
-      fill!(gcm.Σ, 1.0)
-      update_Σ!(gcm)
-        if gcm.Σ[1] < 0
-            copyto!(gcm.σ2, 1.0)
-        elseif gcm.Σ[1] > 2
-            copyto!(gcm.σ2, 1.0)
-        else
-            copyto!(gcm.σ2, gcm.Σ)
-        end
-    nothing
-end
+# 
+# """
+#     update_rho!(gcm, empirical_covariance_mat)
+#
+# Given initial estimates for 'σ2' and 'β', initialize the AR parameter 'ρ' using empirical covariance matrix of Y_1 and Y_2.
+# """
+# function update_rho!(gcm, Y_1, Y_2)
+#     N = length(gcm.data)
+#     empirical_covariance_mat = scattermat(hcat(Y_1, Y_2))/N
+#     n1 = length(gcm.data[1].y)
+#     ρhat = empirical_covariance_mat[1, 2] / (inv(1 + 0.5 * n1 * gcm.σ2[1]) * sqrt(abs(Statistics.mean(Y_1))) * sqrt(abs(Statistics.mean(Y_2))) * gcm.σ2[1])
+#     if ρhat > 1
+#       copyto!(gcm.ρ, 0.5)
+#   elseif ρhat < -1
+#       copyto!(gcm.ρ, -0.5)
+#   else
+#       copyto!(gcm.ρ, ρhat)
+#   end
+#       @inbounds for i in eachindex(gcm.data)
+#         get_V!(gcm.ρ[1], gcm.data[i])
+#      end
+#       fill!(gcm.Σ, 1.0)
+#       update_Σ!(gcm)
+#         if gcm.Σ[1] < 0
+#             copyto!(gcm.σ2, 1.0)
+#         elseif gcm.Σ[1] > 2
+#             copyto!(gcm.σ2, 1.0)
+#         else
+#             copyto!(gcm.σ2, gcm.Σ)
+#         end
+#     nothing
+# end

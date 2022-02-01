@@ -27,10 +27,10 @@ function run_test()
 
     #simulation parameters
     samplesizes = [100; 1000; 10000]
-    # ns = [2; 5; 10; 15; 20; 25]
-    ns = [25]
-    nsims = 1
-    # nsims = 100
+    ns = [2; 5; 10; 15; 20; 25]
+    # ns = [25]
+    # nsims = 1
+    nsims = 100
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -92,12 +92,12 @@ function run_test()
                 @show gcm.β
                 @show gcm.ρ
                 @show gcm.σ2
-                Y_1 = [Ystack[i][1] for i in 1:samplesize]
-                Y_2 = [Ystack[i][2] for i in 1:samplesize]
-
-                update_rho!(gcm, Y_1, Y_2)
-                @show gcm.ρ
-                @show gcm.σ2
+                # Y_1 = [Ystack[i][1] for i in 1:samplesize]
+                # Y_2 = [Ystack[i][2] for i in 1:samplesize]
+                #
+                # update_rho!(gcm, Y_1, Y_2)
+                # @show gcm.ρ
+                # @show gcm.σ2
                 try
                     fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
                     # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
