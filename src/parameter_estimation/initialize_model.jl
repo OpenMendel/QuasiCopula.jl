@@ -56,8 +56,70 @@ function update_sigma_rho!(gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasRe
 
     σ2hat = 2 * (VarY_k - σ2_k_mean) * inv((1 + σ2_k_mean * 3) - σ2_k_mean)
     ρhat = CovY_kY_l * inv(σ2_k_mean * σ2hat)
-    copyto!(gcm.σ2, σ2hat)
-    copyto!(gcm.ρ, ρhat)
+    @show ρhat
+    @show σ2hat
+    if σ2hat > 1
+        @inbounds for i in eachindex(gcm.data)
+            get_V!(gcm.ρ[1], gcm.data[i])
+        end
+        fill!(gcm.Σ, 1.0)
+        update_Σ!(gcm)
+        copyto!(gcm.σ2, gcm.Σ[1])
+    else
+        copyto!(gcm.σ2, σ2hat)
+    end
+    if ρhat > 1
+        copyto!(gcm.ρ, 0.5)
+    elseif ρhat < -1
+        copyto!(gcm.ρ, -0.5)
+    else
+        copyto!(gcm.ρ, ρhat)
+    end
+    nothing
+end
+
+"""
+    update_sigma_rho!(gcm)
+
+Given initial estimates for 'β', initialize the correlation parameter 'ρ' and 'σ2' using empirical variance covariance matrix of Y_1 and Y_2.
+"""
+function update_rho!(di, gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasReal, D, Link}
+    N = length(gcm.data)
+    di = length(gcm.data[1].y)
+    Y = zeros(N, di)
+    for j in 1:di
+        Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
+    end
+    empirical_covariance_mat = scattermat(Y) ./ N
+    VarY_k = maximum(Diagonal(empirical_covariance_mat))
+    CovY_kY_l = mean(GLMCopula.offdiag(empirical_covariance_mat))
+
+    update_res!(gcm)
+    # theoretical variance
+    σ2_k = zeros(N)
+    @inbounds for i in eachindex(gcm.data)
+        σ2_k[i] = mean(gcm.data[i].varμ)
+    end
+    σ2_k_mean = mean(σ2_k)
+
+    σ2hat = 2 * (VarY_k - σ2_k_mean) * inv((1 + σ2_k_mean * 3) - σ2_k_mean)
+    ρhat = CovY_kY_l * inv(σ2_k_mean * σ2hat)
+    if σ2hat > 1
+        @inbounds for i in eachindex(gcm.data)
+            get_V!(gcm.ρ[1], gcm.data[i])
+        end
+        fill!(gcm.Σ, 1.0)
+        update_Σ!(gcm)
+        copyto!(gcm.σ2, gcm.Σ[1])
+    else
+        copyto!(gcm.σ2, σ2hat)
+    end
+    if ρhat > 1
+        copyto!(gcm.ρ, 0.5)
+    elseif ρhat < -1
+        copyto!(gcm.ρ, -0.5)
+    end
+    nothing
 end
 
 function update_sigma_rho!(gcm::GLMCopulaARModel{T, D, Link}) where {T <: BlasReal, D, Link}
@@ -77,11 +139,11 @@ function update_sigma_rho!(gcm::GLMCopulaARModel{T, D, Link}) where {T <: BlasRe
     end
     σ2_k_mean = mean(σ2_k)
 
-    ρhat = ((empirical_covariance_mat[1, di] * (1 + 0.5 * di * gcm.σ2[1]) / σ2_k_mean)/gcm.σ2[1])^(1/(di - 1))
+    # ρhat = ((empirical_covariance_mat[1, di] * (1 + 0.5 * di * gcm.σ2[1]) / σ2_k_mean)/gcm.σ2[1])^(1/(di - 1))
     @inbounds for i in eachindex(gcm.data)
-        get_V!(ρhat, gcm.data[i])
+        get_V!(0.5, gcm.data[i])
     end
-    copyto!(gcm.ρ, ρhat)
+    copyto!(gcm.ρ, 0.5)
     update_Σ!(gcm)
     copyto!(gcm.σ2, gcm.Σ)
 end

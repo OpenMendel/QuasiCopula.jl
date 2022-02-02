@@ -2,13 +2,16 @@ using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, Catego
 using Random, Roots, SpecialFunctions, StatsFuns, Distributions, DataFrames, ToeplitzMatrices
 
 function run_test()
-    p = 3    # number of fixed effects, including intercept
+    p = 3   # number of fixed effects, including intercept
 
     # true parameter values
     Random.seed!(1234)
-    βtrue = randn(p)
-    σ2true = [0.5]
-    ρtrue = [0.9]
+    βtrue = rand(Uniform(-0.2, 0.2), p)
+    # σ2true = [0.5]
+    # ρtrue = [0.9]
+    # βtrue = 0.1 * ones(p)
+    σ2true = [0.1]
+    ρtrue = [-0.04]
 
     function get_V(ρ, n)
         vec = zeros(n)
@@ -19,7 +22,6 @@ function run_test()
         V = ToeplitzMatrices.SymmetricToeplitz(vec)
         V
     end
-
     # generate data
     intervals = zeros(p + 2, 2) #hold intervals
     curcoverage = zeros(p + 2) #hold current coverage resutls
@@ -28,8 +30,6 @@ function run_test()
     #simulation parameters
     samplesizes = [100; 1000; 10000]
     ns = [2; 5; 10; 15; 20; 25]
-    # ns = [25]
-    # nsims = 1
     nsims = 100
 
     #storage for our results
@@ -63,8 +63,6 @@ function run_test()
                 println("rep $j obs per person $ni samplesize $m")
                 Ystack = []
                 for i in 1:m
-                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     X = [ones(ni) randn(ni, p - 1)]
                     η = X * βtrue
                     μ = exp.(η)
@@ -76,12 +74,9 @@ function run_test()
                     # simuate single vector y
                     y = Vector{Float64}(undef, ni)
                     res = Vector{Float64}(undef, ni)
-                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     rand(nonmixed_multivariate_dist, y, res)
                     push!(Ystack, y)
                     V = [ones(ni, ni)]
-                    # V = [Float64.(Matrix(I, ni, ni))]
                     gcs[i] = GLMCopulaCSObs(y, X, d, link)
                 end
 
@@ -92,15 +87,10 @@ function run_test()
                 @show gcm.β
                 @show gcm.ρ
                 @show gcm.σ2
-                # Y_1 = [Ystack[i][1] for i in 1:samplesize]
-                # Y_2 = [Ystack[i][2] for i in 1:samplesize]
-                #
-                # update_rho!(gcm, Y_1, Y_2)
-                # @show gcm.ρ
-                # @show gcm.σ2
+
                 try
-                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
-                    # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
+                    # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
+                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, accept_after_max_steps = 2, limited_memory_max_history = 20, warm_start_init_point="yes", mu_strategy = "adaptive", mu_oracle = "probing", hessian_approximation = "limited-memory"))
                     @show fittime
                     @show gcm.θ
                     @show gcm.∇θ

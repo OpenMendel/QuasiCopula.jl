@@ -248,7 +248,7 @@ function loglikelihood!(
     logl = GLMCopula.component_loglikelihood(gc)
     logl += -log(c1)
     # @show logl
-    logl += log(abs(c2))
+    logl += log(c2)
     # add L2 ridge penalty
     if penalized
         logl -= 0.5 * (σ2)^2
@@ -284,7 +284,9 @@ function loglikelihood!(
 
             #  hessian cross term for beta and rho
             # gc.Hβρ .= inv1pq * σ2 * transpose(gc.∇resβ) * gc.∇ARV * gc.res - 0.5 * σ2^2 * inv1pq^2 * q2 * transpose(gc.∇resβ) * gc.V * gc.res
-            gc.Hβρ .= ((c2 * σ2 * dot(gc.∇resβ, gc.storage_n)) .- (0.5 * gc.∇β * σ2 * q2)) * inv1pq^2
+            BLAS.gemv!('T', σ2, gc.∇resβ, gc.storage_n, 1.0, gc.storage_p1) # stores ∇resβ*Γ*res (standardized residual)
+
+            gc.Hβρ .= ((c2 * gc.storage_p1) .- (0.5 * gc.∇β * σ2 * q2)) * inv1pq^2
 
             BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 0.0, gc.Hβ) # only lower triangular
             fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
