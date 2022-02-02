@@ -107,18 +107,21 @@ function vcov!(gcm::NBCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
 end
 
 """
-    vcov!(gcm::GLMCopulaARModel, GLMCopulaCSModel)
+    vcov!(gcm::GLMCopulaCSModel)
 Calculate the asymptotic covariance of the parameters,
 based on values `gcm.Hββ`, `gcm.Hρ`, `gcm.Hσ2`, `gcm.data[i].∇β`,
 `gcm.data[i].∇ρ`, `gcm.data[i].∇σ2`, and `gcm.vcov` is updated and returned.
 """
-function vcov!(gcm::Union{GLMCopulaARModel{T, D, Link}, GLMCopulaCSModel{T, D, Link}}) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
+function vcov!(gcm::Union{GLMCopulaCSModel{T, D, Link}, GLMCopulaARModel{T, D, Link}}) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
     p = gcm.p
     # form A matrix in the sandwich formula
     fill!(gcm.Ainv, 0.0)
     gcm.Ainv[1:p, 1:p] = gcm.Hβ
+    gcm.Ainv[1:p, (p + 1)] = gcm.Hβρ
+    gcm.Ainv[1:p, (p + 2)] = gcm.Hβσ2
     gcm.Ainv[(p + 1) : (p + 1), (p + 1) : (p + 1)] = gcm.Hρ
     gcm.Ainv[(p + 2) : (p + 2), (p + 2) : (p + 2)] = gcm.Hσ2
+    gcm.Ainv[(p + 1) : (p + 1), (p + 2) : (p + 2)] = gcm.Hρσ2
     # form M matrix in the sandwich formula
     fill!(gcm.M, 0.0)
     for obs in gcm.data

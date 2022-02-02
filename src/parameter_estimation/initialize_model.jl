@@ -4,7 +4,7 @@
 Initialize the linear regression parameters `β` using Newton's Algorithm under Independence Assumption, update variance components using MM-Algorithm.
 """
 function initialize_model!(
-    gcm::Union{GLMCopulaARModel{T, D, Link}, GLMCopulaCSModel{T, D, Link}}) where {T <: BlasReal, D, Link}
+    gcm::GLMCopulaARModel{T, D, Link}) where {T <: BlasReal, D, Link}
     println("initializing β using Newton's Algorithm under Independence Assumption")
     initialize_beta!(gcm)
     fill!(gcm.τ, 1.0)
@@ -12,25 +12,79 @@ function initialize_model!(
     println("initializing variance components using MM-Algorithm")
     update_Σ!(gcm)
     copyto!(gcm.σ2, gcm.Σ)
-    fill!(gcm.ρ, 0.5)
+    println("initializing ρ using method of moments")
+    update_sigma_rho!(gcm)
     nothing
 end
 
-# function initialize_model!(
-#     gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
-#     println("initializing β using Newton's Algorithm under Independence Assumption")
-#     glm_regress_model(gcm)
-#     @show gcm.β
-#     fill!(gcm.τ, 1.0)
-#     println("initializing variance components using MM-Algorithm")
-#     fill!(gcm.Σ, 1.0)
-#     update_Σ!(gcm)
-#     if sum(gcm.Σ) >= 20
-#       fill!(gcm.Σ, 1.0)
-#     end
-#     @show gcm.Σ
-#     nothing
-# end
+function initialize_model!(
+    gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasReal, D, Link}
+    println("initializing β using Newton's Algorithm under Independence Assumption")
+    initialize_beta!(gcm)
+    println("initializing σ2 and ρ using method of moments")
+    update_sigma_rho!(gcm)
+    nothing
+end
+
+function offdiag(A::AbstractMatrix)
+    [A[ι] for ι in CartesianIndices(A) if ι[1] ≠ ι[2]]
+end
+
+"""
+    update_sigma_rho!(gcm)
+
+Given initial estimates for 'β', initialize the correlation parameter 'ρ' and 'σ2' using empirical variance covariance matrix of Y_1 and Y_2.
+"""
+function update_sigma_rho!(gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasReal, D, Link}
+    N = length(gcm.data)
+    di = length(gcm.data[1].y)
+    Y = zeros(N, di)
+    for j in 1:di
+        Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
+    end
+    empirical_covariance_mat = scattermat(Y) ./ N
+    VarY_k = maximum(Diagonal(empirical_covariance_mat))
+    CovY_kY_l = mean(GLMCopula.offdiag(empirical_covariance_mat))
+
+    update_res!(gcm)
+    # theoretical variance
+    σ2_k = zeros(N)
+    @inbounds for i in eachindex(gcm.data)
+        σ2_k[i] = mean(gcm.data[i].varμ)
+    end
+    σ2_k_mean = mean(σ2_k)
+
+    σ2hat = 2 * (VarY_k - σ2_k_mean) * inv((1 + σ2_k_mean * 3) - σ2_k_mean)
+    ρhat = CovY_kY_l * inv(σ2_k_mean * σ2hat)
+    copyto!(gcm.σ2, σ2hat)
+    copyto!(gcm.ρ, ρhat)
+end
+
+function update_sigma_rho!(gcm::GLMCopulaARModel{T, D, Link}) where {T <: BlasReal, D, Link}
+    N = length(gcm.data)
+    di = length(gcm.data[1].y)
+    Y = zeros(N, di)
+    for j in 1:di
+        Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
+    end
+    empirical_covariance_mat = scattermat(Y) ./ N
+
+    update_res!(gcm)
+    # theoretical variance
+    σ2_k = zeros(N)
+    @inbounds for i in eachindex(gcm.data)
+        σ2_k[i] = mean(gcm.data[i].varμ)
+    end
+    σ2_k_mean = mean(σ2_k)
+
+    ρhat = ((empirical_covariance_mat[1, di] * (1 + 0.5 * di * gcm.σ2[1]) / σ2_k_mean)/gcm.σ2[1])^(1/(di - 1))
+    @inbounds for i in eachindex(gcm.data)
+        get_V!(ρhat, gcm.data[i])
+    end
+    copyto!(gcm.ρ, ρhat)
+    update_Σ!(gcm)
+    copyto!(gcm.σ2, gcm.Σ)
+end
 
 """
     initialize_model!(gcm{GLMCopulaVCModel, Poisson_Bernoulli_VCModel, NBCopulaVCModel})
@@ -385,35 +439,4 @@ end
 #     end
 #   return gcm
 #   end
-# 
-# """
-#     update_rho!(gcm, empirical_covariance_mat)
 #
-# Given initial estimates for 'σ2' and 'β', initialize the AR parameter 'ρ' using empirical covariance matrix of Y_1 and Y_2.
-# """
-# function update_rho!(gcm, Y_1, Y_2)
-#     N = length(gcm.data)
-#     empirical_covariance_mat = scattermat(hcat(Y_1, Y_2))/N
-#     n1 = length(gcm.data[1].y)
-#     ρhat = empirical_covariance_mat[1, 2] / (inv(1 + 0.5 * n1 * gcm.σ2[1]) * sqrt(abs(Statistics.mean(Y_1))) * sqrt(abs(Statistics.mean(Y_2))) * gcm.σ2[1])
-#     if ρhat > 1
-#       copyto!(gcm.ρ, 0.5)
-#   elseif ρhat < -1
-#       copyto!(gcm.ρ, -0.5)
-#   else
-#       copyto!(gcm.ρ, ρhat)
-#   end
-#       @inbounds for i in eachindex(gcm.data)
-#         get_V!(gcm.ρ[1], gcm.data[i])
-#      end
-#       fill!(gcm.Σ, 1.0)
-#       update_Σ!(gcm)
-#         if gcm.Σ[1] < 0
-#             copyto!(gcm.σ2, 1.0)
-#         elseif gcm.Σ[1] > 2
-#             copyto!(gcm.σ2, 1.0)
-#         else
-#             copyto!(gcm.σ2, gcm.Σ)
-#         end
-#     nothing
-# end

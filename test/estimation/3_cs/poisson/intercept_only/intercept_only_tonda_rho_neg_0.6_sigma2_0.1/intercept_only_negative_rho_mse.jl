@@ -2,19 +2,20 @@ using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, Catego
 using Random, Roots, SpecialFunctions, StatsFuns, Distributions, DataFrames, ToeplitzMatrices
 
 function run_test()
-    p = 3    # number of fixed effects, including intercept
+    p = 1    # number of fixed effects, including intercept
 
     # true parameter values
-    Random.seed!(1234)
-    βtrue = randn(p)
-    σ2true = [0.5]
-    ρtrue = [0.9]
+    # Random.seed!(1234)
+    # βtrue = randn(p)
+    βtrue = [log(5.0)]
+    σ2true = [0.1]
+    ρtrue = [-0.2]
 
     function get_V(ρ, n)
         vec = zeros(n)
         vec[1] = 1.0
         for i in 2:n
-            vec[i] = vec[i - 1] * ρ
+            vec[i] = ρ
         end
         V = ToeplitzMatrices.SymmetricToeplitz(vec)
         V
@@ -23,7 +24,7 @@ function run_test()
     # generate data
     intervals = zeros(p + 2, 2) #hold intervals
     curcoverage = zeros(p + 2) #hold current coverage resutls
-    trueparams = [βtrue; σ2true; ρtrue] #hold true parameters
+    trueparams = [βtrue; ρtrue; σ2true] #hold true parameters
 
     #simulation parameters
     samplesizes = [100; 1000; 10000]
@@ -37,8 +38,6 @@ function run_test()
     βρσ2coverage = Matrix{Float64}(undef, p + 2, nsims * length(ns) * length(samplesizes))
     fittimes = zeros(nsims * length(ns) * length(samplesizes))
 
-    solver = Ipopt.IpoptSolver(print_level = 5)
-
     st = time()
     currentind = 1
     d = Poisson()
@@ -49,7 +48,7 @@ function run_test()
 
     for t in 1:length(samplesizes)
         m = samplesizes[t]
-        gcs = Vector{GLMCopulaARObs{T, D, Link}}(undef, m)
+        gcs = Vector{GLMCopulaCSObs{T, D, Link}}(undef, m)
         for k in 1:length(ns)
             ni = ns[k] # number of observations per individual
             V = get_V(ρtrue[1], ni)
@@ -59,16 +58,20 @@ function run_test()
 
             for j in 1:nsims
                 println("rep $j obs per person $ni samplesize $m")
-                Y_nsample = []
+                Ystack = []
                 for i in 1:m
                     # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-                    X = [ones(ni) randn(ni, p - 1)]
-                    η = X * βtrue
-                    μ = exp.(η)
+                    # X = [ones(ni) randn(ni, p - 1)]
+                    X = ones(ni, 1)
+                    # η = X * βtrue
+                    # μ = exp.(η)
                     vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
+                    # for i in 1:ni
+                    #     vecd[i] = Poisson(μ[i])
+                    # end
                     for i in 1:ni
-                        vecd[i] = Poisson(μ[i])
+                        vecd[i] = Poisson(5.0)
                     end
                     nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
                     # simuate single vector y
@@ -77,20 +80,23 @@ function run_test()
                     # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     rand(nonmixed_multivariate_dist, y, res)
+                    push!(Ystack, y)
                     V = [ones(ni, ni)]
-                    gcs[i] = GLMCopulaARObs(y, X, d, link)
-                    push!(Y_nsample, y)
+                    # V = [Float64.(Matrix(I, ni, ni))]
+                    gcs[i] = GLMCopulaCSObs(y, X, d, link)
                 end
 
                 # form model
-                gcm = GLMCopulaARModel(gcs);
+                gcm = GLMCopulaCSModel(gcs);
                 fittime = NaN
                 initialize_model!(gcm)
                 @show gcm.β
                 @show gcm.ρ
                 @show gcm.σ2
+                loglikelihood!(gcm, true, true)
                 try
-                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, hessian_approximation = "limited-memory"))
+                    # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 12, accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
+                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-7, accept_after_max_steps = 2, hessian_approximation = "exact"))
                     # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
                     @show fittime
                     @show gcm.θ
@@ -126,13 +132,13 @@ function run_test()
 
     @show en - st #seconds
     @info "writing to file..."
-    ftail = "multivariate_poisson_AR$(nsims)reps_sim.csv"
-    writedlm("autoregressive/poisson_ar/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("autoregressive/poisson_ar/mse_sigma_" * ftail, σ2MseResults, ',')
-    writedlm("autoregressive/poisson_ar/mse_rho_" * ftail, ρMseResults, ',')
-    writedlm("autoregressive/poisson_ar/fittimes_" * ftail, fittimes, ',')
+    ftail = "multivariate_poisson_CS$(nsims)reps_sim.csv"
+    writedlm("compound_symmetry/mse_poisson_cs/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("compound_symmetry/mse_poisson_cs/mse_sigma_" * ftail, σ2MseResults, ',')
+    writedlm("compound_symmetry/mse_poisson_cs/mse_rho_" * ftail, ρMseResults, ',')
+    writedlm("compound_symmetry/mse_poisson_cs/fittimes_" * ftail, fittimes, ',')
 
-    writedlm("autoregressive/poisson_ar/beta_sigma_coverage_" * ftail, βρσ2coverage, ',')
+    writedlm("compound_symmetry/mse_poisson_cs/beta_sigma_coverage_" * ftail, βρσ2coverage, ',')
 end
 
 run_test()

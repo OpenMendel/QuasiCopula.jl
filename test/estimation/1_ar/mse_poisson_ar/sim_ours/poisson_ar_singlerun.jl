@@ -7,9 +7,12 @@ p = 3    # number of fixed effects, including intercept
 
 # true parameter values
 Random.seed!(1234)
-βtrue = randn(p)
-σ2true = [0.5]
-ρtrue = [0.9]
+# βtrue = randn(p)
+# σ2true = [0.1]
+# ρtrue = [0.9]
+βtrue = [log(5.0)]
+σ2true = [0.1]
+ρtrue = [0.6]
 
 function get_V(ρ, n)
     vec = zeros(n)
@@ -22,7 +25,7 @@ function get_V(ρ, n)
 end
 
 #simulation parameters
-samplesize = 1000
+samplesize = 10000
 
 st = time()
 currentind = 1
@@ -34,41 +37,60 @@ T = Float64
 
 gcs = Vector{GLMCopulaARObs{T, D, Link}}(undef, samplesize)
 
-ni = 5 # number of observations per individual
+ni = 25# number of observations per individual
 V = get_V(ρtrue[1], ni)
 
 # true Gamma
 Γ = σ2true[1] * V
 
+vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
+for i in 1:ni
+    vecd[i] = Poisson(5.0)
+end
+nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
+
+Random.seed!(1234)
+@time Y_nsample = simulate_nobs_independent_vectors(nonmixed_multivariate_dist, samplesize)
+
 for i in 1:samplesize
-    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-    X = [ones(ni) randn(ni, p - 1)]
-    η = X * βtrue
-    μ = exp.(η)
-    vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
-    for i in 1:ni
-        vecd[i] = Poisson(μ[i])
-    end
-    nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
-    # simuate single vector y
-    y = Vector{Float64}(undef, ni)
-    res = Vector{Float64}(undef, ni)
-    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-    rand(nonmixed_multivariate_dist, y, res)
+    # X = [ones(ni) randn(ni, p - 1)]
+    # η = X * βtrue
+    # μ = exp.(η)
+    # vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
+    # for i in 1:ni
+    #     vecd[i] = Poisson(μ[i])
+    # end
+    # nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
+    # # simuate single vector y
+    # y = Vector{Float64}(undef, ni)
+    # res = Vector{Float64}(undef, ni)
+    # rand(nonmixed_multivariate_dist, y, res)
+    X = ones(ni, 1)
+    y = Float64.(Y_nsample[i])
     V = [ones(ni, ni)]
     gcs[i] = GLMCopulaARObs(y, X, d, link)
 end
 
 # form model
 gcm = GLMCopulaARModel(gcs);
-fittime = NaN
-initialize_model!(gcm)
-@show gcm.β
-@show gcm.ρ
-@show gcm.σ2
-fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, hessian_approximation = "limited-memory"))
+
+
+# N = length(gcm.data)
+# di = length(gcm.data[1].y)
+# Y = zeros(N, di)
+# for j in 1:di
+#     Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
+# end
+# empirical_covariance_mat = scattermat(Y) ./ N
+#
+# initialize_model!(gcm)
+# @show gcm.β
+# @show gcm.ρ
+# @show gcm.σ2
+
+loglikelihood!(gcm, true, true)
+
+fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 20, accept_after_max_steps = 3, hessian_approximation = "limited-memory"))
 # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
 @show fittime
 @show gcm.θ

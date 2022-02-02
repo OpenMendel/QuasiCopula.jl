@@ -160,7 +160,76 @@ Triangular number n * (n+1) / 2
 """
 @inline ◺(n::Integer) = (n * (n + 1)) >> 1
 
-function MathProgBase.hesslag_structure(gcm::Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel})
+function MathProgBase.hesslag_structure(gcm::GLMCopulaCSModel)
+    # we work on the upper triangular part of the Hessian
+    arr1 = Vector{Int}(undef, ◺(gcm.p) + ◺(2) + 2 * gcm.p)
+    arr2 = Vector{Int}(undef, ◺(gcm.p) + ◺(2) + 2 * gcm.p)
+    # Hββ block
+    idx  = 1    
+    for j in 1:gcm.p
+        for i in j:gcm.p
+            arr1[idx] = i
+            arr2[idx] = j
+            idx += 1
+        end
+    end
+    # rho and sigma2
+    for j in 1:2
+        arr1[idx] = gcm.p + j
+        arr2[idx] = gcm.p + j
+        idx += 1
+    end
+    arr1[idx] = gcm.p + 1
+    arr2[idx] = gcm.p + 2
+    idx += 1
+    for k in 1:gcm.p
+        arr1[idx] = gcm.p + 2
+        arr2[idx] = k
+        idx += 1
+    end
+    for k in 1:gcm.p
+        arr1[idx] = gcm.p + 1
+        arr2[idx] = k
+        idx += 1
+    end
+    return (arr1, arr2)
+end
+
+function MathProgBase.eval_hesslag(
+        gcm :: GLMCopulaCSModel,
+        H   :: Vector{T},
+        par :: Vector{T},
+        σ   :: T,
+        μ   :: Vector{T}
+    ) where {T}    
+    optimpar_to_modelpar!(gcm, par)
+    loglikelihood!(gcm, true, true)
+    # Hβ block
+    idx = 1    
+    @inbounds for j in 1:gcm.p, i in 1:j
+        H[idx] = gcm.Hβ[i, j]
+        idx   += 1
+    end
+    # Haa block
+    H[idx] = gcm.Hρ[1, 1]
+    idx += 1
+    H[idx] = gcm.Hσ2[1, 1]
+    idx += 1
+    H[idx] = gcm.Hρσ2[1, 1]
+    idx += 1
+    for k in 1:gcm.p
+        H[idx] = gcm.Hβσ2[k]
+        idx += 1
+    end
+    for k in 1:gcm.p
+        H[idx] = gcm.Hβρ[k]
+        idx += 1
+    end
+    # lmul!(σ, H)
+    H .*= σ
+end
+
+function MathProgBase.hesslag_structure(gcm::Union{GLMCopulaARModel, NBCopulaARModel})
     # we work on the upper triangular part of the Hessian
     arr1 = Vector{Int}(undef, ◺(gcm.p) + ◺(2) + gcm.p)
     arr2 = Vector{Int}(undef, ◺(gcm.p) + ◺(2) + gcm.p)
@@ -196,7 +265,7 @@ function MathProgBase.hesslag_structure(gcm::Union{GLMCopulaARModel, NBCopulaARM
 end
 
 function MathProgBase.eval_hesslag(
-        gcm :: Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel},
+        gcm :: Union{GLMCopulaARModel, NBCopulaARModel},
         H   :: Vector{T},
         par :: Vector{T},
         σ   :: T,

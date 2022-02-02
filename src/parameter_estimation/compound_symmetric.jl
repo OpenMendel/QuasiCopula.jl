@@ -21,7 +21,7 @@ struct GLMCopulaCSObs{T <: BlasReal, D, Link}
     Hσ2::Matrix{T}   # Hessian wrt ρ
     Hρσ2::Matrix{T}  # Hessian wrt ρ, σ2
     Hβσ2::Vector{T}  # Hessian wrt β and σ2
-    # Hβρ::Vector{T}
+    Hβρ::Vector{T}
     res::Vector{T}  # residual vector res_i
     t::Vector{T}    # t[k] = tr(V_i[k]) / 2
     q::Vector{T}    # q[k] = res_i' * V_i[k] * res_i / 2
@@ -65,7 +65,7 @@ function GLMCopulaCSObs(
     Hσ2  = Matrix{T}(undef, 1, 1)
     Hρσ2 = Matrix{T}(undef, 1, 1)
     Hβσ2 = zeros(T, p)
-    # Hβρ = Vector{T}(undef, p)
+    Hβρ = zeros(T, p)
     res = Vector{T}(undef, n)
     t   = [tr(V)/2]
     q   = Vector{T}(undef, 1)
@@ -85,7 +85,7 @@ function GLMCopulaCSObs(
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
-    GLMCopulaCSObs{T, D, Link}(n, p, y, X, V, vec, ∇CSV, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇ρ, ∇σ2, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2,# Hβρ,
+    GLMCopulaCSObs{T, D, Link}(n, p, y, X, V, vec, ∇CSV, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇ρ, ∇σ2, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2, Hβρ,
        res, t, q, xtx, storage_n, storage_p1, storage_np, storage_pp, added_term_numerator, added_term2,
         η, μ, varμ, dμ, d, link, wt, w1, w2)
 end
@@ -120,12 +120,12 @@ struct GLMCopulaCSModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalu
     Hσ2::Matrix{T}    # Hessian from all observations
     Hρσ2::Matrix{T}
     Hβσ2::Vector{T}
+    Hβρ::Vector{T}
     Ainv::Matrix{T}
     Aevec::Matrix{T}
     M::Matrix{T}
     vcov::Matrix{T}
     ψ::Vector{T}
-    # Hβρ::Vector{T}
     TR::Matrix{T}
     QF::Matrix{T}         # n-by-1 matrix with qik = res_i' Vi res_i
     storage_n::Vector{T}
@@ -153,12 +153,12 @@ function GLMCopulaCSModel(gcs::Vector{GLMCopulaCSObs{T, D, Link}}) where {T <: B
     Hσ2  = Matrix{T}(undef, 1, 1)
     Hρσ2 = Matrix{T}(undef, 1, 1)
     Hβσ2 = zeros(T, p)
+    Hβρ = zeros(T, p)
     Ainv    = zeros(T, p + 2, p + 2)
     Aevec   = zeros(T, p + 2, p + 2)
     M       = zeros(T, p + 2, p + 2)
     vcov    = zeros(T, p + 2, p + 2)
     ψ       = Vector{T}(undef, p + 2)
-    # Hβρ = Vector{T}(undef, p)
     TR  = Matrix{T}(undef, n, 1) # collect trace terms
     QF  = Matrix{T}(undef, n, 1)
     Ytotal = 0.0
@@ -177,7 +177,7 @@ function GLMCopulaCSModel(gcs::Vector{GLMCopulaCSObs{T, D, Link}}) where {T <: B
     storage_m = Vector{T}(undef, 1)
     storage_Σ = Vector{T}(undef, 1)
     GLMCopulaCSModel{T, D, Link}(gcs, Ytotal, ntotal, p, β, τ, ρ, σ2, Σ, θ,
-        ∇β, ∇ρ, ∇σ2, ∇θ, XtX, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2, Ainv, Aevec,  M, vcov, ψ,
+        ∇β, ∇ρ, ∇σ2, ∇θ, XtX, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2, Hβρ, Ainv, Aevec,  M, vcov, ψ,
         TR, QF, storage_n, storage_m, storage_Σ, d, link)
 end
 
@@ -231,9 +231,6 @@ function loglikelihood!(
     fill!(gc.∇resβ, 0.0) # fill gradient of residual vector with 0
     std_res_differential!(gc) # this will compute ∇resβ
 
-    # form V
-    # gc.V .= get_AR_cov(n, ρ, σ2, gc.V)
-
     get_V!(ρ, gc)
 
     #evaluate copula loglikelihood
@@ -242,15 +239,16 @@ function loglikelihood!(
         BLAS.gemv!('T', σ2, gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
     end
 
-    q = abs(dot(gc.res, gc.storage_n))
+    q = dot(gc.res, gc.storage_n)
 
-    c1 = 1 + 0.5 * n * σ2
-    c2 = 1 + 0.5 * σ2 * q
+    c1 = 1 + (0.5 * n * σ2)
+
+    c2 = 1 + (0.5 * σ2 * q)
     # loglikelihood
     logl = GLMCopula.component_loglikelihood(gc)
     logl += -log(c1)
     # @show logl
-    logl += log(c2)
+    logl += log(abs(c2))
     # add L2 ridge penalty
     if penalized
         logl -= 0.5 * (σ2)^2
@@ -262,32 +260,31 @@ function loglikelihood!(
         mul!(gc.storage_n, gc.∇CSV, gc.res) # storage_n = ∇ARV * res
         q2 = dot(gc.res, gc.storage_n) #
         # gc.∇ρ .= inv(c2) * 0.5 * σ2 * transpose(gc.res) * gc.∇ARV * gc.res
-        gc.∇ρ .= inv(c2) * 0.5 * σ2 * q2
+        gc.∇ρ .= inv1pq * 0.5 * σ2 * q2
 
         # gradient with respect to sigma2
-        gc.∇σ2 .= -0.5 * n * inv(c1) .+ inv(c2) * 0.5 * q
+        # gc.∇σ2 .= -0.5 * n * inv(c1) .+ (inv(c2) * 0.5 * q)
+        gc.∇σ2 .= 0.5 * ((q * inv1pq) - n * inv(c1))
         if penalized
             gc.∇σ2 .-= σ2
         end
       if needhess
-            # gc.∇2ARV .= get_∇2ARV(n, ρ, σ2, gc.∇2ARV)
-            # get_∇2V!(ρ, gc)
-            # mul!(gc.storage_n, gc.∇2ARV, gc.res) # storage_n = ∇ARV * res
-            # q3 = dot(gc.res, gc.storage_n) #
-            # hessian for rho
             gc.Hρ .= -(inv(c2) * 0.5 * σ2 * q2)^2
 
             # hessian for sigma2
-            gc.Hσ2 .= 0.25 * n^2 * inv(c1)^2 - inv(c2)^2 * (0.25 * q^2)
+            gc.Hσ2 .= 0.25 * n^2 * inv(c1)^2 - inv1pq^2 * (0.25 * q^2)
 
             # hessian cross term for rho and sigma2
-            gc.Hρσ2 .= 0.5 * q2 * inv1pq - 0.25 * σ2 * q * q2 * inv1pq^2
+            # gc.Hρσ2 .= 0.5 * q2 * inv1pq - 0.25 * σ2 * q * q2 * inv1pq^2
+            gc.Hρσ2 .= (0.5 * q2 * c2 - 0.25 * σ2 * q * q2) * inv1pq^2
 
             # hessian cross term for beta and sigma2
-            gc.Hβσ2 .= inv1pq * gc.∇β - 0.5 * q * inv1pq^2 * σ2 * gc.∇β
+            # gc.Hβσ2 .= inv1pq * gc.∇β - 0.5 * q * inv1pq^2 * σ2 * gc.∇β
+            gc.Hβσ2 .= ((c2 * gc.∇β * inv(σ2)) - (gc.∇β * 0.5 * q)) * inv1pq^2
 
             #  hessian cross term for beta and rho
             # gc.Hβρ .= inv1pq * σ2 * transpose(gc.∇resβ) * gc.∇ARV * gc.res - 0.5 * σ2^2 * inv1pq^2 * q2 * transpose(gc.∇resβ) * gc.V * gc.res
+            gc.Hβρ .= ((c2 * σ2 * dot(gc.∇resβ, gc.storage_n)) .- (0.5 * gc.∇β * σ2 * q2)) * inv1pq^2
 
             BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 0.0, gc.Hβ) # only lower triangular
             fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
@@ -298,6 +295,10 @@ function loglikelihood!(
             gc.added_term2 .*= inv1pq
             gc.Hβ .+= gc.added_term2
             gc.Hβ .+= GLMCopula.glm_hessian(gc)
+
+            if penalized
+                gc.∇σ2 .-= 1.0
+            end
       end
       gc.∇β .= gc.∇β .* inv1pq
       gc.res .= gc.y .- gc.μ
@@ -324,7 +325,7 @@ function loglikelihood!(
         fill!(gcm.Hρσ2, 0.0)
         fill!(gcm.Hβσ2, 0.0)
         # @show gcm.Hβσ2
-        # fill!(gcm.Hβρ, 0)
+        fill!(gcm.Hβρ, 0)
     end
     @inbounds for i in eachindex(gcm.data)
         logl += loglikelihood!(gcm.data[i], gcm.β, gcm.ρ[1], gcm.σ2[1], needgrad, needhess)
@@ -339,7 +340,7 @@ function loglikelihood!(
             gcm.Hσ2 .+= gcm.data[i].Hσ2
             gcm.Hρσ2 .+= gcm.data[i].Hρσ2
             gcm.Hβσ2 .+= gcm.data[i].Hβσ2
-            # gcm.Hβρ .+= gcm.data[i].Hβρ
+            gcm.Hβρ .+= gcm.data[i].Hβρ
         end
     end
     logl

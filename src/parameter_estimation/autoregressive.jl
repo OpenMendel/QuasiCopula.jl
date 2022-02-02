@@ -23,7 +23,7 @@ struct GLMCopulaARObs{T <: BlasReal, D, Link}
     Hσ2::Matrix{T}   # Hessian wrt ρ
     Hρσ2::Matrix{T}  # Hessian wrt ρ, σ2
     Hβσ2::Vector{T}  # Hessian wrt β and σ2
-    # Hβρ::Vector{T}
+    Hβρ::Vector{T}
     res::Vector{T}  # residual vector res_i
     t::Vector{T}    # t[k] = tr(V_i[k]) / 2
     q::Vector{T}    # q[k] = res_i' * V_i[k] * res_i / 2
@@ -68,7 +68,7 @@ function GLMCopulaARObs(
     Hσ2  = Matrix{T}(undef, 1, 1)
     Hρσ2 = Matrix{T}(undef, 1, 1)
     Hβσ2 = zeros(T, p)
-    # Hβρ = Vector{T}(undef, p)
+    Hβρ = zeros(T, p)
     res = Vector{T}(undef, n)
     t   = [tr(V)/2]
     q   = Vector{T}(undef, 1)
@@ -88,7 +88,7 @@ function GLMCopulaARObs(
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
-    GLMCopulaARObs{T, D, Link}(n, p, y, X, V, vec, ∇ARV, ∇2ARV, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇ρ, ∇σ2, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2,# Hβρ,
+    GLMCopulaARObs{T, D, Link}(n, p, y, X, V, vec, ∇ARV, ∇2ARV, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇ρ, ∇σ2, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2, Hβρ,
        res, t, q, xtx, storage_n, storage_p1, storage_np, storage_pp, added_term_numerator, added_term2,
         η, μ, varμ, dμ, d, link, wt, w1, w2)
 end
@@ -128,7 +128,7 @@ struct GLMCopulaARModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalu
     M::Matrix{T}
     vcov::Matrix{T}
     ψ::Vector{T}
-    # Hβρ::Vector{T}
+    Hβρ::Vector{T}
     TR::Matrix{T}
     QF::Matrix{T}         # n-by-1 matrix with qik = res_i' Vi res_i
     storage_n::Vector{T}
@@ -161,7 +161,7 @@ function GLMCopulaARModel(gcs::Vector{GLMCopulaARObs{T, D, Link}}) where {T <: B
     M       = zeros(T, p + 2, p + 2)
     vcov    = zeros(T, p + 2, p + 2)
     ψ       = Vector{T}(undef, p + 2)
-    # Hβρ = Vector{T}(undef, p)
+    Hβρ = zeros(T, p)
     TR  = Matrix{T}(undef, n, 1) # collect trace terms
     QF  = Matrix{T}(undef, n, 1)
     Ytotal = 0.0
@@ -180,7 +180,7 @@ function GLMCopulaARModel(gcs::Vector{GLMCopulaARObs{T, D, Link}}) where {T <: B
     storage_m = Vector{T}(undef, 1)
     storage_Σ = Vector{T}(undef, 1)
     GLMCopulaARModel{T, D, Link}(gcs, Ytotal, ntotal, p, β, τ, ρ, σ2, Σ, θ,
-        ∇β, ∇ρ, ∇σ2, ∇θ, XtX, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2, Ainv, Aevec,  M, vcov, ψ,
+        ∇β, ∇ρ, ∇σ2, ∇θ, XtX, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2, Ainv, Aevec,  M, vcov, ψ, Hβρ,
         TR, QF, storage_n, storage_m, storage_Σ, d, link)
 end
 
@@ -318,7 +318,7 @@ function loglikelihood!(
             gc.Hβσ2 .= inv1pq * gc.∇β - 0.5 * q * inv1pq^2 * σ2 * gc.∇β
 
             #  hessian cross term for beta and rho
-            # gc.Hβρ .= inv1pq * σ2 * transpose(gc.∇resβ) * gc.∇ARV * gc.res - 0.5 * σ2^2 * inv1pq^2 * q2 * transpose(gc.∇resβ) * gc.V * gc.res
+            gc.Hβρ .= inv1pq * σ2 * transpose(gc.∇resβ) * gc.∇ARV * gc.res - 0.5 * σ2^2 * inv1pq^2 * q2 * transpose(gc.∇resβ) * gc.V * gc.res
 
             BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 0.0, gc.Hβ) # only lower triangular
             fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
@@ -355,7 +355,7 @@ function loglikelihood!(
         fill!(gcm.Hρσ2, 0.0)
         fill!(gcm.Hβσ2, 0.0)
         # @show gcm.Hβσ2
-        # fill!(gcm.Hβρ, 0)
+        fill!(gcm.Hβρ, 0)
     end
     @inbounds for i in eachindex(gcm.data)
         logl += loglikelihood!(gcm.data[i], gcm.β, gcm.ρ[1], gcm.σ2[1], needgrad, needhess)
@@ -370,7 +370,7 @@ function loglikelihood!(
             gcm.Hσ2 .+= gcm.data[i].Hσ2
             gcm.Hρσ2 .+= gcm.data[i].Hρσ2
             gcm.Hβσ2 .+= gcm.data[i].Hβσ2
-            # gcm.Hβρ .+= gcm.data[i].Hβρ
+            gcm.Hβρ .+= gcm.data[i].Hβρ
         end
     end
     logl
