@@ -83,42 +83,48 @@ end
 
 Given initial estimates for 'β', initialize the correlation parameter 'ρ' and 'σ2' using empirical variance covariance matrix of Y_1 and Y_2.
 """
-function update_rho!(di, gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasReal, D, Link}
+function update_sigma_rho!(gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasReal, D<:Bernoulli, Link}
+    println("method of moments for bernoulli")
     N = length(gcm.data)
     di = length(gcm.data[1].y)
     Y = zeros(N, di)
     for j in 1:di
         Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
     end
-    empirical_covariance_mat = scattermat(Y) ./ N
-    VarY_k = maximum(Diagonal(empirical_covariance_mat))
-    CovY_kY_l = mean(GLMCopula.offdiag(empirical_covariance_mat))
-
     update_res!(gcm)
     # theoretical variance
-    σ2_k = zeros(N)
-    @inbounds for i in eachindex(gcm.data)
-        σ2_k[i] = mean(gcm.data[i].varμ)
-    end
-    σ2_k_mean = mean(σ2_k)
+    μ_ik = zeros(N)
+    σ2_ik = zeros(N)
 
-    σ2hat = 2 * (VarY_k - σ2_k_mean) * inv((1 + σ2_k_mean * 3) - σ2_k_mean)
-    ρhat = CovY_kY_l * inv(σ2_k_mean * σ2hat)
-    if σ2hat > 1
+    μ_imean = zeros(di)
+    σ2_imean = zeros(di)
+    σ2hats = zeros(di)
+    for k in 1:di
         @inbounds for i in eachindex(gcm.data)
-            get_V!(gcm.ρ[1], gcm.data[i])
+            μ_ik[i] = mean(gcm.data[i].μ[k])
         end
-        fill!(gcm.Σ, 1.0)
-        update_Σ!(gcm)
-        copyto!(gcm.σ2, gcm.Σ[1])
-    else
-        copyto!(gcm.σ2, σ2hat)
+        μ_imean[k] = mean(μ_ik)
+        @inbounds for i in eachindex(gcm.data)
+            σ2_ik[i] = mean(gcm.data[i].varμ[k])
+        end
+        σ2_imean[k] = mean(σ2_ik)
+
+        σ2hats[k] = 2 * (mean(Y[:, k]) - μ_imean[k]) / (sqrt(σ2_imean[k]) * skewness(Y[:, k]))
     end
-    if ρhat > 1
-        copyto!(gcm.ρ, 0.5)
-    elseif ρhat < -1
-        copyto!(gcm.ρ, -0.5)
+    σ2hat = mean(σ2hats)
+    # correlation parameter now
+    empirical_correlation_mean = mean(GLMCopula.offdiag(StatsBase.cor(Y)))
+    ρhat = empirical_correlation_mean / σ2hat
+    copyto!(gcm.σ2, σ2hat)
+    copyto!(gcm.ρ, ρhat)
+    @inbounds for i in eachindex(gcm.data)
+        get_V!(gcm.ρ[1], gcm.data[i])
     end
+    fill!(gcm.Σ, 1.0)
+    update_Σ!(gcm)
+    copyto!(gcm.σ2, gcm.Σ[1])
+    ρhat = gcm.ρ /gcm.σ2[1]
+    copyto!(gcm.ρ, ρhat)
     nothing
 end
 

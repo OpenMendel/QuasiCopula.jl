@@ -11,7 +11,6 @@ function vcov!(gcm::Union{GLMCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCMode
     fill!(gcm.Ainv, 0.0)
     gcm.Ainv[          1:p,                 1:p      ] = gcm.Hβ
     gcm.Ainv[    (p + 1):(p + m),     (p + 1):(p + m)] = gcm.HΣ
-    # form M matrix in the sandwich formula
     fill!(gcm.M, 0.0)
     for obs in gcm.data
         copyto!(gcm.ψ, 1, obs.∇β)
@@ -57,7 +56,6 @@ function vcov!(gcm::GaussianCopulaVCModel{T}) where {T <: BlasReal}
     gcm.Ainv[          1:p,                 1:p      ] = gcm.Hβ
     gcm.Ainv[          p + 1:p + 1,                 p + 1:p + 1      ] = gcm.Hτ
     gcm.Ainv[    (p + 2):(p + 1 + m),     (p + 2):(p + 1 + m)] = gcm.HΣ
-    # form M matrix in the sandwich formula
     fill!(gcm.M, 0.0)
     for obs in gcm.data
         copyto!(gcm.ψ, 1, obs.∇β)
@@ -88,7 +86,6 @@ function vcov!(gcm::NBCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
     gcm.Ainv[          1:p,                 1:p      ] = gcm.Hβ
     gcm.Ainv[          p + 1:p + 1,                 p + 1:p + 1      ] = gcm.Hr
     gcm.Ainv[    (p + 2):(p + 1 + m),     (p + 2):(p + 1 + m)] = gcm.HΣ
-    # form M matrix in the sandwich formula
     fill!(gcm.M, 0.0)
     for obs in gcm.data
         copyto!(gcm.ψ, 1, gcm.∇β)
@@ -117,12 +114,11 @@ function vcov!(gcm::Union{GLMCopulaCSModel{T, D, Link}, GLMCopulaARModel{T, D, L
     # form A matrix in the sandwich formula
     fill!(gcm.Ainv, 0.0)
     gcm.Ainv[1:p, 1:p] = gcm.Hβ
-    gcm.Ainv[1:p, (p + 1)] = gcm.Hβρ
-    gcm.Ainv[1:p, (p + 2)] = gcm.Hβσ2
+    # gcm.Ainv[1:p, (p + 1)] = gcm.Hβρ
+    # gcm.Ainv[1:p, (p + 2)] = gcm.Hβσ2
     gcm.Ainv[(p + 1) : (p + 1), (p + 1) : (p + 1)] = gcm.Hρ
     gcm.Ainv[(p + 2) : (p + 2), (p + 2) : (p + 2)] = gcm.Hσ2
-    gcm.Ainv[(p + 1) : (p + 1), (p + 2) : (p + 2)] = gcm.Hρσ2
-    # form M matrix in the sandwich formula
+    # gcm.Ainv[(p + 1) : (p + 1), (p + 2) : (p + 2)] = gcm.Hρσ2
     fill!(gcm.M, 0.0)
     for obs in gcm.data
         copyto!(gcm.ψ, 1, obs.∇β)
@@ -154,7 +150,6 @@ function vcov!(gcm::GaussianCopulaARModel{T}) where {T <: BlasReal}
     gcm.Ainv[(p + 1) : (p + 1), (p + 1) : (p + 1)] = gcm.Hρ
     gcm.Ainv[(p + 2) : (p + 2), (p + 2) : (p + 2)] = gcm.Hσ2
     gcm.Ainv[(p + 3) : (p + 3), (p + 3) : (p + 3)] = gcm.Hτ
-    # form M matrix in the sandwich formula
     fill!(gcm.M, 0.0)
     for obs in gcm.data
         copyto!(gcm.ψ, 1, obs.∇β)

@@ -64,6 +64,7 @@ function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaAR
     @inbounds for j in 1:length(gc.y)
         gc.∇μβ[j, :] .= gc.varμ[j] .* @view(gc.X[j, :])
         gc.∇σ2β[j, :].= gc.varμ[j] * (1 - 2 * gc.μ[j]) .* @view(gc.X[j, :])
+        # gc.∇σ2β[j, :] .= (1 - (2 * gc.μ[j])) .* gc.∇μβ[j, :]
         gc.∇resβ[j, :] .= -inv(sqrt(gc.varμ[j])) .* @view(gc.∇μβ[j, :]) .- (0.5 * inv(sqrt(gc.varμ[j]))) .* gc.res[j] .* @view(gc.∇σ2β[j, :])
     end
     nothing

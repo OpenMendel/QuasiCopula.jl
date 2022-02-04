@@ -64,6 +64,7 @@ function fit!(
     modelpar_to_optimpar!(par0, gcm)
     MathProgBase.setwarmstart!(optm, par0)
     # optimize
+    @show par0
     MathProgBase.optimize!(optm)
     optstat = MathProgBase.status(optm)
     optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
@@ -143,9 +144,9 @@ function MathProgBase.eval_grad_f(
     # gradient wrt σ2
     grad[gcm.p + 2] = gcm.∇σ2[1]
     # @show gcm.θ
-    # @show gcm.θ
+    @show gcm.θ
     copyto!(gcm.∇θ, grad)
-    # @show gcm.∇θ
+    @show gcm.∇θ
     # return objective
     obj
 end

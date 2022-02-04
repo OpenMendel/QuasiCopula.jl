@@ -35,21 +35,11 @@ T = Float64
 
 gcs = Vector{GLMCopulaCSObs{T, D, Link}}(undef, samplesize)
 
-ni = 20 #  number of observations per individual
+ni = 25 #  number of observations per individual
 V = get_V(ρtrue[1], ni)
 
 # true Gamma
 Γ = σ2true[1] * V
-
-# vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
-# for i in 1:ni
-#     vecd[i] = Poisson(5.0)
-# end
-# nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
-#
-# Random.seed!(1234)
-# @time Y_nsample = simulate_nobs_independent_vectors(nonmixed_multivariate_dist, samplesize)
-
 
 for i in 1:samplesize
     X = [ones(ni) randn(ni, p - 1)]
@@ -115,7 +105,7 @@ gcm4 = deepcopy(gcm);
 # @show mseσ2
 # @show mseρ
 
-fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, accept_after_max_steps = 2, limited_memory_max_history = 20, warm_start_init_point="yes", mu_strategy = "adaptive", mu_oracle = "probing", hessian_approximation = "limited-memory"))
+fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, accept_after_max_steps = 2, limited_memory_max_history = 20, warm_start_init_point="yes", mu_strategy = "adaptive", mu_oracle = "probing", derivative_test = "first-order", hessian_approximation = "limited-memory"))
 loglikelihood!(gcm, true, true)
 @show fittime
 @show gcm.θ
@@ -131,10 +121,10 @@ mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
 # @show fittime
 # @show gcm2.θ
 # @show gcm2.∇θ
-loglikelihood!(gcm2, true, true)
-vcov!(gcm2)
-@show GLMCopula.confint(gcm2)
-mseβ, mseρ, mseσ2 = MSE(gcm2, βtrue, ρtrue, σ2true)
-@show mseβ
-@show mseσ2
-@show mseρ
+# loglikelihood!(gcm2, true, true)
+# vcov!(gcm2)
+# @show GLMCopula.confint(gcm2)
+# mseβ, mseρ, mseσ2 = MSE(gcm2, βtrue, ρtrue, σ2true)
+# @show mseβ
+# @show mseσ2
+# @show mseρ

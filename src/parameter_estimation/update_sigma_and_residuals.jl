@@ -72,25 +72,6 @@ function update_res!(
    end
    return gc.res
 end
-#
-# """
-#     update_res!(gc, β)
-# Update the residual vector according to `β` given link functions and distributions.
-# """
-# function update_res!(
-#    gc::Poisson_Bernoulli_VCObs{T, VD, VL},
-#    β::Vector{T}) where {T <: BlasReal, VD, VL}
-#    mul!(gc.η, gc.X, β)
-#    @inbounds for i in 1:length(gc.y)
-#        gc.μ[i] = GLM.linkinv(gc.veclink[i], gc.η[i])
-#        gc.varμ[i] = GLM.glmvar(gc.vecd[i], gc.μ[i]) # Note: for negative binomial, d.r is used
-#        gc.dμ[i] = GLM.mueta(gc.veclink[i], gc.η[i])
-#        gc.w1[i] = gc.dμ[i] / gc.varμ[i]
-#        gc.w2[i] = gc.w1[i] * gc.dμ[i]
-#        gc.res[i] = gc.y[i] - gc.μ[i]
-#    end
-#    return gc.res
-# end
 
 function update_res!(
     gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, GLMCopulaCSModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}}
