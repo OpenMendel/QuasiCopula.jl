@@ -248,7 +248,7 @@ function loglikelihood!(
     logl = GLMCopula.component_loglikelihood(gc)
     logl += -log(c1)
     # @show logl
-    logl += log(abs(c2))
+    logl += log(c2)
     # add L2 ridge penalty
     if penalized
         logl -= 0.5 * (σ2)^2
