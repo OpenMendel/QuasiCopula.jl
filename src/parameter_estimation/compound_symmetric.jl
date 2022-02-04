@@ -243,12 +243,12 @@ function loglikelihood!(
     # if q < 0
     #     q = 0
     # end
-    c2 = 1 + (0.5 * σ2 * abs(q))
+    c2 = 1 + (0.5 * σ2 * q)
     # loglikelihood
     logl = GLMCopula.component_loglikelihood(gc)
     logl += -log(c1)
     # @show logl
-    logl += log(c2)
+    logl += log(abs(c2))
     # add L2 ridge penalty
     if penalized
         logl -= 0.5 * (σ2)^2
@@ -262,7 +262,6 @@ function loglikelihood!(
         # gc.∇ρ .= inv(c2) * 0.5 * σ2 * transpose(gc.res) * gc.∇ARV * gc.res
         gc.∇ρ .= inv1pq * 0.5 * σ2 * q2
         # gradient with respect to sigma2
-        # gc.∇σ2 .= -0.5 * n * inv(c1) .+ (inv(c2) * 0.5 * q)
         gc.∇σ2 .= 0.5 * ((q * inv1pq) - n * inv(c1))
         if penalized
             gc.∇σ2 .-= σ2

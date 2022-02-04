@@ -6,7 +6,7 @@ import StatsBase: sem
 p = 3    # number of fixed effects, including intercept
 
 # true parameter values
-Random.seed!(1234)
+Random.seed!(12345)
 βtrue = rand(Uniform(-0.2, 0.2), p)
 # βtrue = 0.1 * ones(p)
 σ2true = [0.1]
@@ -41,8 +41,13 @@ V = get_V(ρtrue[1], ni)
 # true Gamma
 Γ = σ2true[1] * V
 
+# for reproducibility I will simulate all the design matrices here
+Random.seed!(12345)
+X_samplesize = [randn(ni, p - 1) for i in 1:samplesize]
+
 for i in 1:samplesize
-    X = [ones(ni) randn(ni, p - 1)]
+    X = [ones(ni) X_samplesize[1]]
+    # X = [ones(ni) randn(ni, p - 1)]
     # X = ones(ni, 1)
     # y = Float64.(Y_nsample[i])
     η = X * βtrue
@@ -51,15 +56,10 @@ for i in 1:samplesize
     for i in 1:ni
         vecd[i] = Poisson(μ[i])
     end
-#     for i in 1:ni
-#         vecd[i] = Poisson(5.0)
-#     end
     nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
     # simuate single vector y
     y = Vector{Float64}(undef, ni)
     res = Vector{Float64}(undef, ni)
-    # # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-    # # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
     rand(nonmixed_multivariate_dist, y, res)
     # push!(Ystack, y)
     V = [Float64.(Matrix(I, ni, ni))]
@@ -69,14 +69,6 @@ end
 
 # form model
 gcm = GLMCopulaCSModel(gcs);
-
-# N = length(gcm.data)
-# di = length(gcm.data[1].y)
-# Y = zeros(N, di)
-# for j in 1:di
-#     Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
-# end
-# empirical_covariance_mat_CS = scattermat(Y) ./ N
 
 initialize_model!(gcm)
 @show gcm.β
