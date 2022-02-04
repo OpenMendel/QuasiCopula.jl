@@ -10,7 +10,7 @@ Random.seed!(12345)
 βtrue = rand(Uniform(-0.2, 0.2), p)
 # βtrue = 0.1 * ones(p)
 σ2true = [0.1]
-ρtrue = [-0.04]
+ρtrue = [0.5]
 
 function get_V(ρ, n)
     vec = zeros(n)
@@ -35,7 +35,7 @@ T = Float64
 
 gcs = Vector{GLMCopulaCSObs{T, D, Link}}(undef, samplesize)
 
-ni = 25 #  number of observations per individual
+ni = 5 #  number of observations per individual
 V = get_V(ρtrue[1], ni)
 
 # true Gamma

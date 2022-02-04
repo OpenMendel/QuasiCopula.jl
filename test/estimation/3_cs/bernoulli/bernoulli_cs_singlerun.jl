@@ -8,8 +8,8 @@ p = 3    # number of fixed effects, including intercept
 # true parameter values
 Random.seed!(12345)
 βtrue = rand(Uniform(-0.2, 0.2), p)
-σ2true = [0.05]
-ρtrue = [0.2]
+σ2true = [0.1]
+ρtrue = [0.5]
 
 function get_V(ρ, n)
     vec = zeros(n)
@@ -69,19 +69,20 @@ end
 gcm = GLMCopulaCSModel(gcs);
 
 initialize_model!(gcm)
+
+# GLMCopula.initialize_beta!(gcm)
+# copyto!(gcm.σ2, 0.1)
+# copyto!(gcm.ρ, 0.7)
 @show gcm.β
 @show gcm.ρ
 @show gcm.σ2
 
-# GLMCopula.initialize_beta!(gcm)
-# copyto!(gcm.σ2, 0.1)
-# copyto!(gcm.ρ, 0.2)
-
 loglikelihood!(gcm, true, true)
 
 # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 30, derivative_test = "second-order", accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
+fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, accept_after_max_steps = 2, limited_memory_max_history = 20, warm_start_init_point="yes", mu_strategy = "adaptive", mu_oracle = "probing", derivative_test = "first-order", hessian_approximation = "limited-memory"))
 
-fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, accept_after_max_steps = 3, limited_memory_max_history = 20, warm_start_init_point="yes", mu_strategy = "adaptive", mu_oracle = "probing", hessian_approximation = "limited-memory"))
+# fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, warm_start_init_point="yes", mu_strategy = "adaptive", mu_oracle = "probing", hessian_approximation = "limited-memory"))
 # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 10, tol = 10^-8, derivative_test = "first-order", hessian_approximation = "limited-memory"))
 @show fittime
 @show gcm.θ

@@ -343,5 +343,6 @@ function loglikelihood!(
             gcm.Hβρ .+= gcm.data[i].Hβρ
         end
     end
+    # @show gcm.∇ρ
     logl
 end

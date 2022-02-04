@@ -10,8 +10,8 @@ function run_test()
     # σ2true = [0.5]
     # ρtrue = [0.9]
     # βtrue = 0.1 * ones(p)
-    σ2true = [0.1]
-    ρtrue = [-0.04]
+    σ2true = [0.2]
+    ρtrue = [0.5]
 
     function get_V(ρ, n)
         vec = zeros(n)
@@ -28,9 +28,12 @@ function run_test()
     trueparams = [βtrue; ρtrue; σ2true] #hold true parameters
 
     #simulation parameters
-    samplesizes = [100; 1000; 10000]
-    ns = [2; 5; 10; 15; 20; 25]
-    nsims = 100
+    samplesize = [10000]
+    # samplesizes = [100; 1000; 10000]
+    # ns = [2; 5; 10; 15; 20; 25]
+    ns = [5]
+    nsims = 1
+    # nsims = 100
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))

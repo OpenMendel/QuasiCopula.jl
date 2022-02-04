@@ -54,7 +54,7 @@ function fit!(
     offset = gcm.p + 1
     # rho
     ub[offset] = 1
-    lb[offset] = -1
+    lb[offset] = 0
     offset += 1
     # sigma2
     lb[offset] = 0
@@ -144,9 +144,9 @@ function MathProgBase.eval_grad_f(
     # gradient wrt σ2
     grad[gcm.p + 2] = gcm.∇σ2[1]
     # @show gcm.θ
-    @show gcm.θ
+    #@show gcm.θ
     copyto!(gcm.∇θ, grad)
-    @show gcm.∇θ
+    #@show gcm.∇θ
     # return objective
     obj
 end

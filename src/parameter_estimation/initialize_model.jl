@@ -35,7 +35,7 @@ end
 
 Given initial estimates for 'β', initialize the correlation parameter 'ρ' and 'σ2' using empirical variance covariance matrix of Y_1 and Y_2.
 """
-function update_sigma_rho!(gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasReal, D, Link}
+function update_sigma_rho!(gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasReal, D<:Poisson, Link}
     N = length(gcm.data)
     di = length(gcm.data[1].y)
     Y = zeros(N, di)
@@ -69,9 +69,9 @@ function update_sigma_rho!(gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasRe
         copyto!(gcm.σ2, σ2hat)
     end
     if ρhat > 1
-        copyto!(gcm.ρ, 0.5)
+        copyto!(gcm.ρ, 0.25)
     elseif ρhat < -1
-        copyto!(gcm.ρ, -0.5)
+        copyto!(gcm.ρ, -0.25)
     else
         copyto!(gcm.ρ, ρhat)
     end
@@ -115,8 +115,13 @@ function update_sigma_rho!(gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasRe
     # correlation parameter now
     empirical_correlation_mean = mean(GLMCopula.offdiag(StatsBase.cor(Y)))
     ρhat = empirical_correlation_mean / σ2hat
-    @show ρhat
-    copyto!(gcm.ρ, ρhat)
+    if ρhat > 1
+        copyto!(gcm.ρ, 0.25)
+    elseif ρhat < -1
+        copyto!(gcm.ρ, -0.25)
+    else
+        copyto!(gcm.ρ, ρhat)
+    end
     @inbounds for i in eachindex(gcm.data)
         get_V!(gcm.ρ[1], gcm.data[i])
     end
