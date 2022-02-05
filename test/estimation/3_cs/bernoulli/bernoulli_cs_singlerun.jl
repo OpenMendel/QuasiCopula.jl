@@ -9,7 +9,7 @@ p = 3    # number of fixed effects, including intercept
 Random.seed!(12345)
 βtrue = rand(Uniform(-0.2, 0.2), p)
 σ2true = [0.1]
-ρtrue = [0.5]
+ρtrue = [0.25]
 
 function get_V(ρ, n)
     vec = zeros(n)

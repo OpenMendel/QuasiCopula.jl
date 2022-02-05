@@ -87,15 +87,15 @@ function run_test()
                 @show gcm.ρ
                 @show gcm.σ2
 
-                ### now sigma2 is initialized now we need rho
-                Y_1 = [Y_nsample[i][1] for i in 1:m]
-                Y_2 = [Y_nsample[i][2] for i in 1:m]
-
-                update_rho!(gcm, Y_1, Y_2)
-                @show gcm.ρ
-                @show gcm.σ2
+                # ### now sigma2 is initialized now we need rho
+                # Y_1 = [Y_nsample[i][1] for i in 1:m]
+                # Y_2 = [Y_nsample[i][2] for i in 1:m]
+                #
+                # update_rho!(gcm, Y_1, Y_2)
+                # @show gcm.ρ
+                # @show gcm.σ2
                  try
-                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
+                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, derivative_test = "first-order", limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
                     # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
                     @show fittime
                     @show gcm.θ
