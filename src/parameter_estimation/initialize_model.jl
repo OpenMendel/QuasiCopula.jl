@@ -116,22 +116,21 @@ function update_sigma_rho!(gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasRe
     corY = StatsBase.cor(Y)
     empirical_correlation_mean = mean(GLMCopula.offdiag(corY))
     ρhat = empirical_correlation_mean / σ2hat
-    if abs2(corY[1, 2] - empirical_correlation_mean) < 10^-4
-        copyto!(gcm.ρ, ρhat)
-        copyto!(gcm.σ2, σ2hat)
+    if ρhat > 1
+        copyto!(gcm.ρ, 0.5)
+    elseif ρhat < -1
+        copyto!(gcm.ρ, -0.1)
     else
-        if ρhat > 1
-            copyto!(gcm.ρ, 0.1)
-        elseif ρhat < -1
-            copyto!(gcm.ρ, -0.1)
-        else
-            copyto!(gcm.ρ, ρhat)
-        end
-        @inbounds for i in eachindex(gcm.data)
-            get_V!(gcm.ρ[1], gcm.data[i])
-        end
-        fill!(gcm.Σ, 1.0)
-        update_Σ!(gcm)
+        copyto!(gcm.ρ, ρhat)
+    end
+    @inbounds for i in eachindex(gcm.data)
+        get_V!(gcm.ρ[1], gcm.data[i])
+    end
+    fill!(gcm.Σ, 1.0)
+    update_Σ!(gcm)
+    if gcm.Σ[1] > 1
+        copyto!(gcm.σ2, 1.0)
+    else
         copyto!(gcm.σ2, gcm.Σ[1])
     end
     nothing
