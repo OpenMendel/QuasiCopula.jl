@@ -66,8 +66,8 @@ function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaAR
             gc.∇μβ[j, i] = gc.varμ[j] * gc.X[j, i]
             gc.∇σ2β[j, i] = gc.varμ[j] * (1 - 2 * gc.μ[j]) * gc.X[j, i]
             # gc.∇σ2β[j, :] .= (1 - (2 * gc.μ[j])) .* gc.∇μβ[j, :]
-            # gc.∇resβ[j, i] = -inv(sqrt(gc.varμ[j])) * gc.∇μβ[j, i] - (0.5 * inv(sqrt(gc.varμ[j])) * gc.res[j] * gc.∇σ2β[j, i])
-            gc.∇resβ[j, i] = -inv(sqrt(gc.varμ[j])) * gc.∇μβ[j, i] - (0.5 * gc.res[j] * (1 - (2 * gc.μ[j])) * gc.X[j, i])
+            # wrong gc.∇resβ[j, i] = -inv(sqrt(gc.varμ[j])) * gc.∇μβ[j, i] - (0.5 * inv(sqrt(gc.varμ[j])) * gc.res[j] * gc.∇σ2β[j, i])
+            gc.∇resβ[j, i] = -sqrt(gc.varμ[j]) * gc.X[j, i] - (0.5 * gc.res[j] * (1 - (2 * gc.μ[j])) * gc.X[j, i])
         end
     end
     nothing

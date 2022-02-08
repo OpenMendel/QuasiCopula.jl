@@ -10,8 +10,8 @@ function run_test()
     # σ2true = [0.5]
     # ρtrue = [0.9]
     # βtrue = 0.1 * ones(p)
-    σ2true = [0.2]
-    ρtrue = [0.5]
+    σ2true = [0.1]
+    ρtrue = [-0.04]
 
     function get_V(ρ, n)
         vec = zeros(n)
@@ -28,12 +28,12 @@ function run_test()
     trueparams = [βtrue; ρtrue; σ2true] #hold true parameters
 
     #simulation parameters
-    samplesize = [10000]
-    # samplesizes = [100; 1000; 10000]
-    # ns = [2; 5; 10; 15; 20; 25]
-    ns = [5]
-    nsims = 1
-    # nsims = 100
+    # samplesize = [10000]
+    samplesizes = [100; 1000; 10000]
+    ns = [2; 5; 10; 15; 20; 25]
+    # ns = [25]
+    # nsims = 1
+    nsims = 5
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -128,13 +128,13 @@ function run_test()
 
     @show en - st #seconds
     @info "writing to file..."
-    ftail = "multivariate_poisson_CS$(nsims)reps_sim.csv"
-    writedlm("mse_poisson_cs/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("mse_poisson_cs/mse_sigma_" * ftail, σ2MseResults, ',')
-    writedlm("mse_poisson_cs/mse_rho_" * ftail, ρMseResults, ',')
-    writedlm("mse_poisson_cs/fittimes_" * ftail, fittimes, ',')
+    ftail = "multivariate_bernoulli_CS$(nsims)reps_sim.csv"
+    writedlm("mse_bernoulli_cs/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("mse_bernoulli_cs/mse_sigma_" * ftail, σ2MseResults, ',')
+    writedlm("mse_bernoulli_cs/mse_rho_" * ftail, ρMseResults, ',')
+    writedlm("mse_bernoulli_cs/fittimes_" * ftail, fittimes, ',')
 
-    writedlm("mse_poisson_cs/beta_sigma_coverage_" * ftail, βρσ2coverage, ',')
+    writedlm("mse_bernoulli_cs/beta_sigma_coverage_" * ftail, βρσ2coverage, ',')
 end
 
 run_test()

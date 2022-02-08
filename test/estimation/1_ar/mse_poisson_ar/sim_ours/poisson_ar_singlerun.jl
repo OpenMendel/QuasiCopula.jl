@@ -7,10 +7,11 @@ p = 3    # number of fixed effects, including intercept
 
 # true parameter values
 Random.seed!(12345)
-βtrue = rand(Uniform(-0.2, 0.2), p)
-# βtrue = 0.1 * ones(p)
-σ2true = [0.1]
+# βtrue = rand(Uniform(-0.2, 0.2), p)
+βtrue = [log(5.0)]
+σ2true = [1.0]
 ρtrue = [0.5]
+trueparams = [βtrue; ρtrue; σ2true]
 
 function get_V(ρ, n)
     vec = zeros(n)
@@ -23,7 +24,7 @@ function get_V(ρ, n)
 end
 
 #simulation parameters
-samplesize = 10000
+samplesize = 50000
 
 st = time()
 currentind = 1
@@ -42,33 +43,33 @@ V = get_V(ρtrue[1], ni)
 Γ = σ2true[1] * V
 
 # vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
-# for i in 1:ni
-#     vecd[i] = Poisson(5.0)
-# end
-# nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
-#
-# Random.seed!(1234)
-# @time Y_nsample = simulate_nobs_independent_vectors(nonmixed_multivariate_dist, samplesize)
+for i in 1:ni
+    vecd[i] = Poisson(5.0)
+end
+nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
+
+Random.seed!(1234)
+@time Y_nsample = simulate_nobs_independent_vectors(nonmixed_multivariate_dist, samplesize)
 
 # for reproducibility I will simulate all the design matrices here
-Random.seed!(12345)
-X_samplesize = [randn(ni, p - 1) for i in 1:samplesize]
+# Random.seed!(12345)
+# X_samplesize = [randn(ni, p - 1) for i in 1:samplesize]
 
 for i in 1:samplesize
-    X = [ones(ni) X_samplesize[1]]
-    η = X * βtrue
-    μ = exp.(η)
-    vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
-    for i in 1:ni
-        vecd[i] = Poisson(μ[i])
-    end
-    nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
-    # simuate single vector y
-    y = Vector{Float64}(undef, ni)
-    res = Vector{Float64}(undef, ni)
-    rand(nonmixed_multivariate_dist, y, res)
-    # X = ones(ni, 1)
-    # y = Float64.(Y_nsample[i])
+    # X = [ones(ni) X_samplesize[1]]
+    # η = X * βtrue
+    # μ = exp.(η)
+    # vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
+    # for i in 1:ni
+    #     vecd[i] = Poisson(μ[i])
+    # end
+    # nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
+    # # simuate single vector y
+    # y = Vector{Float64}(undef, ni)
+    # res = Vector{Float64}(undef, ni)
+    # rand(nonmixed_multivariate_dist, y, res)
+    X = ones(ni, 1)
+    y = Float64.(Y_nsample[i])
     V = [ones(ni, ni)]
     gcs[i] = GLMCopulaARObs(y, X, d, link)
 end
@@ -77,14 +78,15 @@ end
 gcm = GLMCopulaARModel(gcs);
 
 
-# N = length(gcm.data)
-# di = length(gcm.data[1].y)
-# Y = zeros(N, di)
-# for j in 1:di
-#     Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
-# end
+N = length(gcm.data)
+di = length(gcm.data[1].y)
+Y = zeros(N, di)
+for j in 1:di
+    Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
+end
 # empirical_covariance_mat = scattermat(Y) ./ N
-#
+StatsBase.cor(Y)
+
 initialize_model!(gcm)
 @show gcm.β
 @show gcm.ρ

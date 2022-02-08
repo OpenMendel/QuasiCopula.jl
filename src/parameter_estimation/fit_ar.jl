@@ -54,7 +54,8 @@ function fit!(
     offset = gcm.p + 1
     # rho
     ub[offset] = 1
-    lb[offset] = 0
+    # lb[offset] = 0
+    lb[offset] = -inv(gcm.data[1].n - 1)
     offset += 1
     # sigma2
     lb[offset] = 0
