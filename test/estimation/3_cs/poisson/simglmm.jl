@@ -7,10 +7,10 @@ p = 3    # number of fixed effects, including intercept
 
 # true parameter values
 Random.seed!(12345)
-βtrue = rand(Uniform(-2, 2), p)
+βtrue = rand(Uniform(-0.2, 0.2), p)
 # βtrue = 0.1 * ones(p)
-σ2true = [0.5]
-ρtrue = [-0.05]
+σ2true = [1.0]
+ρtrue = [0.9]
 
 function get_V(ρ, n)
     vec = zeros(n)
@@ -35,7 +35,7 @@ T = Float64
 
 gcs = Vector{GLMCopulaCSObs{T, D, Link}}(undef, samplesize)
 
-ni = 25 #  number of observations per individual
+ni = 5 #  number of observations per individual
 V = get_V(ρtrue[1], ni)
 
 # true Gamma
@@ -45,32 +45,32 @@ V = get_V(ρtrue[1], ni)
 Random.seed!(12345)
 X_samplesize = [randn(ni, p - 1) for i in 1:samplesize]
 
+a = collect(1:samplesize)
+group = [repeat([a[i]], ni) for i in 1:samplesize]
+groupstack = vcat(group...)
+Xstack = []
+Ystack = []
 for i in 1:samplesize
-    X = [ones(ni) X_samplesize[1]]
-    # X = [ones(ni) randn(ni, p - 1)]
-    # X = ones(ni, 1)
-    # y = Float64.(Y_nsample[i])
-    η = X * βtrue
-    μ = exp.(η)
-    vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
-    for i in 1:ni
-        vecd[i] = Poisson(μ[i])
-    end
-    nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
-    # simuate single vector y
-    y = Vector{Float64}(undef, ni)
-    res = Vector{Float64}(undef, ni)
-    rand(nonmixed_multivariate_dist, y, res)
-    # push!(Ystack, y)
-    V = [Float64.(Matrix(I, ni, ni))]
-    # V = [ones(ni, ni)]
-    gcs[i] = GLMCopulaCSObs(y, X, d, link)
+  X = [ones(ni) randn(ni, p - 1)]
+  η = X * βtrue
+  V = [ones(ni, ni)]
+  # generate mvn response
+  mvn_d = MvNormal(η, Γ)
+  mvn_η = rand(mvn_d)
+  μ = GLM.linkinv.(link, mvn_η)
+  y = Float64.(rand.(__get_distribution.(D, μ)))
+  push!(Xstack, X)
+  push!(Ystack, y)
+  # add to data
+  gcs[i] = GLMCopulaCSObs(y, X, d, link)
 end
-
 # form model
 gcm = GLMCopulaCSModel(gcs);
 
-initialize_model!(gcm)
+# initialize_model!(gcm)
+GLMCopula.initialize_beta!(gcm)
+copyto!(gcm.ρ, ρtrue[1])
+copyto!(gcm.σ2, σ2true[1])
 @show gcm.β
 @show gcm.ρ
 @show gcm.σ2

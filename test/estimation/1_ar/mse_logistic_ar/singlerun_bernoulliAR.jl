@@ -4,11 +4,11 @@ using Random, Roots, SpecialFunctions, StatsFuns, Distributions, DataFrames, Toe
 p = 3    # number of fixed effects, including intercept
 
 # true parameter values
-Random.seed!(1234)
+Random.seed!(12345)
 # try next
-βtrue = rand(Uniform(-0.2, 0.2), p)
+βtrue = rand(Uniform(-2, 2), p)
 σ2true = [0.5]
-ρtrue = [0.9]
+ρtrue = [0.5]
 
 function get_V(ρ, n)
   vec = zeros(n)
@@ -24,7 +24,7 @@ end
 trueparams = [βtrue; ρtrue; σ2true] #hold true parameters
 
 #simulation parameters
-samplesize = 10000
+samplesize = 100
 ni = 5
 
 
@@ -73,7 +73,7 @@ initialize_model!(gcm)
 @show gcm.ρ
 @show gcm.σ2
 
-fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
+fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, warm_start_init_point="yes", accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
 # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
 @show fittime
 @show gcm.θ

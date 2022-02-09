@@ -271,7 +271,9 @@ function loglikelihood!(
 
             # hessian for sigma2
             gc.Hσ2 .= 0.25 * n^2 * inv(c1)^2 - inv1pq^2 * (0.25 * q^2)
-
+            if penalized
+                gc.Hσ2 .-= 1.0
+            end
             # hessian cross term for rho and sigma2
             # gc.Hρσ2 .= 0.5 * q2 * inv1pq - 0.25 * σ2 * q * q2 * inv1pq^2
             gc.Hρσ2 .= (0.5 * q2 * c2 - 0.25 * σ2 * q * q2) * inv1pq^2

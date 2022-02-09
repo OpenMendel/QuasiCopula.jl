@@ -11,9 +11,9 @@ function runtest()
     p = 3    # number of fixed effects, including intercept
     m = 1    # number of variance components
     # true parameter values
-    Random.seed!(1234)
+    Random.seed!(12345)
     βtrue = rand(Uniform(-0.2, 0.2), p)
-    Σtrue = [0.01]
+    Σtrue = [0.25]
 
     # generate data
     intervals = zeros(p + m, 2) #hold intervals
@@ -21,9 +21,10 @@ function runtest()
     trueparams = [βtrue; Σtrue] #hold true parameters
 
     #simulation parameters
-    samplesizes = [100; 1000; 10000]
-    ns = [2; 5; 10; 15; 20; 25]
-    nsims = 100
+    samplesizes = [10000]
+    ns = [25]
+    # ns = [2; 5; 10; 15; 20; 25]
+    nsims = 2
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -52,7 +53,7 @@ function runtest()
         gcs = Vector{GLMCopulaVCObs{T, D, Link}}(undef, m)
         for k in 1:length(ns)
             ni = ns[k] # number of observations per individual
-            Γ = Σtrue[1] * ones(ni, ni) + 0.00000000000001 * Matrix(I, ni, ni)
+            Γ = Σtrue[1] * ones(ni, ni) + 0.000000000000001 * Matrix(I, ni, ni)
             for j in 1:nsims
                 println("rep $j obs per person $ni samplesize $m")
 
@@ -89,8 +90,8 @@ function runtest()
                 # p = 3
                 df = (Y = Ystack, X2 = Xstack[:, 2], X3 = Xstack[:, 3], group = string.(groupstack))
                 form = @formula(Y ~ 1 + X2 + X3 + (1|group));
-
-                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, hessian_approximation = "limited-memory"))
+                initialize_model!(gcm)
+                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 20, warm_start_init_point="yes", hessian_approximation = "limited-memory"))
                 @show fittime
                 @show gcm.β
                 @show gcm.Σ
@@ -135,7 +136,7 @@ function runtest()
                     ΣMseResults_GLMM[currentind] = NaN
                     fittimes_GLMM[currentind] = NaN
                     currentind += 1
-                    # continue
+                    continue
                end
             end
         end
@@ -145,11 +146,11 @@ function runtest()
     @show en - st #seconds
     @info "writing to file..."
     ftail = "multivariate_poisson_vcm$(nsims)reps_sim.csv"
-    writedlm("sim_glmm_vs_ours_random_int/poisson_sim_glmm/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("sim_glmm_vs_ours_random_int/poisson_sim_glmm/mse_Sigma_" * ftail, ΣMseResults, ',')
-    writedlm("sim_glmm_vs_ours_random_int/poisson_sim_glmm/fittimes_" * ftail, fittimes, ',')
+    writedlm("poisson_sim_glmm/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("poisson_sim_glmm/mse_Sigma_" * ftail, ΣMseResults, ',')
+    writedlm("poisson_sim_glmm/fittimes_" * ftail, fittimes, ',')
 
-    writedlm("sim_glmm_vs_ours_random_int/poisson_sim_glmm/beta_sigma_coverage_" * ftail, βΣcoverage, ',')
+    writedlm("poisson_sim_glmm/beta_sigma_coverage_" * ftail, βΣcoverage, ',')
 
 #     # glmm
     writedlm("sim_glmm_vs_ours_random_int/poisson_sim_glmm/mse_beta_GLMM_" * ftail, βMseResults_GLMM, ',')
@@ -157,3 +158,31 @@ function runtest()
     writedlm("sim_glmm_vs_ours_random_int/poisson_sim_glmm/fittimes_GLMM_" * ftail, fittimes_GLMM, ',')
 end
 runtest()
+# N = length(gcm.data)
+# di = length(gcm.data[1].y)
+# Y = zeros(N, di)
+# for j in 1:di
+#     Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
+# end
+
+# # for simulating under GLMM Poisson
+# function initialize_model!(
+#     gcm::Union{GLMCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}}) where {T <: BlasReal, D<:Poisson, Link,  VD, VL}
+#     println("initializing β using Newton's Algorithm under Independence Assumption")
+#     initialize_beta!(gcm)
+#     @show gcm.β
+#     fill!(gcm.τ, 1.0)
+#     println("initializing variance components using MM-Algorithm")
+#     N = length(gcm.data)
+#     di = length(gcm.data[1].y)
+#     Y = zeros(N, di)
+#     for j in 1:di
+#         Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
+#     end
+#     corY = StatsBase.cor(Y)
+#     empirical_correlation_mean = mean(GLMCopula.offdiag(corY))
+#     copyto!(gcm.Σ, empirical_correlation_mean)
+#     @show gcm.Σ
+#     nothing
+# end
+#

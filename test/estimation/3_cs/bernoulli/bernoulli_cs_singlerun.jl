@@ -8,8 +8,8 @@ p = 3    # number of fixed effects, including intercept
 # true parameter values
 Random.seed!(12345)
 βtrue = rand(Uniform(-2, 2), p)
-σ2true = [1.0]
-ρtrue = [0.9]
+σ2true = [0.5]
+ρtrue = [-0.05]
 trueparams = [βtrue; ρtrue; σ2true]
 
 function get_V(ρ, n)
@@ -61,8 +61,8 @@ for i in 1:samplesize
     res = Vector{Float64}(undef, ni)
     rand(nonmixed_multivariate_dist, y, res)
     # push!(Ystack, y)
-    V = [Float64.(Matrix(I, ni, ni))]
-    # V = [ones(ni, ni)]
+    # V = [Float64.(Matrix(I, ni, ni))]
+    V = [ones(ni, ni)]
     gcs[i] = GLMCopulaCSObs(y, X, d, link)
 end
 
@@ -91,9 +91,7 @@ gcm.∇θ
 # loglikelihood!(gcm, true, true)
 # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, warm_start_init_point="yes", mu_strategy = "adaptive", mu_oracle = "probing", hessian_approximation = "limited-memory"))
 # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 10, tol = 10^-8, derivative_test = "first-order", hessian_approximation = "limited-memory"))
-@show fittime
-@show gcm.θ
-@show gcm.∇θ
+
 loglikelihood!(gcm, true, true)
 vcov!(gcm)
 mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)

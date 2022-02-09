@@ -11,10 +11,10 @@ function runtest()
     p = 3    # number of fixed effects, including intercept
     m = 1    # number of variance components
     # true parameter values
-    Random.seed!(1234)
+    Random.seed!(12345)
     # try next
     βtrue = rand(Uniform(-0.2, 0.2), p)
-    Σtrue = [0.1]
+    Σtrue = [0.25]
 
     # generate data
     intervals = zeros(p + m, 2) #hold intervals

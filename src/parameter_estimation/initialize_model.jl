@@ -35,7 +35,7 @@ end
 
 Given initial estimates for 'β', initialize the correlation parameter 'ρ' and 'σ2' using empirical variance covariance matrix of Y_1 and Y_2.
 """
-function update_sigma_rho!(gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasReal, D<:Poisson, Link}
+function update_sigma_rho!(gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasReal, D, Link}
     N = length(gcm.data)
     di = length(gcm.data[1].y)
     Y = zeros(N, di)
@@ -78,63 +78,63 @@ function update_sigma_rho!(gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasRe
     nothing
 end
 
-"""
-    update_sigma_rho!(gcm)
-
-Given initial estimates for 'β', initialize the correlation parameter 'ρ' and 'σ2' using empirical variance covariance matrix of Y_1 and Y_2.
-"""
-function update_sigma_rho!(gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasReal, D<:Bernoulli, Link}
-    println("method of moments for bernoulli")
-    N = length(gcm.data)
-    di = length(gcm.data[1].y)
-    Y = zeros(N, di)
-    for j in 1:di
-        Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
-    end
-    update_res!(gcm)
-    # theoretical variance
-    μ_ik = zeros(N)
-    σ2_ik = zeros(N)
-
-    μ_imean = zeros(di)
-    σ2_imean = zeros(di)
-    σ2hats = zeros(di)
-    for k in 1:di
-        @inbounds for i in eachindex(gcm.data)
-            μ_ik[i] = mean(gcm.data[i].μ[k])
-        end
-        μ_imean[k] = mean(μ_ik)
-        @inbounds for i in eachindex(gcm.data)
-            σ2_ik[i] = mean(gcm.data[i].varμ[k])
-        end
-        σ2_imean[k] = mean(σ2_ik)
-
-        σ2hats[k] = 2 * (mean(Y[:, k]) - μ_imean[k]) / (sqrt(σ2_imean[k]) * skewness(Y[:, k]))
-    end
-    σ2hat = abs(mean(σ2hats))
-    # correlation parameter now
-    corY = StatsBase.cor(Y)
-    empirical_correlation_mean = mean(GLMCopula.offdiag(corY))
-    ρhat = empirical_correlation_mean / σ2hat
-    if ρhat > 1
-        copyto!(gcm.ρ, 0.5)
-    elseif ρhat < -1
-        copyto!(gcm.ρ, -0.1)
-    else
-        copyto!(gcm.ρ, ρhat)
-    end
-    @inbounds for i in eachindex(gcm.data)
-        get_V!(gcm.ρ[1], gcm.data[i])
-    end
-    fill!(gcm.Σ, 1.0)
-    update_Σ!(gcm)
-    if gcm.Σ[1] > 1
-        copyto!(gcm.σ2, 1.0)
-    else
-        copyto!(gcm.σ2, gcm.Σ[1])
-    end
-    nothing
-end
+# """
+#     update_sigma_rho!(gcm)
+#
+# Given initial estimates for 'β', initialize the correlation parameter 'ρ' and 'σ2' using empirical variance covariance matrix of Y_1 and Y_2.
+# """
+# function update_sigma_rho!(gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasReal, D<:Bernoulli, Link}
+#     println("method of moments for bernoulli")
+# N = length(gcm.data)
+# di = length(gcm.data[1].y)
+# Y = zeros(N, di)
+# for j in 1:di
+#     Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
+# end
+#     update_res!(gcm)
+#     # theoretical variance
+#     μ_ik = zeros(N)
+#     σ2_ik = zeros(N)
+#
+#     μ_imean = zeros(di)
+#     σ2_imean = zeros(di)
+#     σ2hats = zeros(di)
+#     for k in 1:di
+#         @inbounds for i in eachindex(gcm.data)
+#             μ_ik[i] = mean(gcm.data[i].μ[k])
+#         end
+#         μ_imean[k] = mean(μ_ik)
+#         @inbounds for i in eachindex(gcm.data)
+#             σ2_ik[i] = mean(gcm.data[i].varμ[k])
+#         end
+#         σ2_imean[k] = mean(σ2_ik)
+#
+#         σ2hats[k] = 2 * (mean(Y[:, k]) - μ_imean[k]) / (sqrt(σ2_imean[k]) * skewness(Y[:, k]))
+#     end
+#     σ2hat = abs(mean(σ2hats))
+#     # correlation parameter now
+    # corY = StatsBase.cor(Y)
+    # empirical_correlation_mean = mean(GLMCopula.offdiag(corY))
+#     ρhat = empirical_correlation_mean / σ2hat
+#     if ρhat > 1
+#         copyto!(gcm.ρ, 0.5)
+#     elseif ρhat < -1
+#         copyto!(gcm.ρ, -0.1)
+#     else
+#         copyto!(gcm.ρ, ρhat)
+#     end
+#     @inbounds for i in eachindex(gcm.data)
+#         get_V!(gcm.ρ[1], gcm.data[i])
+#     end
+#     fill!(gcm.Σ, 1.0)
+#     update_Σ!(gcm)
+#     if gcm.Σ[1] > 1
+#         copyto!(gcm.σ2, 1.0)
+#     else
+#         copyto!(gcm.σ2, gcm.Σ[1])
+#     end
+#     nothing
+# end
 
 function update_sigma_rho!(gcm::GLMCopulaARModel{T, D, Link}) where {T <: BlasReal, D, Link}
     N = length(gcm.data)
@@ -163,11 +163,14 @@ function update_sigma_rho!(gcm::GLMCopulaARModel{T, D, Link}) where {T <: BlasRe
         @inbounds for i in eachindex(gcm.data)
             get_V!(ρhat, gcm.data[i])
         end
-        fill!(gcm.Σ, 1.0)
+        fill!(gcm.Σ, σ2_k_mean)
         update_Σ!(gcm)
         @show gcm.Σ
-
-        copyto!(gcm.σ2, gcm.Σ)
+        if gcm.Σ[1] > 1
+            copyto!(gcm.σ2, 1.0)
+        else
+            copyto!(gcm.σ2, gcm.Σ)
+        end
         copyto!(gcm.ρ, ρhat)
     end
     nothing
