@@ -54,12 +54,13 @@ function fit!(
 end
 
 function fit!(
-    gcm::NBCopulaARModel,
-    solver=Ipopt.IpoptSolver(print_level=0, max_iter=15,
+    gcm::Union{NBCopulaARModel, NBCopulaCSModel},
+    solver=Ipopt.IpoptSolver(print_level=0, max_iter=12, warm_start_init_point="yes",
                              hessian_approximation = "limited-memory");
-    tol::Float64 = 1e-7,
+    tol::Float64 = 1e-6,
     maxBlockIter::Int=100
     )
+    initialize_model!(gcm)
     npar = gcm.p + 2 # rho and sigma squared
     optm = MathProgBase.NonlinearModel(solver)
     # set lower bounds and upper bounds of parameters

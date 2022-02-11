@@ -186,7 +186,7 @@ end
     get_V!(ρ, gc)
 Forms the CS covariance structure given ρ (correlation parameter), gc (single cluster observation) object.
 """
-function get_V!(ρ, gc::GLMCopulaCSObs{T, D, Link}) where {T, D, Link}
+function get_V!(ρ, gc::Union{GLMCopulaCSObs{T, D, Link}, NBCopulaCSObs{T, D, Link}}) where {T, D, Link}
     gc.vec[1] = 1.0
     @simd for i in 2:Integer(gc.n)
         gc.vec[i] = ρ
@@ -199,7 +199,7 @@ end
     get_∇V!(gc)
 Forms the first derivative of CS covariance structure wrt to ρ, given ρ (correlation parameter)
 """
-function get_∇V!(gc::GLMCopulaCSObs{T, D, Link}) where {T, D, Link}
+function get_∇V!(gc::Union{GLMCopulaCSObs{T, D, Link}, NBCopulaCSObs{T, D, Link}}) where {T, D, Link}
     gc.vec[1] = 0.0
     @simd for i in 2:Integer(gc.n)
         gc.vec[i] = 1.0
@@ -297,10 +297,6 @@ function loglikelihood!(
             gc.added_term2 .*= inv1pq
             gc.Hβ .+= gc.added_term2
             gc.Hβ .+= GLMCopula.glm_hessian(gc)
-
-            if penalized
-                gc.∇σ2 .-= 1.0
-            end
       end
       gc.∇β .= gc.∇β .* inv1pq
       gc.res .= gc.y .- gc.μ

@@ -12,7 +12,7 @@ end
     std_res_differential!(gc)
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Negative Binomial.
 """
-function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, NBCopulaARObs{T, D, Link}}
+function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, NBCopulaARObs{T, D, Link}, NBCopulaCSObs{T, D, Link}}
     ) where {T<: BlasReal, D<:NegativeBinomial{T}, Link}
     @inbounds for j in 1:length(gc.y)
         gc.∇μβ[j, :] .= gc.dμ[j] .* @view(gc.X[j, :])
@@ -77,7 +77,7 @@ end
     glm_gradient(gc::GLMCopulaVCObs{T, D, Link}, β)
 Calculates the gradient with respect to beta for our the glm portion for one obs. Keeps the residuals standardized.
 """
-function glm_gradient(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}, GLMCopulaCSObs{T, D, Link}}) where {T<:Real, D, Link, VD, VL}
+function glm_gradient(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, NBCopulaCSObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}, GLMCopulaCSObs{T, D, Link}}) where {T<:Real, D, Link, VD, VL}
     gc.storage_n .= gc.w1 .* gc.res
     mul!(gc.storage_p1, transpose(gc.X), gc.storage_n)
     gc.storage_p1
@@ -88,7 +88,7 @@ end
 
 Compute the part of the hessian relevant to the glm density with respect to beta for a single obs
 """
-function glm_hessian(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}, GLMCopulaCSObs{T, D, Link}}) where {T <: BlasReal, D, Link, VD, VL}
+function glm_hessian(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, NBCopulaCSObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}, GLMCopulaCSObs{T, D, Link}}) where {T <: BlasReal, D, Link, VD, VL}
     mul!(gc.storage_np, Diagonal(gc.w2), gc.X)
     BLAS.gemm!('T', 'N', -1.0, gc.X, gc.storage_np, 0.0, gc.storage_pp)
 end

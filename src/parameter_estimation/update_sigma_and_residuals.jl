@@ -4,7 +4,7 @@ update_Σ_jensen!(gcm)
 Update Σ using the MM algorithm and Jensens inequality, given β.
 """
 function update_Σ_jensen!(
-    gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, GLMCopulaCSModel{T, D, Link}, NBCopulaARModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}},
+    gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, GLMCopulaCSModel{T, D, Link}, NBCopulaARModel{T, D, Link}, NBCopulaCSModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}},
     maxiter::Integer=50000,
     reltol::Number=1e-6,
     verbose::Bool=false) where {T <: BlasReal, D<:Union{Poisson, Bernoulli, NegativeBinomial}, Link, VD, VL}
@@ -59,7 +59,7 @@ end
 Update the residual vector according to `β` given link function and distribution.
 """
 function update_res!(
-   gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}, NBCopulaARObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}},
+   gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}, NBCopulaARObs{T, D, Link}, NBCopulaCSObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}},
    β::Vector{T}) where {T <: BlasReal, D, Link, VD, VL}
    mul!(gc.η, gc.X, β)
    @inbounds for i in 1:length(gc.y)
@@ -74,7 +74,7 @@ function update_res!(
 end
 
 function update_res!(
-    gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, GLMCopulaCSModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}}
+    gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, GLMCopulaCSModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, NBCopulaARModel{T, D, Link}, NBCopulaCSModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}}
     ) where {T <: BlasReal, D, Link, VD, VL}
     @inbounds for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
@@ -91,7 +91,7 @@ end
 # end
 
 function standardize_res!(
-    gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}, NBCopulaARObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}}
+    gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}, NBCopulaARObs{T, D, Link}, NBCopulaCSObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}}
     ) where {T <: BlasReal, D, Link, VD, VL}
     @inbounds for j in eachindex(gc.y)
         σinv = inv(sqrt(gc.varμ[j]))
@@ -127,7 +127,7 @@ end
 
 Update the quadratic forms `(r^T V[k] r) / 2` according to the current residual `r`.
 """
-function update_quadform!(gc::Union{GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}, NBCopulaARObs{T, D, Link}}) where {T<:Real, D, Link}
+function update_quadform!(gc::Union{GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}, NBCopulaARObs{T, D, Link}, NBCopulaCSObs{T, D, Link}}) where {T<:Real, D, Link}
     mul!(gc.storage_n, gc.V, gc.res)
     gc.q .= dot(gc.res, gc.storage_n) / 2
     gc.q
@@ -140,7 +140,7 @@ Performs maximum loglikelihood estimation of the nuisance paramter for negative
 binomial model using Newton's algorithm. Will run a maximum of `maxIter` and
 convergence is defaulted to `convTol`.
 """
-function update_r_newton!(gcm::Union{NBCopulaVCModel, NBCopulaARModel};
+function update_r_newton!(gcm::Union{NBCopulaVCModel, NBCopulaARModel, NBCopulaCSModel};
     maxIter=100, convTol=1e-6)
 
     T = eltype(gcm.β)
@@ -185,7 +185,7 @@ function update_r_newton!(gcm::Union{NBCopulaVCModel, NBCopulaARModel};
     return new_r
 end
 
-function update_r!(gcm::Union{NBCopulaVCModel, NBCopulaARModel})
+function update_r!(gcm::Union{NBCopulaVCModel, NBCopulaARModel, NBCopulaCSModel})
     new_r = update_r_newton!(gcm, maxIter=10)
     gcm.r[1] = new_r
     for gc in gcm.data
@@ -228,7 +228,7 @@ function first_derivative(gcm::NBCopulaVCModel, r::T) where T <: AbstractFloat
     return s
 end
 
-function first_derivative(gcm::NBCopulaARModel, r::T) where T <: AbstractFloat
+function first_derivative(gcm::Union{NBCopulaARModel, NBCopulaCSModel}, r::T) where T <: AbstractFloat
     s = zero(T)
     @inbounds for i in eachindex(gcm.data)
         # 2nd term of logl
@@ -320,7 +320,7 @@ function second_derivative(gcm::NBCopulaVCModel, r::T) where T <: AbstractFloat
     return s
 end
 
-function second_derivative(gcm::NBCopulaARModel, r::T) where T <: AbstractFloat
+function second_derivative(gcm::Union{NBCopulaARModel, NBCopulaCSModel}, r::T) where T <: AbstractFloat
     s = zero(T)
     @inbounds for i in eachindex(gcm.data)
         # 2nd term of logl
@@ -378,7 +378,7 @@ function second_derivative(gcm::NBCopulaARModel, r::T) where T <: AbstractFloat
     return s
 end
 
-function negbin_component_loglikelihood(gcm::NBCopulaARModel, r::T) where T <: AbstractFloat
+function negbin_component_loglikelihood(gcm::Union{NBCopulaARModel, NBCopulaCSModel}, r::T) where T <: AbstractFloat
     return loglikelihood!(gcm)
 end
 

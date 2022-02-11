@@ -5,11 +5,11 @@ using ToeplitzMatrices
 function run_test()
     p_fixed = 3    # number of fixed effects, including intercept
     # true parameter values
-    Random.seed!(1234)
-    βtrue = randn(p_fixed)
+    Random.seed!(12345)
+    βtrue = rand(Uniform(-2, 2), p_fixed)
     rtrue = 10.0
     σ2true = [0.5]
-    ρtrue = [0.9]
+    ρtrue = [0.5]
 
     function get_V(ρ, n)
         vec = zeros(n)
@@ -28,9 +28,8 @@ function run_test()
 
     #simulation parameters
     samplesizes = [100; 1000; 10000]
-    # ns = [5]
     ns = [2; 5; 10; 15; 20; 25]
-    nsims = 100
+    nsims = 5
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -40,8 +39,6 @@ function run_test()
 
     βρσ2rcoverage = Matrix{Float64}(undef, p_fixed + 3, nsims * length(ns) * length(samplesizes))
     fittimes = zeros(nsims * length(ns) * length(samplesizes))
-
-    solver = Ipopt.IpoptSolver(print_level = 5)
 
     st = time()
     currentind = 1
@@ -53,7 +50,7 @@ function run_test()
 
     for t in 1:length(samplesizes)
         m = samplesizes[t]
-        gcs = Vector{NBCopulaARObs{T, D, Link}}(undef, m)
+        gcs = Vector{NBCopulaCSObs{T, D, Link}}(undef, m)
         for k in 1:length(ns)
             ni = ns[k] # number of observations per individual
             V = get_V(ρtrue[1], ni)
@@ -82,12 +79,12 @@ function run_test()
                     res = Vector{Float64}(undef, ni)
                     # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     rand(nonmixed_multivariate_dist, y, res)
-                    gcs[i] = NBCopulaARObs(y, X, d,link)
+                    gcs[i] = NBCopulaCSObs(y, X, d,link)
                     push!(Y_nsample, y)
                 end
 
                 # form model
-                gcm = NBCopulaARModel(gcs);
+                gcm = NBCopulaCSModel(gcs);
                 fittime = NaN
                 try
                     fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter = 30, tol=1e-6)
@@ -133,13 +130,13 @@ function run_test()
 
     @show en - st #seconds
     @info "writing to file..."
-    ftail = "multivariate_nb_AR$(nsims)reps_sim.csv"
-    writedlm("autoregressive/nb_ar/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("autoregressive/nb_ar/mse_r_" * ftail, rMseResults, ',')
-    writedlm("autoregressive/nb_ar/mse_sigma_" * ftail, σ2MseResults, ',')
-    writedlm("autoregressive/nb_ar/mse_rho_" * ftail, ρMseResults, ',')
-    writedlm("autoregressive/nb_ar/fittimes_" * ftail, fittimes, ',')
+    ftail = "multivariate_nb_CS$(nsims)reps_sim.csv"
+    writedlm("nb/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("nb/mse_r_" * ftail, rMseResults, ',')
+    writedlm("nb/mse_sigma_" * ftail, σ2MseResults, ',')
+    writedlm("nb/mse_rho_" * ftail, ρMseResults, ',')
+    writedlm("nb/fittimes_" * ftail, fittimes, ',')
 
-    writedlm("autoregressive/nb_ar/beta_rho_sigma_coverage_" * ftail, βρσ2rcoverage, ',')
+    writedlm("nb/beta_rho_sigma_coverage_" * ftail, βρσ2rcoverage, ',')
 end
 run_test()

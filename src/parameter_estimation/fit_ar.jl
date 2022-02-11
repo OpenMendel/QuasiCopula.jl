@@ -9,6 +9,7 @@ function fit!(
         gcm::GLMCopulaARModel,
         solver=Ipopt.IpoptSolver(print_level = 5)
     )
+    initialize_model!(gcm)
     npar = gcm.p + 2 # rho and sigma squared
     optm = MathProgBase.NonlinearModel(solver)
     # set lower bounds and upper bounds of parameters
@@ -46,6 +47,7 @@ function fit!(
         gcm::GLMCopulaCSModel,
         solver=Ipopt.IpoptSolver(print_level = 5)
     )
+    initialize_model!(gcm)
     npar = gcm.p + 2 # rho and sigma squared
     optm = MathProgBase.NonlinearModel(solver)
     # set lower bounds and upper bounds of parameters
@@ -83,7 +85,7 @@ Translate model parameters in `gcm` to optimization variables in `par`.
 """
 function modelpar_to_optimpar!(
         par :: Vector,
-        gcm :: Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel}
+        gcm :: Union{GLMCopulaARModel, NBCopulaARModel, NBCopulaCSModel, GLMCopulaCSModel}
     )
     # β
     copyto!(par, gcm.β)
@@ -99,7 +101,7 @@ end
 Translate optimization variables in `par` to the model parameters in `gcm`.
 """
 function optimpar_to_modelpar!(
-        gcm :: Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel},
+        gcm :: Union{GLMCopulaARModel, NBCopulaARModel, NBCopulaCSModel, GLMCopulaCSModel},
         par :: Vector
     )
     # β
@@ -112,7 +114,7 @@ function optimpar_to_modelpar!(
 end
 
 function MathProgBase.initialize(
-    gcm::Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel},
+    gcm::Union{GLMCopulaARModel, NBCopulaARModel, NBCopulaCSModel, GLMCopulaCSModel},
     requested_features::Vector{Symbol})
     for feat in requested_features
         if !(feat in [:Grad, :Hess])
@@ -121,10 +123,10 @@ function MathProgBase.initialize(
     end
 end
 
-MathProgBase.features_available(gcm::Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel}) = [:Grad, :Hess]
+MathProgBase.features_available(gcm::Union{GLMCopulaARModel, NBCopulaARModel, NBCopulaCSModel, GLMCopulaCSModel}) = [:Grad, :Hess]
 
 function MathProgBase.eval_f(
-        gcm :: Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel},
+        gcm :: Union{GLMCopulaARModel, NBCopulaARModel, NBCopulaCSModel, GLMCopulaCSModel},
         par :: Vector
     )
     optimpar_to_modelpar!(gcm, par)
@@ -132,7 +134,7 @@ function MathProgBase.eval_f(
 end
 
 function MathProgBase.eval_grad_f(
-        gcm  :: Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel},
+        gcm  :: Union{GLMCopulaARModel, NBCopulaARModel, NBCopulaCSModel, GLMCopulaCSModel},
         grad :: Vector,
         par  :: Vector
     )
@@ -152,9 +154,9 @@ function MathProgBase.eval_grad_f(
     obj
 end
 
-MathProgBase.eval_g(gcm::Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel}, g, par) = nothing
-MathProgBase.jac_structure(gcm::Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel}) = Int[], Int[]
-MathProgBase.eval_jac_g(gcm::Union{GLMCopulaARModel, NBCopulaARModel, GLMCopulaCSModel}, J, par) = nothing
+MathProgBase.eval_g(gcm::Union{GLMCopulaARModel, NBCopulaARModel, NBCopulaCSModel, GLMCopulaCSModel}, g, par) = nothing
+MathProgBase.jac_structure(gcm::Union{GLMCopulaARModel, NBCopulaARModel, NBCopulaCSModel, GLMCopulaCSModel}) = Int[], Int[]
+MathProgBase.eval_jac_g(gcm::Union{GLMCopulaARModel, NBCopulaARModel, NBCopulaCSModel, GLMCopulaCSModel}, J, par) = nothing
 
 """
     ◺(n::Integer)
@@ -231,7 +233,7 @@ function MathProgBase.eval_hesslag(
     H .*= σ
 end
 
-function MathProgBase.hesslag_structure(gcm::Union{GLMCopulaARModel, NBCopulaARModel})
+function MathProgBase.hesslag_structure(gcm::Union{GLMCopulaARModel, NBCopulaARModel, NBCopulaCSModel})
     # we work on the upper triangular part of the Hessian
     arr1 = Vector{Int}(undef, ◺(gcm.p) + ◺(2) + gcm.p)
     arr2 = Vector{Int}(undef, ◺(gcm.p) + ◺(2) + gcm.p)
@@ -267,7 +269,7 @@ function MathProgBase.hesslag_structure(gcm::Union{GLMCopulaARModel, NBCopulaARM
 end
 
 function MathProgBase.eval_hesslag(
-        gcm :: Union{GLMCopulaARModel, NBCopulaARModel},
+        gcm :: Union{GLMCopulaARModel, NBCopulaARModel, NBCopulaCSModel},
         H   :: Vector{T},
         par :: Vector{T},
         σ   :: T,

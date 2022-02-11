@@ -299,13 +299,13 @@ function loglikelihood!(
             BLAS.gemm!('T', 'N', σ2, gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2)
             gc.added_term2 .*= inv1pq
             gc.Hβ .+= gc.added_term2
-            gc.Hβ .+= GLMCopula.glm_hessian(gc, β)
+            gc.Hβ .+= GLMCopula.glm_hessian(gc)
             # hessian for r
             gc.Hr .= nb_second_derivative(gc, ρ, σ2, r)
       end
       gc.∇β .= gc.∇β .* inv1pq
       gc.res .= gc.y .- gc.μ
-      gc.∇β .+= GLMCopula.glm_gradient(gc, β, 1.0)
+      gc.∇β .+= GLMCopula.glm_gradient(gc)
     end
     logl
 end
@@ -352,9 +352,9 @@ function loglikelihood!(
 end
 
 """
-1st derivative of loglikelihood of a sample with ρ and σ2 being the AR(1) parameterization of the covariance matrix.
+1st derivative of loglikelihood of a sample with ρ and σ2 being the AR(1) or CS parameterization of the covariance matrix.
 """
-function nb_first_derivative(gc::NBCopulaARObs, ρ::T, σ2::T, r::Number) where T <: BlasReal
+function nb_first_derivative(gc::Union{NBCopulaARObs, NBCopulaCSObs}, ρ::T, σ2::T, r::Number) where T <: BlasReal
     s = zero(T)
     # 2nd term of logl
     for j in eachindex(gc.y)
@@ -376,7 +376,7 @@ end
 """
 2nd derivative of loglikelihood of a sample with ρ and σ2 being the AR(1) parameterization of the covariance matrix.
 """
-function nb_second_derivative(gc::NBCopulaARObs, ρ::T, σ2::T, r::Number) where T <: BlasReal
+function nb_second_derivative(gc::Union{NBCopulaARObs, NBCopulaCSObs}, ρ::T, σ2::T, r::Number) where T <: BlasReal
     s = zero(T)
     # 2nd term of logl
     for j in eachindex(gc.y)

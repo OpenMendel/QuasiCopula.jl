@@ -78,63 +78,48 @@ function update_sigma_rho!(gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasRe
     nothing
 end
 
-# """
-#     update_sigma_rho!(gcm)
-#
-# Given initial estimates for 'β', initialize the correlation parameter 'ρ' and 'σ2' using empirical variance covariance matrix of Y_1 and Y_2.
-# """
-# function update_sigma_rho!(gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasReal, D<:Bernoulli, Link}
-#     println("method of moments for bernoulli")
-# N = length(gcm.data)
-# di = length(gcm.data[1].y)
-# Y = zeros(N, di)
-# for j in 1:di
-#     Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
-# end
-#     update_res!(gcm)
-#     # theoretical variance
-#     μ_ik = zeros(N)
-#     σ2_ik = zeros(N)
-#
-#     μ_imean = zeros(di)
-#     σ2_imean = zeros(di)
-#     σ2hats = zeros(di)
-#     for k in 1:di
-#         @inbounds for i in eachindex(gcm.data)
-#             μ_ik[i] = mean(gcm.data[i].μ[k])
-#         end
-#         μ_imean[k] = mean(μ_ik)
-#         @inbounds for i in eachindex(gcm.data)
-#             σ2_ik[i] = mean(gcm.data[i].varμ[k])
-#         end
-#         σ2_imean[k] = mean(σ2_ik)
-#
-#         σ2hats[k] = 2 * (mean(Y[:, k]) - μ_imean[k]) / (sqrt(σ2_imean[k]) * skewness(Y[:, k]))
-#     end
-#     σ2hat = abs(mean(σ2hats))
-#     # correlation parameter now
-    # corY = StatsBase.cor(Y)
-    # empirical_correlation_mean = mean(GLMCopula.offdiag(corY))
-#     ρhat = empirical_correlation_mean / σ2hat
-#     if ρhat > 1
-#         copyto!(gcm.ρ, 0.5)
-#     elseif ρhat < -1
-#         copyto!(gcm.ρ, -0.1)
-#     else
-#         copyto!(gcm.ρ, ρhat)
-#     end
-#     @inbounds for i in eachindex(gcm.data)
-#         get_V!(gcm.ρ[1], gcm.data[i])
-#     end
-#     fill!(gcm.Σ, 1.0)
-#     update_Σ!(gcm)
-#     if gcm.Σ[1] > 1
-#         copyto!(gcm.σ2, 1.0)
-#     else
-#         copyto!(gcm.σ2, gcm.Σ[1])
-#     end
-#     nothing
-# end
+"""
+    update_sigma_rho!(gcm)
+
+Given initial estimates for 'β', initialize the correlation parameter 'ρ' and 'σ2' using empirical variance covariance matrix of Y_1 and Y_2.
+"""
+function update_sigma_rho!(gcm::NBCopulaCSModel{T, D, Link}) where {T <: BlasReal, D, Link}
+    println("method of moments for NB CS")
+    N = length(gcm.data)
+    di = length(gcm.data[1].y)
+    Y = zeros(N, di)
+    for j in 1:di
+        Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
+    end
+    corY = StatsBase.cor(Y)
+    empirical_correlation_mean = mean(GLMCopula.offdiag(corY))
+    ρhat = empirical_correlation_mean * ( 1 + 0.5 * di + kurtosis(Y))
+    @show ρhat
+    if ρhat > 1
+        copyto!(gcm.ρ, 0.5)
+    elseif ρhat < -1
+        copyto!(gcm.ρ, -0.1)
+    else
+        copyto!(gcm.ρ, ρhat)
+    end
+    # @inbounds for i in eachindex(gcm.data)
+    #     get_V!(gcm.ρ[1], gcm.data[i])
+    # end
+    # if gcm.σ2[1] > 1.0
+    #     fill!(gcm.Σ, 1.0)
+    # else
+    #     fill!(gcm.Σ, gcm.σ2[1])
+    # end
+    # update_Σ!(gcm)
+    # @show gcm.Σ[1]
+    # if gcm.Σ[1] > 1
+    #     copyto!(gcm.σ2, 1.0)
+    # else
+    #     copyto!(gcm.σ2, gcm.Σ[1])
+    # end
+    @show gcm.σ2
+    nothing
+end
 
 function update_sigma_rho!(gcm::GLMCopulaARModel{T, D, Link}) where {T <: BlasReal, D, Link}
     N = length(gcm.data)
@@ -316,7 +301,7 @@ function initialize_model!(
     nothing
 end
 
-function initialize_model!(gcm::NBCopulaARModel{T, D, Link}) where {T <: BlasReal, D, Link}
+function initialize_model!(gcm::Union{NBCopulaARModel{T, D, Link}, NBCopulaCSModel{T, D, Link}}) where {T <: BlasReal, D, Link}
 
   # initial guess for r = 1
   fill!(gcm.r, 1)
@@ -324,22 +309,14 @@ function initialize_model!(gcm::NBCopulaARModel{T, D, Link}) where {T <: BlasRea
   # fit a Poisson regression model to estimate μ, η, β, τ
   println("Initializing NegBin r to Poisson regression values")
   nsample = length(gcm.data)
-  gcsPoisson = Vector{GLMCopulaARObs{T, Poisson{T}, LogLink}}(undef, nsample)
+  gcsPoisson = Vector{GLMCopulaCSObs{T, Poisson{T}, LogLink}}(undef, nsample)
   for (i, gc) in enumerate(gcm.data)
-      gcsPoisson[i] = GLMCopulaARObs(gc.y, gc.X, Poisson(), LogLink())
+      gcsPoisson[i] = GLMCopulaCSObs(gc.y, gc.X, Poisson(), LogLink())
   end
-  gcmPoisson = GLMCopulaARModel(gcsPoisson)
-  optm = GLMCopula.fit!(gcmPoisson, IpoptSolver(print_level = 0, max_iter = 100,
-      tol = 10^-3, hessian_approximation = "limited-memory",
-      limited_memory_max_history = 20))
-
-  # use poisson regression values of β, μ, η to initialize r, if poisson fit was successful
-  if MathProgBase.status(optm) == :Optimal
-      for i in 1:nsample
-          copyto!(gcm.data[i].μ, gcmPoisson.data[i].μ)
-          copyto!(gcm.data[i].η, gcmPoisson.data[i].η)
-      end
-      copyto!(gcm.β, gcmPoisson.β)
+  gcmPoisson = GLMCopulaCSModel(gcsPoisson)
+  initialize_model!(gcmPoisson)
+  copyto!(gcm.β, gcmPoisson.β)
+  copyto!(gcm.σ2, gcmPoisson.σ2)
 
       # update r using maximum likelihood with Newton's method
       for gc in gcm.data
@@ -350,18 +327,10 @@ function initialize_model!(gcm::NBCopulaARModel{T, D, Link}) where {T <: BlasRea
           fill!(gc.res, 0)
       end
       println("initializing r using Newton update")
-      update_r!(gcm)
-  else
-      fill!(gcm.τ, 1)
-      fill!(gcm.β, 0)
-  end
+      GLMCopula.update_r!(gcm)
 
-  println("initializing variance parameters in AR model using MM-Algorithm")
-  fill!(gcm.Σ, 1.0)
-  fill!(gcm.ρ, 1.0) # initial guess for rho is 1, because it's a random intercept model?
-  update_Σ!(gcm)
-  copyto!(gcm.σ2, gcm.Σ)
-
+  println("initializing variance parameters in CS model using mom")
+  update_sigma_rho!(gcm)
   nothing
 end
 

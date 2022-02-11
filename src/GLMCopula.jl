@@ -5,7 +5,7 @@ using SpecialFunctions, Random
 @reexport using Ipopt
 @reexport using NLopt
 
-export fit!, fit2!, update_Σ_jensen!, init_β!, initialize_model!, loglikelihood!, standardize_res!, std_res_differential!
+export fit!, update_Σ_jensen!, init_β!, initialize_model!, loglikelihood!, standardize_res!, std_res_differential!
 export update_res!, update_Σ!
 export update_∇Σ!, update_HΣ! # update gradient and hessian of variance components
 export glm_regress_jl, glm_regress_model, glm_score_statistic!  # these are to initialize our model
@@ -220,13 +220,14 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: B
         storage_n, storage_m, storage_Σ, d, link)
 end
 
+include("parameter_estimation/NBCopulaCS.jl")
 include("parameter_estimation/compound_symmetric.jl")
 include("parameter_estimation/bivariate_mixed.jl")
 include("parameter_estimation/gaussian_VC.jl")
-include("parameter_estimation/autoregressive.jl")
 include("parameter_estimation/gaussian_AR.jl")
 include("parameter_estimation/NBCopulaAR.jl")
 include("parameter_estimation/NBCopulaVC.jl")
+include("parameter_estimation/autoregressive.jl")
 include("generate_random_deviates/discrete_rand.jl")
 include("generate_random_deviates/continuous_rand.jl")
 include("generate_random_deviates/multivariate_rand.jl")
