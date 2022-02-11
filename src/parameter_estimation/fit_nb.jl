@@ -54,7 +54,7 @@ function fit!(
 end
 
 function fit!(
-    gcm::Union{NBCopulaARModel, NBCopulaCSModel},
+    gcm::NBCopulaARModel,
     solver=Ipopt.IpoptSolver(print_level=0, max_iter=12, warm_start_init_point="yes",
                              hessian_approximation = "limited-memory");
     tol::Float64 = 1e-6,
@@ -72,6 +72,54 @@ function fit!(
         lb[offset] = 0
         offset += 1
     end
+    MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Max, gcm)
+    # starting point
+    par0 = zeros(npar)
+    modelpar_to_optimpar!(par0, gcm)
+    MathProgBase.setwarmstart!(optm, par0)
+    logl0 = MathProgBase.getobjval(optm)
+    println("Converging when tol ≤ $tol (max block iter = $maxBlockIter)")
+    # optimize
+    for i in 1:maxBlockIter
+        MathProgBase.optimize!(optm)
+        logl = MathProgBase.getobjval(optm)
+        update_r!(gcm)
+        if abs(logl - logl0) / (1 + abs(logl0)) ≤ tol # this is faster but has wider confidence intervals
+            # if abs(logl - logl0) ≤ tol # this is slower but has very tight confidence intervals
+            break
+        else
+            println("Block iter $i r = $(round(gcm.r[1], digits=2))," *
+            " logl = $(round(logl, digits=2)), tol = $(abs(logl - logl0) / (1 + abs(logl0)))")
+            logl0 = logl
+        end
+    end
+    # update parameters and refresh gradient
+    optimpar_to_modelpar!(gcm, MathProgBase.getsolution(optm))
+    loglikelihood!(gcm, true, false)
+    # gcm
+end
+
+function fit!(
+    gcm::NBCopulaCSModel,
+    solver=Ipopt.IpoptSolver(print_level=0, max_iter=12, warm_start_init_point="yes",
+                             hessian_approximation = "limited-memory");
+    tol::Float64 = 1e-6,
+    maxBlockIter::Int=100
+    )
+    initialize_model!(gcm)
+    npar = gcm.p + 2 # rho and sigma squared
+    optm = MathProgBase.NonlinearModel(solver)
+    # set lower bounds and upper bounds of parameters
+    lb   = fill(-Inf, npar)
+    ub   = fill(Inf, npar)
+    offset = gcm.p + 1
+    # rho
+    ub[offset] = 1
+    # lb[offset] = 0
+    lb[offset] = -inv(gcm.data[1].n - 1)
+    offset += 1
+    # sigma2
+    lb[offset] = 0
     MathProgBase.loadproblem!(optm, npar, 0, lb, ub, Float64[], Float64[], :Max, gcm)
     # starting point
     par0 = zeros(npar)
