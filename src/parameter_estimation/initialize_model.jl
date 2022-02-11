@@ -138,7 +138,7 @@ function update_sigma_rho!(gcm::GLMCopulaARModel{T, D, Link}) where {T <: BlasRe
     end
     σ2_k_mean = mean(σ2_k)
 
-    ρhat = ((empirical_covariance_mat[1, di] * (1 + 0.5 * di * gcm.σ2[1]) / σ2_k_mean)/gcm.σ2[1])^(1/(di - 1))
+    ρhat = abs((empirical_covariance_mat[1, di] * (1 + 0.5 * di * gcm.σ2[1]) / σ2_k_mean)/gcm.σ2[1])^(1/(di - 1))
     @show ρhat
     if ρhat < 0
         copyto!(gcm.ρ, 0.1)

@@ -101,7 +101,7 @@ end
 
 function fit!(
     gcm::NBCopulaCSModel,
-    solver=Ipopt.IpoptSolver(print_level=0, max_iter=12, warm_start_init_point="yes",
+    solver=Ipopt.IpoptSolver(print_level=0, max_iter=20, warm_start_init_point="yes",
                              hessian_approximation = "limited-memory");
     tol::Float64 = 1e-6,
     maxBlockIter::Int=100
@@ -134,6 +134,8 @@ function fit!(
         update_r!(gcm)
         if abs(logl - logl0) / (1 + abs(logl0)) ≤ tol # this is faster but has wider confidence intervals
             # if abs(logl - logl0) ≤ tol # this is slower but has very tight confidence intervals
+            println("Block iter $i r = $(round(gcm.r[1], digits=2))," *
+            " logl = $(round(logl, digits=2)), tol = $(abs(logl - logl0) / (1 + abs(logl0)))")
             break
         else
             println("Block iter $i r = $(round(gcm.r[1], digits=2))," *
