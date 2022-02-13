@@ -1,5 +1,5 @@
 using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, CategoricalArrays
-using Random, Roots, SpecialFunctions
+using Random, Roots, SpecialFunctions, LoopVectorization
 using DataFrames, DelimitedFiles, Statistics, ToeplitzMatrices
 import StatsBase: sem
 
@@ -7,10 +7,10 @@ p = 3    # number of fixed effects, including intercept
 
 # true parameter values
 Random.seed!(12345)
-βtrue = rand(Uniform(-2, 2), p)
+βtrue = rand(Uniform(-0.2, 0.2), p)
 # βtrue = 0.1 * ones(p)
 σ2true = [0.5]
-ρtrue = [-0.05]
+ρtrue = [0.5]
 
 function get_V(ρ, n)
     vec = zeros(n)
@@ -75,27 +75,32 @@ initialize_model!(gcm)
 @show gcm.ρ
 @show gcm.σ2
 
+gc = gcm.data[1];
+
 loglikelihood!(gcm, true, true)
+
+
+using BenchmarkTools
+# @benchmark update_res!($gc, $gcm.β)
+# @benchmark update_res2!($gc, $gcm.β)
 #
-gcm2 = deepcopy(gcm);
-gcm3 = deepcopy(gcm);
-gcm4 = deepcopy(gcm);
+# function std_res_differential2!(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}}) where {T<: BlasReal, D<:Poisson{T}, Link}
+#     @inbounds for i in 1:size(gc.X, 2)
+#         @turbo for j in 1:length(gc.y)
+#             gc.∇resβ[j, i] = gc.X[j, i]
+#             gc.∇resβ[j, i] *= -(inv(sqrt(gc.varμ[j])) + (0.5 * inv(gc.varμ[j])) * gc.res[j]) * gc.dμ[j]
+#         end
+#     end
+#     nothing
+# end
 #
-# # fittime = @elapsed GLMCopula.fit!(gcm3, IpoptSolver(print_level = 5, max_iter = 200, tol = 10^-7, accept_after_max_steps = 3, warm_start_init_point="yes", mu_strategy = "adaptive", mu_oracle = "probing", hessian_approximation = "exact"))
-# fittime1 = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 20, warm_start_init_point="yes", mu_strategy = "adaptive", mu_oracle = "probing", hessian_approximation = "limited-memory"))
-# # @show gcm.β
-# # @show gcm.ρ
-# # @show gcm.σ2
-# @show fittime1
-# @show gcm.θ
-# @show gcm.∇θ
-# loglikelihood!(gcm, true, true)
-# vcov!(gcm)
-# @show GLMCopula.confint(gcm)
-# mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
-# @show mseβ
-# @show mseσ2
-# @show mseρ
+# @benchmark std_res_differential!($gc)
+# @benchmark std_res_differential2!($gc)
+
+@benchmark loglikelihood!($gcm, true, false)
+# revise()
+# @benchmark loglikelihood!($gcm, true, true)
+
 
 fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, accept_after_max_steps = 2, limited_memory_max_history = 20, warm_start_init_point="yes", mu_strategy = "adaptive", mu_oracle = "probing", derivative_test = "first-order", hessian_approximation = "limited-memory"))
 loglikelihood!(gcm, true, true)
@@ -108,15 +113,3 @@ mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
 @show mseβ
 @show mseσ2
 @show mseρ
-#
-# fittime = @elapsed GLMCopula.fit!(gcm2, IpoptSolver(print_level = 5, max_iter = 200, tol = 10^-7, accept_after_max_steps = 3, warm_start_init_point="yes", mu_strategy = "adaptive", hessian_approximation_space = "all-variables", mu_oracle = "probing", hessian_approximation = "exact"))
-# @show fittime
-# @show gcm2.θ
-# @show gcm2.∇θ
-# loglikelihood!(gcm2, true, true)
-# vcov!(gcm2)
-# @show GLMCopula.confint(gcm2)
-# mseβ, mseρ, mseσ2 = MSE(gcm2, βtrue, ρtrue, σ2true)
-# @show mseβ
-# @show mseσ2
-# @show mseρ

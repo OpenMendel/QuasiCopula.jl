@@ -5,11 +5,12 @@ using ToeplitzMatrices
 function run_test()
     p_fixed = 3    # number of fixed effects, including intercept
     # true parameter values
-    Random.seed!(1234)
-    βtrue = randn(p_fixed)
-    rtrue = 10.0
+    Random.seed!(12345)
+    # try next
+    βtrue = rand(Uniform(-2, 2), p_fixed)
     σ2true = [0.5]
-    ρtrue = [0.9]
+    ρtrue = [0.5]
+    rtrue = 10.0
 
     function get_V(ρ, n)
         vec = zeros(n)
@@ -28,7 +29,6 @@ function run_test()
 
     #simulation parameters
     samplesizes = [100; 1000; 10000]
-    # ns = [5]
     ns = [2; 5; 10; 15; 20; 25]
     nsims = 100
 
@@ -62,10 +62,12 @@ function run_test()
 
             for j in 1:nsims
                 println("rep $j obs per person $ni samplesize $m")
-                Y_nsample = []
+                # Y_nsample = []
+                Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k)
+                X_samplesize = [randn(ni, p_fixed - 1) for i in 1:m]
                 for i in 1:m
                     # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-                    X = [ones(ni) randn(ni, p_fixed - 1)]
+                    X = [ones(ni) X_samplesize[i]]
                     η = X * βtrue
                     μ = exp.(η)
                     p = rtrue ./ (μ .+ rtrue)
@@ -83,14 +85,14 @@ function run_test()
                     # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     rand(nonmixed_multivariate_dist, y, res)
                     gcs[i] = NBCopulaARObs(y, X, d,link)
-                    push!(Y_nsample, y)
+                    # push!(Y_nsample, y)
                 end
 
                 # form model
                 gcm = NBCopulaARModel(gcs);
                 fittime = NaN
                 try
-                    fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter = 30, tol=1e-6)
+                    fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter = 20, tol=1e-6)
                     @show fittime
                     @show gcm.θ
                     @show gcm.∇θ

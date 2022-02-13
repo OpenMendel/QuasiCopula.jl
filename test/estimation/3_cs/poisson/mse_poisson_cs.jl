@@ -1,17 +1,19 @@
 using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, CategoricalArrays
-using Random, Roots, SpecialFunctions, StatsFuns, Distributions, DataFrames, ToeplitzMatrices
+using Random, Roots, SpecialFunctions, StatsFuns, Distributions, DataFrames, ToeplitzMatrices, StatsBase
 
 function run_test()
-    p = 3   # number of fixed effects, including intercept
+    p = 3    # number of fixed effects, including intercept
 
     # true parameter values
-    Random.seed!(1234)
-    βtrue = rand(Uniform(-0.2, 0.2), p)
-    # σ2true = [0.5]
-    # ρtrue = [0.9]
-    # βtrue = 0.1 * ones(p)
-    σ2true = [0.1]
-    ρtrue = [-0.04]
+    Random.seed!(12345)
+    βtrue = rand(Uniform(-2, 2), p)
+    # βtrue = randn(p)
+    σ2true = [0.5]
+    ρtrue = [0.5]
+
+#     βtrue = [log(5.0)]
+#     σ2true = [0.1]
+#     ρtrue = [-0.6]
 
     function get_V(ρ, n)
         vec = zeros(n)
@@ -22,6 +24,7 @@ function run_test()
         V = ToeplitzMatrices.SymmetricToeplitz(vec)
         V
     end
+
     # generate data
     intervals = zeros(p + 2, 2) #hold intervals
     curcoverage = zeros(p + 2) #hold current coverage resutls
@@ -29,7 +32,7 @@ function run_test()
 
     #simulation parameters
     samplesizes = [100; 1000; 10000]
-    ns = [2; 5; 10; 15; 20; 25]
+    ns = [2 ; 5; 10; 15; 20; 25]
     nsims = 100
 
     #storage for our results
@@ -38,8 +41,6 @@ function run_test()
     ρMseResults = ones(nsims * length(ns) * length(samplesizes))
     βρσ2coverage = Matrix{Float64}(undef, p + 2, nsims * length(ns) * length(samplesizes))
     fittimes = zeros(nsims * length(ns) * length(samplesizes))
-
-    solver = Ipopt.IpoptSolver(print_level = 5)
 
     st = time()
     currentind = 1
@@ -61,9 +62,10 @@ function run_test()
 
             for j in 1:nsims
                 println("rep $j obs per person $ni samplesize $m")
-                Ystack = []
+                Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k)
+                X_samplesize = [randn(ni, p - 1) for i in 1:m]
                 for i in 1:m
-                    X = [ones(ni) randn(ni, p - 1)]
+                    X = [ones(ni) X_samplesize[i]]
                     η = X * βtrue
                     μ = exp.(η)
                     vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
@@ -75,7 +77,6 @@ function run_test()
                     y = Vector{Float64}(undef, ni)
                     res = Vector{Float64}(undef, ni)
                     rand(nonmixed_multivariate_dist, y, res)
-                    push!(Ystack, y)
                     V = [ones(ni, ni)]
                     gcs[i] = GLMCopulaCSObs(y, X, d, link)
                 end
@@ -87,9 +88,9 @@ function run_test()
                 @show gcm.β
                 @show gcm.ρ
                 @show gcm.σ2
-
+                loglikelihood!(gcm, true, true)
                 try
-                    # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
+#                   fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 200, tol = 10^-7, accept_after_max_steps = 2, warm_start_init_point="yes", mu_strategy = "adaptive", tau_min = 0.25, mu_oracle = "probing", hessian_approximation = "exact"))
                     fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, accept_after_max_steps = 2, limited_memory_max_history = 20, warm_start_init_point="yes", mu_strategy = "adaptive", mu_oracle = "probing", hessian_approximation = "limited-memory"))
                     @show fittime
                     @show gcm.θ
@@ -126,12 +127,12 @@ function run_test()
     @show en - st #seconds
     @info "writing to file..."
     ftail = "multivariate_poisson_CS$(nsims)reps_sim.csv"
-    writedlm("mse_poisson_cs/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("mse_poisson_cs/mse_sigma_" * ftail, σ2MseResults, ',')
-    writedlm("mse_poisson_cs/mse_rho_" * ftail, ρMseResults, ',')
-    writedlm("mse_poisson_cs/fittimes_" * ftail, fittimes, ',')
+    writedlm("compound_symmetry/mse_poisson_cs/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("compound_symmetry/mse_poisson_cs/mse_sigma_" * ftail, σ2MseResults, ',')
+    writedlm("compound_symmetry/mse_poisson_cs/mse_rho_" * ftail, ρMseResults, ',')
+    writedlm("compound_symmetry/mse_poisson_cs/fittimes_" * ftail, fittimes, ',')
 
-    writedlm("mse_poisson_cs/beta_sigma_coverage_" * ftail, βρσ2coverage, ',')
+    writedlm("compound_symmetry/mse_poisson_cs/beta_sigma_coverage_" * ftail, βρσ2coverage, ',')
 end
 
 run_test()

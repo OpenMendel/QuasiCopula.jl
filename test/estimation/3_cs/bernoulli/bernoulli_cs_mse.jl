@@ -1,17 +1,16 @@
 using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, CategoricalArrays
 using Random, Roots, SpecialFunctions, StatsFuns, Distributions, DataFrames, ToeplitzMatrices
+using DataFrames, Statistics, RCall, Printf
+import StatsBase: sem
 
 function run_test()
     p = 3   # number of fixed effects, including intercept
 
     # true parameter values
-    Random.seed!(1234)
-    βtrue = rand(Uniform(-0.2, 0.2), p)
-    # σ2true = [0.5]
-    # ρtrue = [0.9]
-    # βtrue = 0.1 * ones(p)
-    σ2true = [0.1]
-    ρtrue = [-0.04]
+    Random.seed!(12345)
+    βtrue = rand(Uniform(-2, 2), p)
+    σ2true = [0.5]
+    ρtrue = [0.5]
 
     function get_V(ρ, n)
         vec = zeros(n)
@@ -28,12 +27,9 @@ function run_test()
     trueparams = [βtrue; ρtrue; σ2true] #hold true parameters
 
     #simulation parameters
-    # samplesize = [10000]
     samplesizes = [100; 1000; 10000]
     ns = [2; 5; 10; 15; 20; 25]
-    # ns = [25]
-    # nsims = 1
-    nsims = 5
+    nsims = 100
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -65,8 +61,10 @@ function run_test()
             for j in 1:nsims
                 println("rep $j obs per person $ni samplesize $m")
                 Ystack = []
+                Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k)
+                X_samplesize = [randn(ni, p - 1) for i in 1:m]
                 for i in 1:m
-                    X = [ones(ni) randn(ni, p - 1)]
+                    X = [ones(ni) X_samplesize[i]]
                     η = X * βtrue
                     μ = exp.(η) ./ (1 .+ exp.(η))
                     vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
@@ -87,6 +85,9 @@ function run_test()
                 gcm = GLMCopulaCSModel(gcs);
                 fittime = NaN
                 initialize_model!(gcm)
+                # GLMCopula.initialize_beta!(gcm)
+                # copyto!(gcm.σ2, 0.1)
+                # copyto!(gcm.ρ, 0.2)
                 @show gcm.β
                 @show gcm.ρ
                 @show gcm.σ2
@@ -135,6 +136,7 @@ function run_test()
     writedlm("mse_bernoulli_cs/fittimes_" * ftail, fittimes, ',')
 
     writedlm("mse_bernoulli_cs/beta_sigma_coverage_" * ftail, βρσ2coverage, ',')
+
 end
 
 run_test()

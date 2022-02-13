@@ -121,7 +121,7 @@ function update_sigma_rho!(gcm::NBCopulaCSModel{T, D, Link}) where {T <: BlasRea
     nothing
 end
 
-function update_sigma_rho!(gcm::GLMCopulaARModel{T, D, Link}) where {T <: BlasReal, D, Link}
+function update_sigma_rho!(gcm::Union{GLMCopulaARModel{T, D, Link}, NBCopulaARModel{T, D, Link}}) where {T <: BlasReal, D, Link}
     N = length(gcm.data)
     di = length(gcm.data[1].y)
     Y = zeros(N, di)

@@ -5,10 +5,11 @@ function run_test()
     p = 3    # number of fixed effects, including intercept
 
     # true parameter values
-    Random.seed!(1234)
-    βtrue = randn(p)
+    Random.seed!(12345)
+    # try next
+    βtrue = rand(Uniform(-2, 2), p)
     σ2true = [0.5]
-    ρtrue = [0.9]
+    ρtrue = [0.5]
     τtrue = 10
 
     function get_V(ρ, n)
@@ -29,7 +30,6 @@ function run_test()
     #simulation parameters
     # samplesizes = [10000]
     samplesizes = [100; 1000; 10000]
-    # ns = [10]
     ns = [2; 5; 10; 15; 20; 25]
     nsims = 100
 
@@ -60,8 +60,12 @@ function run_test()
             for j in 1:nsims
                 println("rep $j obs per person $ni samplesize $m")
                 Y_nsample = []
+                Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k)
+                X_samplesize = [randn(ni, p - 1) for i in 1:m]
                 for i in 1:m
-                    X = [ones(ni) randn(ni, p - 1)]
+                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
+                    # X = [ones(ni) randn(ni, p - 1)]
+                    X = [ones(ni) X_samplesize[i]]
                     μ = X * βtrue
                     vecd = Vector{ContinuousUnivariateDistribution}(undef, length(μ))
                     for i in 1:length(μ)
@@ -71,10 +75,12 @@ function run_test()
                     # simuate single vector y
                     y = Vector{Float64}(undef, ni)
                     res = Vector{Float64}(undef, ni)
+                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
                     # simuate single vector y
                     y = Vector{Float64}(undef, ni)
                     res = Vector{Float64}(undef, ni)
+                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     rand(nonmixed_multivariate_dist, y, res)
                     gcs[i] = GaussianCopulaARObs(y, X)
                     push!(Y_nsample, y)
@@ -82,12 +88,20 @@ function run_test()
 
                 # form model
                 gcm = GaussianCopulaARModel(gcs);
-                fittime = NaN
-                initialize_model!(gcm)
-                @show gcm.β
-                @show gcm.ρ
-                @show gcm.σ2
-                @show gcm.τ
+#                 fittime = NaN
+#                 initialize_model!(gcm)
+#                 @show gcm.β
+#                 @show gcm.ρ
+#                 @show gcm.σ2
+#                 @show gcm.τ
+
+                # ### now sigma2 is initialized now we need rho
+                # Y_1 = [Y_nsample[i][1] for i in 1:m]
+                # Y_2 = [Y_nsample[i][2] for i in 1:m]
+                #
+                # update_rho!(gcm, Y_1, Y_2)
+                # @show gcm.ρ
+                # @show gcm.σ2
                 try
                     fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-6, limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
                     # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))

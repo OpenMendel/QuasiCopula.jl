@@ -9,8 +9,8 @@ p = 3    # number of fixed effects, including intercept
 Random.seed!(12345)
 βtrue = rand(Uniform(-0.2, 0.2), p)
 # βtrue = [log(5.0)]
-σ2true = [1.0]
-ρtrue = [0.9]
+σ2true = [0.5]
+ρtrue = [0.5]
 trueparams = [βtrue; ρtrue; σ2true]
 
 function get_V(ρ, n)
@@ -77,20 +77,20 @@ end
 # form model
 gcm = GLMCopulaARModel(gcs);
 
-
-N = length(gcm.data)
-di = length(gcm.data[1].y)
-Y = zeros(N, di)
-for j in 1:di
-    Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
-end
-# empirical_covariance_mat = scattermat(Y) ./ N
-StatsBase.cor(Y)
-
-initialize_model!(gcm)
-@show gcm.β
-@show gcm.ρ
-@show gcm.σ2
+# 
+# N = length(gcm.data)
+# di = length(gcm.data[1].y)
+# Y = zeros(N, di)
+# for j in 1:di
+#     Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
+# end
+# # empirical_covariance_mat = scattermat(Y) ./ N
+# StatsBase.cor(Y)
+#
+# initialize_model!(gcm)
+# @show gcm.β
+# @show gcm.ρ
+# @show gcm.σ2
 
 loglikelihood!(gcm, true, true)
 

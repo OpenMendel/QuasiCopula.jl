@@ -5,11 +5,11 @@ function run_test()
     p = 3    # number of fixed effects, including intercept
 
     # true parameter values
-    Random.seed!(1234)
+    Random.seed!(12345)
     # try next
-    βtrue = rand(Uniform(-0.2, 0.2), p)
+    βtrue = rand(Uniform(-2, 2), p)
     σ2true = [0.5]
-    ρtrue = [0.9]
+    ρtrue = [0.5]
 
     function get_V(ρ, n)
         vec = zeros(n)
@@ -29,6 +29,7 @@ function run_test()
     #simulation parameters
     samplesizes = [100; 1000; 10000]
     ns = [2; 5; 10; 15; 20; 25]
+    # ns = [25]
     nsims = 100
 
     #storage for our results
@@ -82,20 +83,13 @@ function run_test()
                 # form model
                 gcm = GLMCopulaARModel(gcs);
                 fittime = NaN
-                initialize_model!(gcm)
+                initialize_model2!(gcm)
                 @show gcm.β
                 @show gcm.ρ
                 @show gcm.σ2
-
-                # ### now sigma2 is initialized now we need rho
-                # Y_1 = [Y_nsample[i][1] for i in 1:m]
-                # Y_2 = [Y_nsample[i][2] for i in 1:m]
-                #
-                # update_rho!(gcm, Y_1, Y_2)
-                # @show gcm.ρ
-                # @show gcm.σ2
                  try
-                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, derivative_test = "first-order", limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
+                    #fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, warm_start_init_point="yes", tol = 10^-8, limited_memory_max_history = 20, accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
+                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, warm_start_init_point="yes", accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
                     # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
                     @show fittime
                     @show gcm.θ

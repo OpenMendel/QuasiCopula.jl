@@ -24,9 +24,8 @@ end
 trueparams = [βtrue; ρtrue; σ2true] #hold true parameters
 
 #simulation parameters
-samplesize = 100
-ni = 5
-
+samplesize = 10000
+ni = 25
 
 st = time()
 currentind = 1
@@ -67,7 +66,7 @@ end
 
 # form model
 gcm = GLMCopulaARModel(gcs);
-fittime = NaN
+# fittime = NaN
 initialize_model!(gcm)
 @show gcm.β
 @show gcm.ρ

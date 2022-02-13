@@ -28,8 +28,9 @@ function run_test()
 
     #simulation parameters
     samplesizes = [100; 1000; 10000]
+    # ns = [5]
     ns = [2; 5; 10; 15; 20; 25]
-    nsims = 5
+    nsims = 100
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -60,9 +61,12 @@ function run_test()
             for j in 1:nsims
                 println("rep $j obs per person $ni samplesize $m")
                 Y_nsample = []
+                Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k)
+                X_samplesize = [randn(ni, p_fixed - 1) for i in 1:m]
                 for i in 1:m
                     # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-                    X = [ones(ni) randn(ni, p_fixed - 1)]
+                    # X = [ones(ni) randn(ni, p_fixed - 1)]
+                    X = [ones(ni) X_samplesize[i]]
                     η = X * βtrue
                     μ = exp.(η)
                     p = rtrue ./ (μ .+ rtrue)
@@ -87,7 +91,7 @@ function run_test()
                 gcm = NBCopulaCSModel(gcs);
                 fittime = NaN
                 try
-                    fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter = 30, tol=1e-6)
+                    fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter = 20, tol=1e-6)
                     @show fittime
                     @show gcm.θ
                     @show gcm.∇θ
@@ -131,12 +135,12 @@ function run_test()
     @show en - st #seconds
     @info "writing to file..."
     ftail = "multivariate_nb_CS$(nsims)reps_sim.csv"
-    writedlm("nb/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("nb/mse_r_" * ftail, rMseResults, ',')
-    writedlm("nb/mse_sigma_" * ftail, σ2MseResults, ',')
-    writedlm("nb/mse_rho_" * ftail, ρMseResults, ',')
-    writedlm("nb/fittimes_" * ftail, fittimes, ',')
+    writedlm("compound_symmetry/mse_nb_cs/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("compound_symmetry/mse_nb_cs/mse_r_" * ftail, rMseResults, ',')
+    writedlm("compound_symmetry/mse_nb_cs/mse_sigma_" * ftail, σ2MseResults, ',')
+    writedlm("compound_symmetry/mse_nb_cs/mse_rho_" * ftail, ρMseResults, ',')
+    writedlm("compound_symmetry/mse_nb_cs/fittimes_" * ftail, fittimes, ',')
 
-    writedlm("nb/beta_rho_sigma_coverage_" * ftail, βρσ2rcoverage, ',')
+    writedlm("compound_symmetry/mse_nb_cs/beta_rho_sigma_coverage_" * ftail, βρσ2rcoverage, ',')
 end
 run_test()

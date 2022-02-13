@@ -5,10 +5,11 @@ function run_test()
     p = 3    # number of fixed effects, including intercept
 
     # true parameter values
-    Random.seed!(1234)
-    βtrue = randn(p)
+    Random.seed!(12345)
+    # try next
+    βtrue = rand(Uniform(-2, 2), p)
     σ2true = [0.5]
-    ρtrue = [0.9]
+    ρtrue = [0.5]
 
     function get_V(ρ, n)
         vec = zeros(n)
@@ -60,10 +61,13 @@ function run_test()
             for j in 1:nsims
                 println("rep $j obs per person $ni samplesize $m")
                 Y_nsample = []
+                Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k)
+                X_samplesize = [randn(ni, p - 1) for i in 1:m]
                 for i in 1:m
                     # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-                    X = [ones(ni) randn(ni, p - 1)]
+#                     X = [ones(ni) randn(ni, p - 1)]
+                    X = [ones(ni) X_samplesize[i]]
                     η = X * βtrue
                     μ = exp.(η)
                     vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
@@ -85,10 +89,10 @@ function run_test()
                 # form model
                 gcm = GLMCopulaARModel(gcs);
                 fittime = NaN
-                initialize_model!(gcm)
-                @show gcm.β
-                @show gcm.ρ
-                @show gcm.σ2
+#                 initialize_model!(gcm)
+#                 @show gcm.β
+#                 @show gcm.ρ
+#                 @show gcm.σ2
                 try
                     fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, hessian_approximation = "limited-memory"))
                     # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
