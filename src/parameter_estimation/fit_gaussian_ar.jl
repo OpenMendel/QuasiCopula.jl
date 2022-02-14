@@ -1,12 +1,12 @@
 export ◺
 """
-    fit!(gcm::GaussianCopulaARModel)
+    fit!(gcm)
 
-Fit an `GaussianCopulaARModel` object by MLE using a nonlinear programming solver. Start point
+Fit a `GaussianCopulaARModel` or `GaussianCopulaCSModel` object by MLE using a nonlinear programming solver. Start point
 should be provided in `gcm.β`, `gcm.τ`, `gcm.ρ`, `gcm.σ2`.
 """
 function fit!(
-        gcm::GaussianCopulaARModel,
+        gcm::Union{GaussianCopulaARModel, GaussianCopulaCSModel},
         solver=Ipopt.IpoptSolver(print_level = 5)
     )
     npar = gcm.p + 3 # tau, rho and sigma squared
@@ -42,7 +42,7 @@ Translate model parameters in `gcm` to optimization variables in `par`.
 """
 function modelpar_to_optimpar!(
         par :: Vector,
-        gcm :: GaussianCopulaARModel
+        gcm ::Union{GaussianCopulaARModel, GaussianCopulaCSModel}
     )
     # β
     copyto!(par, gcm.β)
@@ -60,7 +60,7 @@ end
 Translate optimization variables in `par` to the model parameters in `gcm`.
 """
 function optimpar_to_modelpar!(
-        gcm :: GaussianCopulaARModel,
+        gcm :: Union{GaussianCopulaARModel, GaussianCopulaCSModel},
         par :: Vector
     )
     # β
@@ -75,7 +75,7 @@ function optimpar_to_modelpar!(
 end
 
 function MathProgBase.initialize(
-    gcm::GaussianCopulaARModel,
+    gcm::Union{GaussianCopulaARModel, GaussianCopulaCSModel},
     requested_features::Vector{Symbol})
     for feat in requested_features
         if !(feat in [:Grad, :Hess])
@@ -84,10 +84,10 @@ function MathProgBase.initialize(
     end
 end
 
-MathProgBase.features_available(gcm::GaussianCopulaARModel) = [:Grad, :Hess]
+MathProgBase.features_available(gcm::Union{GaussianCopulaARModel, GaussianCopulaCSModel}) = [:Grad, :Hess]
 
 function MathProgBase.eval_f(
-        gcm :: GaussianCopulaARModel,
+        gcm :: Union{GaussianCopulaARModel, GaussianCopulaCSModel},
         par :: Vector
     )
     optimpar_to_modelpar!(gcm, par)
@@ -95,7 +95,7 @@ function MathProgBase.eval_f(
 end
 
 function MathProgBase.eval_grad_f(
-        gcm    :: GaussianCopulaARModel,
+        gcm    :: Union{GaussianCopulaARModel, GaussianCopulaCSModel},
         grad :: Vector,
         par  :: Vector
     )
@@ -117,12 +117,12 @@ function MathProgBase.eval_grad_f(
     obj
 end
 
-MathProgBase.eval_g(gcm::GaussianCopulaARModel, g, par) = nothing
-MathProgBase.jac_structure(gcm::GaussianCopulaARModel) = Int[], Int[]
-MathProgBase.eval_jac_g(gcm::GaussianCopulaARModel, J, par) = nothing
+MathProgBase.eval_g(gcm::Union{GaussianCopulaARModel, GaussianCopulaCSModel}, g, par) = nothing
+MathProgBase.jac_structure(gcm::Union{GaussianCopulaARModel, GaussianCopulaCSModel}) = Int[], Int[]
+MathProgBase.eval_jac_g(gcm::Union{GaussianCopulaARModel, GaussianCopulaCSModel}, J, par) = nothing
 
 
-function MathProgBase.hesslag_structure(gcm::GaussianCopulaARModel)
+function MathProgBase.hesslag_structure(gcm::Union{GaussianCopulaARModel, GaussianCopulaCSModel})
     # we work on the upper triangular part of the Hessian
     arr1 = Vector{Int}(undef, ◺(gcm.p) + ◺(2) + gcm.p + 1)
     arr2 = Vector{Int}(undef, ◺(gcm.p) + ◺(2) + gcm.p + 1)
@@ -161,7 +161,7 @@ function MathProgBase.hesslag_structure(gcm::GaussianCopulaARModel)
 end
 
 function MathProgBase.eval_hesslag(
-        gcm   :: GaussianCopulaARModel,
+        gcm   :: Union{GaussianCopulaARModel, GaussianCopulaCSModel},
         H   :: Vector{T},
         par :: Vector{T},
         σ   :: T,

@@ -1,5 +1,6 @@
 module GLMCopula
 using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Distributions, StatsFuns, Statistics, StatsBase, ToeplitzMatrices
+# using LoopVectorization
 using LinearAlgebra: BlasReal, copytri!
 using SpecialFunctions, Random
 @reexport using Ipopt
@@ -220,6 +221,7 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: B
         storage_n, storage_m, storage_Σ, d, link)
 end
 
+include("parameter_estimation/gaussian_CS.jl")
 include("parameter_estimation/NBCopulaCS.jl")
 include("parameter_estimation/compound_symmetric.jl")
 include("parameter_estimation/bivariate_mixed.jl")
