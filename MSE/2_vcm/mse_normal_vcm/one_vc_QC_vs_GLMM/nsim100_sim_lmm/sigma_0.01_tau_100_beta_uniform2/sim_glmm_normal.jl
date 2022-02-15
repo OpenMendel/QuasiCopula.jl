@@ -10,7 +10,7 @@ function runtest()
     Random.seed!(12345)
     βtrue = rand(Uniform(-2, 2), p)
     # βtrue = ones(p)
-    Σtrue = [0.05]
+    Σtrue = [0.01]
     τtrue = 100.0
     σ2 = inv(τtrue)
     σ = sqrt(σ2)
@@ -22,9 +22,8 @@ function runtest()
 
     #simulation parameters
     samplesizes = [100; 1000; 10000]
-    ns = [5]
-    # ns = [2; 5; 10; 15; 20; 25]
-    nsims = 1
+    ns = [2; 5; 10; 15; 20; 25]
+    nsims = 100
 
    #storage for our results
    βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -159,17 +158,17 @@ function runtest()
     @show en - st #seconds
     @info "writing to file..."
     ftail = "normal$(nsims)reps_sim.csv"
-    writedlm("sim_glmm_vs_ours_random_int/normal_sim_lmm/mse_beta_multivariate_" * ftail, βMseResults, ',')
-    writedlm("sim_glmm_vs_ours_random_int/normal_sim_lmm/mse_Sigma_multivariate_" * ftail, ΣMseResults, ',')
-    writedlm("sim_glmm_vs_ours_random_int/normal_sim_lmm/mse_tau_multivariate_" * ftail, τMseResults, ',')
-    writedlm("sim_glmm_vs_ours_random_int/normal_sim_lmm/fittimes_multivariate_" * ftail, fittimes, ',')
+    writedlm("mse_beta_multivariate_" * ftail, βMseResults, ',')
+    writedlm("mse_Sigma_multivariate_" * ftail, ΣMseResults, ',')
+    writedlm("mse_tau_multivariate_" * ftail, τMseResults, ',')
+    writedlm("fittimes_multivariate_" * ftail, fittimes, ',')
 
-    writedlm("sim_glmm_vs_ours_random_int/normal_sim_lmm/beta_sigma_tau_coverage_" * ftail, βτΣcoverage, ',')
+    writedlm("beta_sigma_tau_coverage_" * ftail, βτΣcoverage, ',')
 
     # glmm
-    writedlm("sim_glmm_vs_ours_random_int/normal_sim_lmm/mse_beta_GLMM_" * ftail, βMseResults_GLMM, ',')
-    writedlm("sim_glmm_vs_ours_random_int/normal_sim_lmm/mse_Sigma_GLMM_" * ftail, ΣMseResults_GLMM, ',')
-    writedlm("sim_glmm_vs_ours_random_int/normal_sim_lmm/mse_tau_GLMM_" * ftail, τMseResults_GLMM, ',')
-    writedlm("sim_glmm_vs_ours_random_int/normal_sim_lmm/fittimes_GLMM_" * ftail, fittimes_GLMM, ',')
+    writedlm("mse_beta_GLMM_" * ftail, βMseResults_GLMM, ',')
+    writedlm("mse_Sigma_GLMM_" * ftail, ΣMseResults_GLMM, ',')
+    writedlm("mse_tau_GLMM_" * ftail, τMseResults_GLMM, ',')
+    writedlm("fittimes_GLMM_" * ftail, fittimes_GLMM, ',')
 end
 runtest()
