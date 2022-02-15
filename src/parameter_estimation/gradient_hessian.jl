@@ -74,21 +74,21 @@ function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaAR
 end
 
 """
-    glm_gradient(gc::GLMCopulaVCObs{T, D, Link}, β)
+    glm_gradient(gc, β)
 Calculates the gradient with respect to beta for our the glm portion for one obs. Keeps the residuals standardized.
 """
-function glm_gradient(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, NBCopulaCSObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}, GLMCopulaCSObs{T, D, Link}}) where {T<:Real, D, Link, VD, VL}
+function glm_gradient(gc::Union{GLMCopulaVCObs, NBCopulaVCObs, GLMCopulaARObs, NBCopulaARObs, NBCopulaCSObs, Poisson_Bernoulli_VCObs, GLMCopulaCSObs})
     gc.storage_n .= gc.w1 .* gc.res
     mul!(gc.storage_p1, transpose(gc.X), gc.storage_n)
     gc.storage_p1
 end
 
 """
-    glm_hessian(gc, β)
+    glm_hessian(gc)
 
 Compute the part of the hessian relevant to the glm density with respect to beta for a single obs
 """
-function glm_hessian(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, NBCopulaCSObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}, GLMCopulaCSObs{T, D, Link}}) where {T <: BlasReal, D, Link, VD, VL}
+function glm_hessian(gc::Union{GLMCopulaVCObs, NBCopulaVCObs, GLMCopulaARObs, NBCopulaARObs, NBCopulaCSObs, Poisson_Bernoulli_VCObs, GLMCopulaCSObs})
     mul!(gc.storage_np, Diagonal(gc.w2), gc.X)
     BLAS.gemm!('T', 'N', -1.0, gc.X, gc.storage_np, 0.0, gc.storage_pp)
 end

@@ -53,7 +53,6 @@ end
 
 # form VarLmmModel
 gcm = Poisson_Bernoulli_VCModel(gcs);
-# initialize_model!(gcm)
 
 fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 12, accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
 

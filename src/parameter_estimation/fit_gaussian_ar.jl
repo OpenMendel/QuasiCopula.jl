@@ -9,6 +9,7 @@ function fit!(
         gcm::Union{GaussianCopulaARModel, GaussianCopulaCSModel},
         solver=Ipopt.IpoptSolver(print_level = 5)
     )
+    initialize_model!(gcm)
     npar = gcm.p + 3 # tau, rho and sigma squared
     optm = MathProgBase.NonlinearModel(solver)
     # set lower bounds and upper bounds of parameters

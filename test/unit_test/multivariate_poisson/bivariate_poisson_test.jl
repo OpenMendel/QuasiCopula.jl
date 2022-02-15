@@ -17,19 +17,6 @@ Y = Vector{Float64}(undef, n)
 res = Vector{Float64}(undef, n)
 rand(nonmixed_multivariate_dist, Y, res)
 
-#### 
-function simulate_nobs_independent_vectors(
-    multivariate_distribution::Union{NonMixedMultivariateDistribution, MultivariateMix},
-    n_obs::Integer)
-    dimension = length(multivariate_distribution.vecd)
-    Y = [Vector{Float64}(undef, dimension) for i in 1:n_obs]
-    res = [Vector{Float64}(undef, dimension) for i in 1:n_obs]
-    for i in 1:n_obs
-        rand(multivariate_distribution, Y[i], res[i])
-    end
-    Y
-end
-
 nsample = 10_000
 @info "sample $nsample independent vectors for the bivariate Poisson distribution"
 # compile
@@ -61,7 +48,7 @@ gcm2 = deepcopy(gcm)
 # -48089.24498484653
 @test GLMCopula.loglikelihood!(gcm, true, true) ≈ -48089.24498484653
 
-@test gcm.∇β ≈ [-3215.226525108171]
+@test gcm.∇β ≈ [-3215.2265922202873]
 # @test gcm.data[1].∇β ≈ [0.17524618878789266] # this does work if i switch hessian to go first then gradient in logliklihood function
 # with the extra hessian term
 @test gcm.Hβ ≈ [-72732.90810806138]
@@ -70,11 +57,10 @@ gcm2 = deepcopy(gcm)
 # @time GLMCopula.fit2!(gcm, IpoptSolver(print_level = 5, derivative_test = "first-order"))
 @time GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, derivative_test = "first-order", mehrotra_algorithm ="yes", warm_start_init_point="yes", max_iter = 200, hessian_approximation = "exact"))
 # 21 iterations 13 seconds
-# check default ipopt quasi newton 
+# check default ipopt quasi newton
 # then go back and check the hessian
 @test GLMCopula.loglikelihood!(gcm, true, true) ≈ -48011.648934230856
 println("estimated mean = $(exp.(gcm.β)[1]); true mean value= $mean_1")
 println("estimated variance component 1 = $(gcm.Σ[1]); true variance component 1 = $variance_component_1")
 println("estimated variance component 2 = $(gcm.Σ[2]); true variance component 2 = $variance_component_2")
-println("gradient with respect to β = $(gcm.∇θ)")
 end

@@ -1,47 +1,49 @@
 module PkgTest
-# # # # # # # simulating data
-# include("simulation/generate_random_deviates/rand_continuous.jl")
-# include("simulation/generate_random_deviates/rand_discrete.jl")
+using Test
 
-# # # # # # # # simulating random vector using conditional densities + check covariances/correlation on multivariate poisson
-# include("simulation/generate_random_deviates/rand_multivariate.jl")
-# include("simulation/multivariate_poisson/trivariate_poisson.jl")
+@testset "Generating Random Deviates" begin
+    include("unit_test/generate_random_deviates/rand_continuous.jl")
+    include("unit_test/generate_random_deviates/rand_discrete.jl")
+    include("unit_test/generate_random_deviates/rand_multivariate.jl")
+end
 
-# # # # # # # # analyze simulated data for Poisson base distribution
-# include("simulation/multivariate_poisson/bivariate_poisson_test.jl")
-# include("simulation/multivariate_poisson/multivariate_n50_poisson_test.jl")
+# VCM
+@testset "VCM Covariance" begin
+    include("unit_test/VCM/singlerun_bernoulliVCM.jl")
+    include("unit_test/VCM/singlerun_nbVCM.jl")
+    include("unit_test/VCM/singlerun_normalVCM.jl")
+    include("unit_test/VCM/singlerun_poissonVCM.jl")
+end
 
-# # # # # # # # analyze simulated data for Bernoulli base distribution
-# include("simulation/multivariate_logistic/bivariate_logistic_test.jl")
-# include("simulation/multivariate_logistic/multivariate_n50_logistic_test.jl")
+### AR
+@testset "AR Covariance" begin
+    include("unit_test/AR/singlerun_bernoulliAR.jl")
+    include("unit_test/AR/singlerun_nbAR.jl")
+    include("unit_test/AR/singlerun_normalAR.jl")
+    include("unit_test/AR/singlerun_poissonAR.jl")
+end
 
+### CS
+@testset "CS Covariance" begin
+    include("unit_test/CS/singlerun_bernoulliCS.jl")
+    include("unit_test/CS/singlerun_nbCS.jl")
+    include("unit_test/CS/singlerun_normalCS.jl")
+    include("unit_test/CS/singlerun_poissonCS.jl")
+end
+
+## two vc
+## poisson
+# include("unit_test/multivariate_poisson/trivariate_poisson.jl")
+# include("unit_test/multivariate_poisson/bivariate_poisson_test.jl")
+# include("unit_test/multivariate_poisson/multivariate_n50_poisson_test.jl")
 # # inference/ confidence intervals
-# include("estimation/ar/asymptotic_ci_AR.jl")
-# include("estimation/vcm/asymptotic_ci_VCM.jl")
-
-# estimate simulated vcm covariance structure
-# # include("estimation/vcm/simulate_logistic_mixedmodels.jl")
-# # include("estimation/vcm/simulate_poisson_mixedmodels.jl")
-# # include("estimation/vcm/mse_logistic_vcm/two_vc_QC/mse.jl")
-
-# mean squared error 
-# AR 
-# include("estimation/ar/mse_logistic_ar/mse.jl")
-# include("estimation/ar/mse_poisson_ar/mse.jl")
-# one vc vs glmm
-# include("estimation/vcm/mse_poisson_vcm/one_vc_QC_vs_GLMM/mse_poisson_vs_glmm.jl")
-# include("estimation/vcm/mse_logistic_vcm/one_vc_QC_vs_GLMM/mse_logistic_vs_glmm.jl")
-# two vcm
-# include("estimation/vcm/mse_poisson_vcm/two_vc_QC/mse.jl")
-# include("estimation/vcm/mse_logistic_vcm/two_vc_QC/mse.jl")
+# include("unit_test/multivariate_poisson/asymptotic_ci_AR.jl")
+# include("unit_test/multivariate_poisson/asymptotic_ci_VCM.jl")
+# # bernoulli
+# include("unit_test/multivariate_logistic/bivariate_logistic_test.jl")
+# include("unit_test/multivariate_logistic/multivariate_n50_logistic_test.jl")
 
 # profiling and benchmarking
 # include("perf.jl")
-
-# add unit tests here
-using Test
-@testset "example test" begin
-    @test 1 + 1 == 2
-end
 
 end

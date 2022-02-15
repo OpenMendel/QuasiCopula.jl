@@ -1,6 +1,8 @@
 export GLMCopulaCSObs, GLMCopulaCSModel
 
-struct GLMCopulaCSObs{T <: BlasReal, D, Link}
+# abstract type QCobs end
+
+struct GLMCopulaCSObs{T <: BlasReal, D, Link} # <: QCobs
     # data
     n::T
     p::T
@@ -209,14 +211,14 @@ function get_∇V!(gc::Union{GLMCopulaCSObs{T, D, Link}, NBCopulaCSObs{T, D, Lin
 end
 
 function loglikelihood!(
-    gc::GLMCopulaCSObs{T, D, Link},
+    gc::GLMCopulaCSObs,
     β::Vector{T},
     ρ::T,
     σ2::T,
     needgrad::Bool = false,
     needhess::Bool = false;
     penalized::Bool = false
-    ) where {T <: BlasReal, D, Link}
+    ) where {T <: BlasReal}
     n, p = size(gc.X, 1), size(gc.X, 2)
     needgrad = needgrad || needhess
     if needgrad
@@ -286,7 +288,7 @@ function loglikelihood!(
             # gc.Hβρ .= inv1pq * σ2 * transpose(gc.∇resβ) * gc.∇ARV * gc.res - 0.5 * σ2^2 * inv1pq^2 * q2 * transpose(gc.∇resβ) * gc.V * gc.res
             BLAS.gemv!('T', σ2, gc.∇resβ, gc.storage_n, 1.0, gc.storage_p1) # stores ∇resβ*Γ*res (standardized residual)
 
-            gc.Hβρ .= ((c2 * gc.storage_p1) .- (0.5 * gc.∇β * σ2 * q2)) * inv1pq^2
+            # gc.Hβρ .= ((c2 * gc.storage_p1) .- (0.5 * gc.∇β * σ2 * q2)) * inv1pq^2
 
             BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 0.0, gc.Hβ) # only lower triangular
             fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
@@ -306,11 +308,11 @@ function loglikelihood!(
 end
 
 function loglikelihood!(
-    gcm::GLMCopulaCSModel{T, D, Link},
+    gcm::GLMCopulaCSModel,
     needgrad::Bool = false,
     needhess::Bool = false
-    ) where {T <: BlasReal, D, Link}
-    logl = zero(T)
+    )
+    logl = 0.0
     if needgrad
         fill!(gcm.∇β, 0.0)
         fill!(gcm.∇ρ, 0.0)
@@ -338,7 +340,7 @@ function loglikelihood!(
             gcm.Hσ2 .+= gcm.data[i].Hσ2
             gcm.Hρσ2 .+= gcm.data[i].Hρσ2
             gcm.Hβσ2 .+= gcm.data[i].Hβσ2
-            gcm.Hβρ .+= gcm.data[i].Hβρ
+            # gcm.Hβρ .+= gcm.data[i].Hβρ
         end
     end
     # @show gcm.∇ρ

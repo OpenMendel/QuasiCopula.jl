@@ -59,8 +59,8 @@ end
 Update the residual vector according to `β` given link function and distribution.
 """
 function update_res!(
-   gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}, NBCopulaARObs{T, D, Link}, NBCopulaCSObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}},
-   β::Vector{T}) where {T <: BlasReal, D, Link, VD, VL}
+   gc::Union{GLMCopulaVCObs, NBCopulaVCObs, GLMCopulaCSObs, GLMCopulaARObs, NBCopulaARObs, NBCopulaCSObs, Poisson_Bernoulli_VCObs},
+   β::Vector)
    mul!(gc.η, gc.X, β)
    @inbounds for i in 1:length(gc.y)
        gc.μ[i] = GLM.linkinv(gc.link, gc.η[i])
@@ -73,9 +73,27 @@ function update_res!(
    return gc.res
 end
 
+#
+# """
+#     update_res!(gc, β)
+# Update the residual vector according to `β` given link function and distribution.
+# """
+# function update_res!(
+#    gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}, NBCopulaARObs{T, D, Link}, NBCopulaCSObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}},
+#    β::Vector{T}) where {T <: BlasReal, D, Link, VD, VL}
+#    mul!(gc.η, gc.X, β)
+#    @turbo gc.μ .= GLM.linkinv.(gc.link, gc.η)
+#    @turbo gc.varμ .= GLM.glmvar.(gc.d, gc.μ) # Note: for negative binomial, d.r is used
+#    @turbo gc.dμ .= GLM.mueta.(gc.link, gc.η)
+#    @turbo gc.w1 .= gc.dμ ./ gc.varμ
+#    @turbo gc.w2 .= gc.w1 .* gc.dμ
+#    @turbo gc.res .= gc.y .- gc.μ
+#    return gc.res
+# end
+
 function update_res!(
-    gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, GLMCopulaCSModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, NBCopulaARModel{T, D, Link}, NBCopulaCSModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}}
-    ) where {T <: BlasReal, D, Link, VD, VL}
+    gcm::Union{GLMCopulaVCModel, GLMCopulaARModel, GLMCopulaCSModel, NBCopulaVCModel, NBCopulaARModel, NBCopulaCSModel, Poisson_Bernoulli_VCModel}
+    )
     @inbounds for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
     end
@@ -91,8 +109,8 @@ end
 # end
 
 function standardize_res!(
-    gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}, NBCopulaARObs{T, D, Link}, NBCopulaCSObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}}
-    ) where {T <: BlasReal, D, Link, VD, VL}
+    gc::Union{GLMCopulaVCObs, NBCopulaVCObs, GLMCopulaARObs, GLMCopulaCSObs, NBCopulaARObs, NBCopulaCSObs, Poisson_Bernoulli_VCObs}
+    )
     @inbounds for j in eachindex(gc.y)
         σinv = inv(sqrt(gc.varμ[j]))
         gc.res[j] *= σinv
@@ -100,8 +118,8 @@ function standardize_res!(
 end
 
 function standardize_res!(
-    gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, GLMCopulaCSModel{T, D, Link}}
-    ) where {T <: BlasReal, D, Link}
+    gcm::Union{GLMCopulaVCModel, NBCopulaVCModel, GLMCopulaARModel, GLMCopulaCSModel}
+    )
     # standardize residual
     @inbounds for i in eachindex(gcm.data)
         standardize_res!(gcm.data[i])

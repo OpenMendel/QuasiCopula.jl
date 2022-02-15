@@ -7,10 +7,10 @@ variance_component_1 = 0.1
 variance_component_2 = 0.1
 Γ = variance_component_1 * ones(n, n) + variance_component_2 * Matrix(I, n, n)
 
-mean = 5
+lambda = 5.0
 dist = Poisson
-vecd = [dist(mean) for i in 1:n]
-    
+vecd = [dist(lambda) for i in 1:n]
+
 nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
 
 nsample = 10_000
@@ -44,13 +44,13 @@ gcm2 = deepcopy(gcm)
 # @time GLMCopula.fit2!(gcm, IpoptSolver(print_level = 5, derivative_test = "first-order"))
 @time GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, mehrotra_algorithm ="yes", warm_start_init_point="yes", max_iter = 200, hessian_approximation = "exact"))
 # 21 iterations 13 seconds
-# check default ipopt quasi newton 
+# check default ipopt quasi newton
 # then go back and check the hessian
 @test GLMCopula.loglikelihood!(gcm, true, true) ≈ -1.1092926528694e6
-@test gcm.θ ≈ [1.6102599493811418, 0.10979563246091144, 0.11466180111186794]
+@test gcm.β ≈ [1.6102599493811418]
+@test gcm.Σ ≈ [0.10979563246091144, 0.11466180111186794]
 
 println("estimated mean = $(exp.(gcm.β)[1]); true mean value= $mean")
 println("estimated variance component 1 = $(gcm.Σ[1]); true variance component 1 = $variance_component_1")
 println("estimated variance component 2 = $(gcm.Σ[2]); true variance component 2 = $variance_component_2")
-println("gradient with respect to θ = $(gcm.∇θ)")
 end

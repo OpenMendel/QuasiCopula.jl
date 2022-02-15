@@ -19,7 +19,7 @@ Calculates the loglikelihood of observing `y` given mean `μ`, a distribution
 """
 function component_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}}) where {T <: BlasReal, D, Link}
   logl = zero(T)
-    @inbounds for j in eachindex(gc.y)
+    @inbounds for j in 1:length(gc.y)
       logl += GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], gc.wt[j], 1.0)
   end
   logl
@@ -52,16 +52,16 @@ function component_loglikelihood(gc::Poisson_Bernoulli_VCObs{T, VD, VL}) where {
 end
 
 """
-    loglikelihood!(gc::GLMCopulaVCObs{T, D, Link}, β, τ, Σ)
+    loglikelihood!(gc, β, τ, Σ)
 Calculates the loglikelihood of observing `y` given mean `μ`, for the Poisson and Bernoulli base distribution using the GLM.jl package.
 """
 function loglikelihood!(
-    gc::Union{GLMCopulaVCObs{T, D, Link}, Poisson_Bernoulli_VCObs{T, VD, VL}},
+    gc::Union{GLMCopulaVCObs, Poisson_Bernoulli_VCObs},
     β::Vector{T},
     Σ::Vector{T},
     needgrad::Bool = false,
     needhess::Bool = false
-    ) where {T <: BlasReal, D, Link, VD, VL}
+    ) where {T <: BlasReal}
     n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
     needgrad = needgrad || needhess
     if needgrad
@@ -131,13 +131,12 @@ function loglikelihood!(
     logl
 end
 
-
 function loglikelihood!(
-    gcm::Union{GLMCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}},
+    gcm::Union{GLMCopulaVCModel, Poisson_Bernoulli_VCModel},
     needgrad::Bool = false,
     needhess::Bool = false
-    ) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link, VD, VL}
-    logl = zero(T)
+    )
+    logl = 0.0
     if needgrad
         fill!(gcm.∇β, 0)
         fill!(gcm.∇Σ, 0)

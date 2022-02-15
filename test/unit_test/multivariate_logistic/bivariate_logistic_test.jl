@@ -17,7 +17,7 @@ Y = Vector{Float64}(undef, n)
 res = Vector{Float64}(undef, n)
 rand(nonmixed_multivariate_dist, Y, res)
 
-#### 
+####
 function simulate_nobs_independent_vectors(
     multivariate_distribution::Union{NonMixedMultivariateDistribution, MultivariateMix},
     n_obs::Integer)
@@ -57,9 +57,9 @@ initialize_model!(gcm)
 @show gcm.Σ
 @test GLMCopula.loglikelihood!(gcm, true, true) ≈ -13440.070462955528
 
-@test gcm.∇β ≈ [-86.55491199152868]
+@test gcm.∇β ≈ [-86.55513779763022]
 # with the extra hessian term
-@test gcm.Hβ ≈ [-4382.156901109999]
+@test gcm.Hβ ≈ [-4382.157040177552]
 
 # @time GLMCopula.fit2!(gcm, IpoptSolver(print_level = 5, derivative_test = "first-order"))
 @time GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, derivative_test = "first-order", mehrotra_algorithm ="yes", warm_start_init_point="yes", max_iter = 200, hessian_approximation = "exact"))

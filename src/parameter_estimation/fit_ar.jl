@@ -166,8 +166,8 @@ Triangular number n * (n+1) / 2
 
 function MathProgBase.hesslag_structure(gcm::GLMCopulaCSModel)
     # we work on the upper triangular part of the Hessian
-    arr1 = Vector{Int}(undef, ◺(gcm.p) + ◺(2) + 2 * gcm.p)
-    arr2 = Vector{Int}(undef, ◺(gcm.p) + ◺(2) + 2 * gcm.p)
+    arr1 = Vector{Int}(undef, ◺(gcm.p) + ◺(2) + gcm.p)
+    arr2 = Vector{Int}(undef, ◺(gcm.p) + ◺(2) + gcm.p)
     # Hββ block
     idx  = 1    
     for j in 1:gcm.p
@@ -191,11 +191,11 @@ function MathProgBase.hesslag_structure(gcm::GLMCopulaCSModel)
         arr2[idx] = k
         idx += 1
     end
-    for k in 1:gcm.p
-        arr1[idx] = gcm.p + 1
-        arr2[idx] = k
-        idx += 1
-    end
+    # for k in 1:gcm.p
+    #     arr1[idx] = gcm.p + 1
+    #     arr2[idx] = k
+    #     idx += 1
+    # end
     return (arr1, arr2)
 end
 
@@ -225,10 +225,10 @@ function MathProgBase.eval_hesslag(
         H[idx] = gcm.Hβσ2[k]
         idx += 1
     end
-    for k in 1:gcm.p
-        H[idx] = gcm.Hβρ[k]
-        idx += 1
-    end
+    # for k in 1:gcm.p
+    #     H[idx] = gcm.Hβρ[k]
+    #     idx += 1
+    # end
     # lmul!(σ, H)
     H .*= σ
 end
