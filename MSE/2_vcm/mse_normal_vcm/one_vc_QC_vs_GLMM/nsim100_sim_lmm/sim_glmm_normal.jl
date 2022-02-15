@@ -2,23 +2,15 @@ using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, Catego
 using Random, Roots, SpecialFunctions
 using DataFrames, DelimitedFiles, Statistics
 import StatsBase: sem
-import GLMCopula.MSE
-
-function MSE(gcm::GaussianCopulaVCModel{T}, β::Vector, invτ::T, Σ::Vector) where {T <: BlasReal}
-    mseβ = sum(abs2, gcm.β .- β) / gcm.p
-    mseτ = sum(abs2, inv.(gcm.τ ./ (gcm.Σ .* inv.(gcm.τ))) .- invτ)
-    mseΣ = sum(abs2, gcm.Σ .* inv.(gcm.τ) .- Σ) / gcm.m
-    return mseβ, mseτ, mseΣ
-end
 
 function runtest()
     p = 3    # number of fixed effects, including intercept
     m = 1    # number of variance components
     # true parameter values
-    Random.seed!(1234)
-    # βtrue = rand(Uniform(-0.2, 0.2), p)
-    βtrue = ones(p)
-    Σtrue = [0.1]
+    Random.seed!(12345)
+    βtrue = rand(Uniform(-2, 2), p)
+    # βtrue = ones(p)
+    Σtrue = [0.05]
     τtrue = 100.0
     σ2 = inv(τtrue)
     σ = sqrt(σ2)
@@ -30,8 +22,9 @@ function runtest()
 
     #simulation parameters
     samplesizes = [100; 1000; 10000]
-    ns = [2; 5; 10; 15; 20; 25]
-    nsims = 50
+    ns = [5]
+    # ns = [2; 5; 10; 15; 20; 25]
+    nsims = 1
 
    #storage for our results
    βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -75,10 +68,10 @@ function runtest()
                     # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
                     X = [ones(ni) randn(ni, p - 1)]
                     μ = X * βtrue
-                    vecd = Vector{ContinuousUnivariateDistribution}(undef, length(μ))
-                    for i in 1:length(μ)
-                        vecd[i] = Normal(μ[i], σ)
-                    end
+                    # vecd = Vector{ContinuousUnivariateDistribution}(undef, length(μ))
+                    # for i in 1:length(μ)
+                    #     vecd[i] = Normal(μ[i], σ)
+                    # end
                     # generate mvn response
                     mvn_d = MvNormal(μ, Γ)
                     y =  Float64.(rand(mvn_d))
@@ -99,7 +92,7 @@ function runtest()
                 df = (Y = Ystack, X2 = Xstack[:, 2], X3 = Xstack[:, 3], group = string.(groupstack))
                 form = @formula(Y ~ 1 + X2 + X3 + (1|group));
 
-                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-7, hessian_approximation = "limited-memory"))
+                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-7, accept_after_max_steps = 3, limited_memory_max_history = 20, hessian_approximation = "limited-memory"))
                 @show fittime
                 @show gcm.β
                 @show gcm.Σ
@@ -112,7 +105,11 @@ function runtest()
                 @show GLMCopula.confint(gcm)
                 # mse and time under our model
                 coverage!(gcm, trueparams, intervals, curcoverage)
-                mseβ, mseτ, mseΣ = MSE(gcm, βtrue, σ2, Σtrue)
+                # mseβ, mseτ, mseΣ = MSE(gcm, βtrue, τtrue, Σtrue * inv(τtrue))
+                mseβ = sum(abs2, gcm.β .- βtrue) / gcm.p
+                mseτ = sum(abs2, inv(gcm.τ[1]) - σ2)
+                mseΣ = sum(abs2, gcm.Σ[1] * inv(gcm.τ[1]) - Σtrue[1])
+                # gcm.Σ * inv(gcm.τ[1])
                 @show mseβ
                 @show mseτ
                 @show mseΣ

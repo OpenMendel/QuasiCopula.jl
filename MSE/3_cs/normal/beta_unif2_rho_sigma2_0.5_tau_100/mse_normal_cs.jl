@@ -1,5 +1,6 @@
 using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, CategoricalArrays
 using Random, Roots, SpecialFunctions, StatsFuns, Distributions, DataFrames, ToeplitzMatrices
+using LinearAlgebra: BlasReal, copytri!
 
 function run_test()
     p = 3    # number of fixed effects, including intercept
@@ -10,7 +11,9 @@ function run_test()
     βtrue = rand(Uniform(-2, 2), p)
     σ2true = [0.5]
     ρtrue = [0.5]
-    τtrue = 10
+    τtrue = 100.0
+    σ2 = inv(τtrue)
+    σ = sqrt(inv(τtrue))
 
     function get_V(ρ, n)
         vec = zeros(n)
@@ -29,6 +32,7 @@ function run_test()
 
     #simulation parameters
     samplesizes = [100; 1000; 10000]
+    # ns = [5]
     ns = [2; 5; 10; 15; 20; 25]
     nsims = 100
 
@@ -68,7 +72,7 @@ function run_test()
                     μ = X * βtrue
                     vecd = Vector{ContinuousUnivariateDistribution}(undef, length(μ))
                     for i in 1:length(μ)
-                        vecd[i] = Normal(μ[i], inv(τtrue))
+                        vecd[i] = Normal(μ[i], σ)
                     end
                     nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
                     # simuate single vector y
@@ -99,7 +103,7 @@ function run_test()
 
                 # mse and time under our model
                 coverage!(gcm, trueparams, intervals, curcoverage)
-                mseβ, mseτ, mseρ, mseσ2 = MSE(gcm, βtrue, inv(τtrue), ρtrue, σ2true)
+                mseβ, mseρ, mseσ2, mseτ = MSE(gcm, βtrue, τtrue, ρtrue, σ2true)
                 @show mseβ
                 @show mseτ
                 @show mseσ2
@@ -130,14 +134,14 @@ function run_test()
 
     @show en - st #seconds
     @info "writing to file..."
-    ftail = "multivariate_normal_AR$(nsims)reps_sim.csv"
-    writedlm("autoregressive/normal_ar/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("autoregressive/normal_ar/mse_tau_" * ftail, τMseResults, ',')
-    writedlm("autoregressive/normal_ar/mse_sigma_" * ftail, σ2MseResults, ',')
-    writedlm("autoregressive/normal_ar/mse_rho_" * ftail, ρMseResults, ',')
-    writedlm("autoregressive/normal_ar/fittimes_" * ftail, fittimes, ',')
+    ftail = "multivariate_normal_CS$(nsims)reps_sim.csv"
+    writedlm("compound_symmetry/mse_normal_cs/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("compound_symmetry/mse_normal_cs/mse_tau_" * ftail, τMseResults, ',')
+    writedlm("compound_symmetry/mse_normal_cs/mse_sigma_" * ftail, σ2MseResults, ',')
+    writedlm("compound_symmetry/mse_normal_cs/mse_rho_" * ftail, ρMseResults, ',')
+    writedlm("compound_symmetry/mse_normal_cs/fittimes_" * ftail, fittimes, ',')
 
-    writedlm("autoregressive/normal_ar/beta_rho_sigma_coverage_" * ftail, βρσ2τcoverage, ',')
+    writedlm("compound_symmetry/mse_normal_cs/beta_rho_sigma_coverage_" * ftail, βρσ2τcoverage, ',')
 end
 
 run_test()

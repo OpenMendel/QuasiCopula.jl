@@ -1,5 +1,6 @@
 using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, CategoricalArrays
 using Random, Roots, SpecialFunctions, StatsFuns, Distributions, DataFrames, ToeplitzMatrices
+using LinearAlgebra: BlasReal, copytri!
 
 function run_test()
     p = 3    # number of fixed effects, including intercept
@@ -10,7 +11,9 @@ function run_test()
     βtrue = rand(Uniform(-2, 2), p)
     σ2true = [0.5]
     ρtrue = [0.5]
-    τtrue = 10
+    τtrue = 100.0
+    σ2 = inv(τtrue)
+    σ = sqrt(σ2)
 
     function get_V(ρ, n)
         vec = zeros(n)
@@ -69,7 +72,7 @@ function run_test()
                     μ = X * βtrue
                     vecd = Vector{ContinuousUnivariateDistribution}(undef, length(μ))
                     for i in 1:length(μ)
-                        vecd[i] = Normal(μ[i], inv(τtrue))
+                        vecd[i] = Normal(μ[i], σ)
                     end
                     nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
                     # simuate single vector y
@@ -114,7 +117,7 @@ function run_test()
 
                 # mse and time under our model
                 coverage!(gcm, trueparams, intervals, curcoverage)
-                mseβ, mseτ, mseρ, mseσ2 = MSE(gcm, βtrue, inv(τtrue), ρtrue, σ2true)
+                mseβ, mseρ, mseσ2, mseτ = MSE(gcm, βtrue, τtrue, ρtrue, σ2true)
                 @show mseβ
                 @show mseτ
                 @show mseσ2
