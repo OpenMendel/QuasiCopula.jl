@@ -1,5 +1,5 @@
 using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, CategoricalArrays
-using Random, Roots, SpecialFunctions, LoopVectorization
+using Random, Roots, SpecialFunctions
 using DataFrames, DelimitedFiles, Statistics, ToeplitzMatrices
 import StatsBase: sem
 
