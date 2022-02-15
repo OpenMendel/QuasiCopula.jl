@@ -45,7 +45,7 @@ d_gamma = pdf_constants(γ, dist)
 @test d_gamma.c2 == 0.5 * γ * (inv(var(d_gamma.d)))
 
 # test if the CDF is a proper density (integrates to 1)
-α, θ = params(dist)
+α, θ = Distributions.params(dist)
 normalizing_c1 = (StatsFuns.gamma(α + 1)/ StatsFuns.gamma(α))
 normalizing_c2 = (StatsFuns.gamma(α + 2)/ StatsFuns.gamma(α))
 @test d_gamma.c * (d_gamma.c0 + normalizing_c1 * d_gamma.c1 + normalizing_c2 * d_gamma.c2) == 1.0
@@ -123,7 +123,7 @@ d_exp = pdf_constants(γ, dist)
 @test d_exp.c2 == 0.5 * γ * (inv(var(d_exp.d)))
 
 # test if the CDF is a proper density (integrates to 1)
-θ = params(d_exp.d)[1]
+θ = Distributions.params(d_exp.d)[1]
 normalizing_c1 = θ * (StatsFuns.gamma(2)/ StatsFuns.gamma(1))
 normalizing_c2 = θ^2 * (StatsFuns.gamma(3)/ StatsFuns.gamma(1))
 @test d_exp.c * (d_exp.c0 + normalizing_c1 * d_exp.c1 + normalizing_c2 * d_exp.c2) == 1.0
@@ -203,7 +203,7 @@ d_beta = pdf_constants(γ, dist)
 @test d_beta.c2 == 0.5 * γ * (inv(var(d_beta.d)))
 
 # test if the CDF is a proper density (integrates to 1)
-α, β = params(d_beta.d)
+α, β = Distributions.params(d_beta.d)
 normalizing_c1 = inv(StatsFuns.gamma(α) * StatsFuns.gamma(α + β + 1)) * (StatsFuns.gamma(α + β) * StatsFuns.gamma(α + 1))
 normalizing_c2 = inv(StatsFuns.gamma(α) * StatsFuns.gamma(α + β + 2)) * (StatsFuns.gamma(α + β) * StatsFuns.gamma(α + 2))
 @test d_beta.c * (d_beta.c0 + normalizing_c1 * d_beta.c1 + normalizing_c2 * d_beta.c2) ≈  1.0
@@ -213,84 +213,47 @@ normalizing_c2 = inv(StatsFuns.gamma(α) * StatsFuns.gamma(α + β + 2)) * (Stat
 @test cdf(d_beta, 1) ≈ 1
 
 ###
-Random.seed!(1234)
-nsample = 10_000 #
-@info "sample $nsample points for the $dist distribution using the Bisection method."
-s = Vector{Float64}(undef, nsample)
-rand!(d_beta, s) # compile
-@time rand!(d_beta, s)
-println("sample mean = $(Statistics.mean(s)); theoretical mean = $(GLMCopula.mean(d_beta))")
-println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_beta))")
+# Random.seed!(1234)
+# nsample = 10_000 #
+# @info "sample $nsample points for the $dist distribution using the Bisection method."
+# s = Vector{Float64}(undef, nsample)
+# rand!(d_beta, s) # compile
+# @time rand!(d_beta, s)
+# println("sample mean = $(Statistics.mean(s)); theoretical mean = $(GLMCopula.mean(d_beta))")
+# println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_beta))")
 end
 
 #########  Beta test ############
-@testset "Beta(α = 0.5, β = 3.0) * (c0 + c1 * x + c2 * x^2);" begin
-Random.seed!(123)
-α, β = (0.5, 3.0)
-dist = Beta(α, β)
-
-# test if the proper c0, c1, c2 constants are stored.
-γ = 1.0
-d_beta = pdf_constants(γ, dist)
-@test d_beta.c ≈ inv(1 + 0.5 * γ)
-@test d_beta.c0 == 1 + (mean(d_beta.d)^2 * inv(var(d_beta.d)) * 0.5 * γ)
-@test d_beta.c1 == 0.5 * γ * (-2 * mean(d_beta.d) * inv(var(d_beta.d)))
-@test d_beta.c2 == 0.5 * γ * (inv(var(d_beta.d)))
-
-# test if the CDF is a proper density (integrates to 1)
-α, β = params(d_beta.d)
-normalizing_c1 = inv(StatsFuns.gamma(α) * StatsFuns.gamma(α + β + 1)) * (StatsFuns.gamma(α + β) * StatsFuns.gamma(α + 1))
-normalizing_c2 = inv(StatsFuns.gamma(α) * StatsFuns.gamma(α + β + 2)) * (StatsFuns.gamma(α + β) * StatsFuns.gamma(α + 2))
-@test d_beta.c * (d_beta.c0 + normalizing_c1 * d_beta.c1 + normalizing_c2 * d_beta.c2) == 1.0
-@test minimum(d_beta) == 0
-@test maximum(d_beta) ≈ 1
-@test cdf(d_beta, 0) == 0
-@test cdf(d_beta, 1) ≈ 1
-
-###
-Random.seed!(1234)
-nsample = 10_000 #
-@info "sample $nsample points for the $dist distribution using the Bisection method."
-s = Vector{Float64}(undef, nsample)
-rand!(d_beta, s) # compile
-@time rand!(d_beta, s)
-println("sample mean = $(Statistics.mean(s)); theoretical mean = $(GLMCopula.mean(d_beta))")
-println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_beta))")
-end
-
-#########  Beta test ############
-@testset "Beta(α = 2.0, β = 0.5) * (c0 + c1 * x + c2 * x^2);" begin
-Random.seed!(123)
-α, β = (2.0, 0.5)
-dist = Beta(α, β)
-
-# test if the proper c0, c1, c2 constants are stored.
-γ = 1.0
-d_beta = pdf_constants(γ, dist)
-@test d_beta.c ≈ inv(1 + 0.5 * γ)
-@test d_beta.c0 == 1 + (mean(d_beta.d)^2 * inv(var(d_beta.d)) * 0.5 * γ)
-@test d_beta.c1 == 0.5 * γ * (-2 * mean(d_beta.d) * inv(var(d_beta.d)))
-@test d_beta.c2 == 0.5 * γ * (inv(var(d_beta.d)))
-
-# test if the CDF is a proper density (integrates to 1)
-α, β = params(d_beta.d)
-normalizing_c1 = inv(StatsFuns.gamma(α) * StatsFuns.gamma(α + β + 1)) * (StatsFuns.gamma(α + β) * StatsFuns.gamma(α + 1))
-normalizing_c2 = inv(StatsFuns.gamma(α) * StatsFuns.gamma(α + β + 2)) * (StatsFuns.gamma(α + β) * StatsFuns.gamma(α + 2))
-@test d_beta.c * (d_beta.c0 + normalizing_c1 * d_beta.c1 + normalizing_c2 * d_beta.c2) ≈ 1.0
-@test minimum(d_beta) == 0
-@test maximum(d_beta) ≈ 1
-@test cdf(d_beta, 0) == 0
-@test cdf(d_beta, 1) ≈ 1
-
-###
-Random.seed!(1234)
-nsample = 10_000 #
-@info "sample $nsample points for the $dist distribution using the Bisection method."
-s = Vector{Float64}(undef, nsample)
-rand!(d_beta, s) # compile
-@time rand!(d_beta, s)
-println("sample mean = $(Statistics.mean(s)); theoretical mean = $(GLMCopula.mean(d_beta))")
-println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_beta))")
-end
-
+# @testset "Beta(α = 0.5, β = 3.0) * (c0 + c1 * x + c2 * x^2);" begin
+# Random.seed!(123)
+# α, β = (0.5, 3.0)
+# dist = Beta(α, β)
+#
+# # test if the proper c0, c1, c2 constants are stored.
+# γ = 1.0
+# d_beta = pdf_constants(γ, dist)
+# @test d_beta.c ≈ inv(1 + 0.5 * γ)
+# @test d_beta.c0 == 1 + (mean(d_beta.d)^2 * inv(var(d_beta.d)) * 0.5 * γ)
+# @test d_beta.c1 == 0.5 * γ * (-2 * mean(d_beta.d) * inv(var(d_beta.d)))
+# @test d_beta.c2 == 0.5 * γ * (inv(var(d_beta.d)))
+#
+# # test if the CDF is a proper density (integrates to 1)
+# α, β = Distributions.params(d_beta.d)
+# normalizing_c1 = inv(StatsFuns.gamma(α) * StatsFuns.gamma(α + β + 1)) * (StatsFuns.gamma(α + β) * StatsFuns.gamma(α + 1))
+# normalizing_c2 = inv(StatsFuns.gamma(α) * StatsFuns.gamma(α + β + 2)) * (StatsFuns.gamma(α + β) * StatsFuns.gamma(α + 2))
+# @test d_beta.c * (d_beta.c0 + normalizing_c1 * d_beta.c1 + normalizing_c2 * d_beta.c2) == 1.0
+# @test minimum(d_beta) == 0
+# @test maximum(d_beta) ≈ 1
+# @test cdf(d_beta, 0) == 0
+# @test cdf(d_beta, 1) ≈ 1
+#
+# ###
+# Random.seed!(1234)
+# nsample = 10_000 #
+# @info "sample $nsample points for the $dist distribution using the Bisection method."
+# s = Vector{Float64}(undef, nsample)
+# rand!(d_beta, s) # compile
+# @time rand!(d_beta, s)
+# println("sample mean = $(Statistics.mean(s)); theoretical mean = $(GLMCopula.mean(d_beta))")
+# println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_beta))")
 end
