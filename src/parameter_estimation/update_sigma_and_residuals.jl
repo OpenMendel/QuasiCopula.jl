@@ -59,13 +59,32 @@ end
 Update the residual vector according to `β` given link function and distribution.
 """
 function update_res!(
-   gc::Union{GLMCopulaVCObs, NBCopulaVCObs, GLMCopulaCSObs, GLMCopulaARObs, NBCopulaARObs, NBCopulaCSObs, Poisson_Bernoulli_VCObs},
+   gc::Union{GLMCopulaVCObs, NBCopulaVCObs, GLMCopulaCSObs, GLMCopulaARObs, NBCopulaARObs, NBCopulaCSObs},
    β::Vector)
    mul!(gc.η, gc.X, β)
    @inbounds for i in 1:length(gc.y)
        gc.μ[i] = GLM.linkinv(gc.link, gc.η[i])
        gc.varμ[i] = GLM.glmvar(gc.d, gc.μ[i]) # Note: for negative binomial, d.r is used
        gc.dμ[i] = GLM.mueta(gc.link, gc.η[i])
+       gc.w1[i] = gc.dμ[i] / gc.varμ[i]
+       gc.w2[i] = gc.w1[i] * gc.dμ[i]
+       gc.res[i] = gc.y[i] - gc.μ[i]
+   end
+   return gc.res
+end
+
+"""
+    update_res!(gc, β)
+Update the residual vector according to `β` given link function and distribution.
+"""
+function update_res!(
+   gc::Poisson_Bernoulli_VCObs,
+   β::Vector)
+   mul!(gc.η, gc.X, β)
+   @inbounds for i in 1:length(gc.y)
+       gc.μ[i] = GLM.linkinv(gc.veclink[i], gc.η[i])
+       gc.varμ[i] = GLM.glmvar(gc.vecd[i], gc.μ[i]) # Note: for negative binomial, d.r is used
+       gc.dμ[i] = GLM.mueta(gc.veclink[i], gc.η[i])
        gc.w1[i] = gc.dμ[i] / gc.varμ[i]
        gc.w2[i] = gc.w1[i] * gc.dμ[i]
        gc.res[i] = gc.y[i] - gc.μ[i]

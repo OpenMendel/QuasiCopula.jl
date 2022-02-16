@@ -69,38 +69,25 @@ end
 # form model
 gcm = GLMCopulaCSModel(gcs);
 
-initialize_model!(gcm)
-@show gcm.β
-@show gcm.ρ
-@show gcm.σ2
+fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, accept_after_max_steps = 5, limited_memory_max_history = 50, warm_start_init_point="yes", derivative_test = "first-order", hessian_approximation = "limited-memory"))
+@show gcm.θ
+@show trueparams
+@show gcm.∇θ
 
+@test gcm.θ ≈ [0.2679016603133174, 1.3485569590033557, -0.4898578491349565, 0.5225462587214745, 0.4028766887775074]
+
+loglikelihood!(gcm, true, true)
+vcov!(gcm)
 mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
+@show mseβ
+@show mseσ2
+@show mseρ
+@show GLMCopula.confint(gcm)
+
 using Test
-@test mseβ < 1
-@test mseσ2 < 1
-@test mseρ < 1
-
-# loglikelihood!(gcm, true, true)
-# # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 30, derivative_test = "second-order", accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
-# fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, accept_after_max_steps = 5, limited_memory_max_history = 50, warm_start_init_point="yes", derivative_test = "first-order", hessian_approximation = "limited-memory"))
-# @show gcm.θ
-# @show trueparams
-# @show gcm.∇θ
-#
-# @test gcm.θ ≈ [0.2679016603133174, 1.3485569590033557, -0.4898578491349565, 0.5225462587214745, 0.4028766887775074]
-#
-# loglikelihood!(gcm, true, true)
-# vcov!(gcm)
-# mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
-# @show mseβ
-# @show mseσ2
-# @show mseρ
-# @show GLMCopula.confint(gcm)
-
-# using Test
-# @test mseβ ≈ 0.0011582605721954502
-# @test mseσ2 ≈ 0.009432937582821162
-# @test mseρ ≈ 0.0005083337823356664
+@test mseβ ≈ 0.0011582605721954502
+@test mseσ2 ≈ 0.009432937582821162
+@test mseρ ≈ 0.0005083337823356664
 #
 using BenchmarkTools
 println("checking memory allocation for bernoulli CS")

@@ -102,21 +102,6 @@ function update_sigma_rho!(gcm::NBCopulaCSModel{T, D, Link}) where {T <: BlasRea
     else
         copyto!(gcm.ρ, ρhat)
     end
-    # @inbounds for i in eachindex(gcm.data)
-    #     get_V!(gcm.ρ[1], gcm.data[i])
-    # end
-    # if gcm.σ2[1] > 1.0
-    #     fill!(gcm.Σ, 1.0)
-    # else
-    #     fill!(gcm.Σ, gcm.σ2[1])
-    # end
-    # update_Σ!(gcm)
-    # @show gcm.Σ[1]
-    # if gcm.Σ[1] > 1
-    #     copyto!(gcm.σ2, 1.0)
-    # else
-    #     copyto!(gcm.σ2, gcm.Σ[1])
-    # end
     @show gcm.σ2
     nothing
 end

@@ -49,36 +49,27 @@ end
 # form VarLmmModel
 gcm = GLMCopulaVCModel(gcs);
 
-initialize_model!(gcm)
+fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 18, hessian_approximation = "limited-memory"))
+@show fittime
 @show gcm.β
 @show gcm.Σ
+@show gcm.∇β
+@show gcm.∇Σ
+
+@test gcm.β ≈ [0.2576229433409327, 1.3924041840923747, -0.5133766008765471]
+@test gcm.Σ ≈ [0.47829604479425886]
+
+loglikelihood!(gcm, true, true)
+vcov!(gcm)
+@show GLMCopula.confint(gcm)
+# mse and time under our model
+mseβ, mseΣ = MSE(gcm, βtrue, Σtrue)
+@show mseβ
+@show mseΣ
 
 using Test
-mseβ, mseΣ = MSE(gcm, βtrue, Σtrue)
-@test mseβ < 1
-@test mseΣ < 1
-
-# fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 18, hessian_approximation = "limited-memory"))
-# @show fittime
-# @show gcm.β
-# @show gcm.Σ
-# @show gcm.∇β
-# @show gcm.∇Σ
-#
-# @test gcm.β ≈ [0.2576229433409327, 1.3924041840923747, -0.5133766008765471]
-# @test gcm.Σ ≈ [0.47829604479425886]
-#
-# loglikelihood!(gcm, true, true)
-# vcov!(gcm)
-# @show GLMCopula.confint(gcm)
-# # mse and time under our model
-# mseβ, mseΣ = MSE(gcm, βtrue, Σtrue)
-# @show mseβ
-# @show mseΣ
-#
-# using Test
-# @test mseβ ≈ 3.330529801229417e-5
-# @test mseΣ ≈ 0.0004710616715728181
+@test mseβ ≈ 3.330529801229417e-5
+@test mseΣ ≈ 0.0004710616715728181
 
 using BenchmarkTools
 println("checking memory allocation for Poisson VCM")

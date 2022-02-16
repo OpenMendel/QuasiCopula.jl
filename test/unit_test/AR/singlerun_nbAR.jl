@@ -69,49 +69,34 @@ end
 # form model
 gcm = NBCopulaARModel(gcs);
 
-initialize_model!(gcm)
-@show gcm.β
-@show gcm.σ2
-@show gcm.ρ
+fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter = 20, tol=1e-6)
+@show fittime
+@show gcm.θ
+@show gcm.∇θ
+
+@test gcm.θ ≈ [0.25408749719321383, 1.394747799442321, -0.5060772204080676, 0.5182372977100089, 0.5088787843885787]
+
 @show gcm.r
+@show gcm.∇r
 
-mseβ, mseρ, mseσ2, mser = MSE(gcm, βtrue, ρtrue, σ2true, rtrue)
+@test gcm.r ≈ [10.135298765900169]
 
-using Test
-@test mseβ < 1
-@test mser < 10
-@test mseσ2 < 1
-@test mseρ < 1
-
-# fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter = 20, tol=1e-6)
-# @show fittime
-# @show gcm.θ
-# @show gcm.∇θ
-#
-# @test gcm.θ ≈ [0.25408749719321383, 1.394747799442321, -0.5060772204080676, 0.5182372977100089, 0.5088787843885787]
-#
-# @show gcm.r
-# @show gcm.∇r
-#
-# @test gcm.r ≈ [10.135298765900169]
-#
-# loglikelihood!(gcm, true, true)
-# vcov!(gcm)
-# @show GLMCopula.confint(gcm)
+loglikelihood!(gcm, true, true)
+vcov!(gcm)
+@show GLMCopula.confint(gcm)
 
 # mse and time under our model
-# coverage!(gcm, trueparams, intervals, curcoverage)
-# mseβ, mseρ, mseσ2, mser = MSE(gcm, βtrue, ρtrue, σ2true, rtrue)
-# @show mseβ
-# @show mser
-# @show mseσ2
-# @show mseρ
+mseβ, mseρ, mseσ2, mser = MSE(gcm, βtrue, ρtrue, σ2true, rtrue)
+@show mseβ
+@show mser
+@show mseσ2
+@show mseρ
 
-# using Test
-# @test mseβ ≈ 3.060579384225827e-5
-# @test mser ≈ 0.01830575605410867
-# @test mseσ2 ≈ 7.88328122188688e-5
-# @test mseρ ≈ 0.00033259902776349684
+using Test
+@test mseβ ≈ 3.060579384225827e-5
+@test mser ≈ 0.01830575605410867
+@test mseσ2 ≈ 7.88328122188688e-5
+@test mseρ ≈ 0.00033259902776349684
 
 # need to optimize wrt to memory 13.73 MIB
 # using BenchmarkTools

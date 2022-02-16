@@ -49,43 +49,32 @@ end
 # form VarLmmModel
 gcm = NBCopulaVCModel(gcs);
 
-# initialize_model!(gcm)
-# @show gcm.β
-# @show gcm.Σ
-# @show gcm.r
-#
-# using Test
-# mseβ, mser, mseΣ = MSE(gcm, βtrue, rtrue, Σtrue)
-# @test mseβ < 1
-# @test mser < 1
-# @test mseΣ < 1
+fittime = @elapsed GLMCopula.fit!(gcm, tol = 1e-5, maxBlockIter = 50)
+@show fittime
+@show gcm.β
+@show gcm.Σ
+@show gcm.r
+@show gcm.∇β
+@show gcm.∇Σ
+@show gcm.∇r
 
-# fittime = @elapsed GLMCopula.fit!(gcm, tol = 1e-5, maxBlockIter = 50)
-# @show fittime
-# @show gcm.β
-# @show gcm.Σ
-# @show gcm.r
-# @show gcm.∇β
-# @show gcm.∇Σ
-# @show gcm.∇r
-#
-# @test gcm.β ≈ [0.25203920476125224, 1.4003501217778764, -0.5073708048091656]
-# @test gcm.Σ ≈ [0.4992562490328951]
-# @test gcm.r ≈ [10.2357654206632]
-#
-# loglikelihood!(gcm, true, true)
-# vcov!(gcm)
-# @show GLMCopula.confint(gcm)
-# # mse and time under our model
-# mseβ, mser, mseΣ = MSE(gcm, βtrue, rtrue, Σtrue)
-# @show mseβ
-# @show mser
-# @show mseΣ
-#
-# using Test
-# @test mseβ ≈ 1.3429466418437811e-5
-# @test mser ≈ 0.05558533358049526
-# @test mseΣ ≈ 5.531655010694497e-7
+@test gcm.β ≈ [0.25203920476125224, 1.4003501217778764, -0.5073708048091656]
+@test gcm.Σ ≈ [0.4992562490328951]
+@test gcm.r ≈ [10.2357654206632]
+
+loglikelihood!(gcm, true, true)
+vcov!(gcm)
+@show GLMCopula.confint(gcm)
+# mse and time under our model
+mseβ, mser, mseΣ = MSE(gcm, βtrue, rtrue, Σtrue)
+@show mseβ
+@show mser
+@show mseΣ
+
+using Test
+@test mseβ ≈ 1.3429466418437811e-5
+@test mser ≈ 0.05558533358049526
+@test mseΣ ≈ 5.531655010694497e-7
 
 # need to optimize memory allocation 13.73 MIB
 # using BenchmarkTools

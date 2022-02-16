@@ -68,39 +68,27 @@ end
 # form model
 gcm = GLMCopulaARModel(gcs);
 
-initialize_model!(gcm)
-@show gcm.β
-@show gcm.ρ
-@show gcm.σ2
+loglikelihood!(gcm, true, true)
+fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 20, accept_after_max_steps = 3, hessian_approximation = "limited-memory"))
+# fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
+@show fittime
+@show gcm.θ
+@show gcm.∇θ
 
+@test gcm.θ ≈ [0.24591703050925756, 1.4006002322220799, -0.5135116347672279, 0.4991177406151103, 0.5214932641901242]
+
+loglikelihood!(gcm, true, true)
+vcov!(gcm)
+@show GLMCopula.confint(gcm)
 mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
+@show mseβ
+@show mseσ2
+@show mseρ
 
 using Test
-@test mseβ < 1
-@test mseσ2 < 1
-@test mseρ < 1
-
-# loglikelihood!(gcm, true, true)
-# fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 20, accept_after_max_steps = 3, hessian_approximation = "limited-memory"))
-# # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
-# @show fittime
-# @show gcm.θ
-# @show gcm.∇θ
-#
-# @test gcm.θ ≈ [0.24591703050925756, 1.4006002322220799, -0.5135116347672279, 0.4991177406151103, 0.5214932641901242]
-#
-# loglikelihood!(gcm, true, true)
-# vcov!(gcm)
-# @show GLMCopula.confint(gcm)
-# mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
-# @show mseβ
-# @show mseσ2
-# @show mseρ
-#
-# using Test
-# @test mseβ ≈ 8.367620875773262e-6
-# @test mseσ2 ≈ 0.00046196040554647555
-# @test mseρ ≈ 7.783816222260004e-7
+@test mseβ ≈ 8.367620875773262e-6
+@test mseσ2 ≈ 0.00046196040554647555
+@test mseρ ≈ 7.783816222260004e-7
 
 using BenchmarkTools
 println("checking memory allocation for Poisson AR")

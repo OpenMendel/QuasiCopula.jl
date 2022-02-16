@@ -9,9 +9,10 @@ end
 # VCM
 @testset "VCM Covariance" begin
     include("unit_test/VCM/singlerun_bernoulliVCM.jl")
-    # include("unit_test/VCM/singlerun_nbVCM.jl") # why is Ipoptsolver not defined
+    include("unit_test/VCM/singlerun_nbVCM.jl")
     include("unit_test/VCM/singlerun_normalVCM.jl")
     include("unit_test/VCM/singlerun_poissonVCM.jl")
+    include("unit_test/VCM/singlerun_poisson_bernoulli_mixedVCM.jl")
 end
 
 ### AR
