@@ -64,9 +64,9 @@ fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 1
 @show gcm.θ
 @show gcm.∇θ
 
-using Test
-gcm.β ≈ [0.1860209299952096, 0.10317203848536331, -0.05217158982432471, 0.17357582848018224, 0.09003965923131003, -0.13325170880834192]
-gcm.Σ ≈ [0.09854548500696161]
+# using Test
+# gcm.β ≈ [0.1860209299952096, 0.10317203848536331, -0.05217158982432471, 0.17357582848018224, 0.09003965923131003, -0.13325170880834192]
+# gcm.Σ ≈ [0.09854548500696161]
 
 loglikelihood!(gcm, true, true)
 vcov!(gcm)
@@ -76,5 +76,8 @@ vcov!(gcm)
 mseβ, mseΣ = MSE(gcm, βtrue, Σtrue)
 @show mseβ
 @show mseΣ
-@test mseβ ≈ 0.00035221889935475105
-@test mseΣ ≈ 2.1156138649734725e-6
+# @test mseβ ≈ 0.00035221889935475105
+# @test mseΣ ≈ 2.1156138649734725e-6
+
+@test mseβ < 0.01
+@test mseΣ < 0.01
