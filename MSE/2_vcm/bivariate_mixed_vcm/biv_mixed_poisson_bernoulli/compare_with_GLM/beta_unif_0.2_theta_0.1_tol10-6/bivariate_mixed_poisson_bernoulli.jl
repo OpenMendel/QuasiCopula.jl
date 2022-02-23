@@ -28,7 +28,9 @@ function runtest()
     p = 3    # number of fixed effects, including intercept
     m = 1    # number of variance components
     # true parameter values
-    βtrue = [0.2; 0.1; -0.05; 0.2; 0.1; -0.1]
+    # βtrue = [0.2; 0.1; -0.05; 0.2; 0.1; -0.1]
+    Random.seed!(12345)
+    βtrue = rand(Uniform(-0.2, 0.2), 2 * p)
     Σtrue = [0.5]
 
     glm_betas = zeros(length(βtrue))
@@ -44,10 +46,10 @@ function runtest()
     trueparams = [βtrue; Σtrue] #hold true parameters
 
     #simulation parameters
-    samplesizes = [10000]
-    # samplesizes = [100; 1000; 10000]
+    # samplesizes = [10000]
+    samplesizes = [100; 1000; 10000]
     ns = [2]
-    nsims = 5
+    nsims = 100
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -112,7 +114,8 @@ function runtest()
 
                 gcm = Poisson_Bernoulli_VCModel(gcs);
 
-                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
+#                 fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, warm_start_init_point="yes", limited_memory_max_history = 50, accept_after_max_steps = 5, hessian_approximation = "limited-memory"))
+                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-6, warm_start_init_point="yes", limited_memory_max_history = 16, hessian_approximation = "limited-memory"))
                 @show fittime
                 @show gcm.β
                 @show gcm.Σ
@@ -137,7 +140,7 @@ function runtest()
                 # poisson_glm = glm(@formula(Y1 ~ 1 + X1 + X2), df, Poisson(), LogLink());
                 # bernoulli_glm = glm(@formula(Y2 ~ 1 + X1 + X2), df, Bernoulli(), LogitLink());
 
-                fittime_GLM = @elapsed fit_GLM_twice!(df, glm_betas, intervals_GLM_1, intervals_GLM_2)
+                fittime_GLM = @elapsed fit_GLM_twice!(Ystack, Xstack, glm_betas, intervals_GLM_1, intervals_GLM_2)
                 fittimes_GLM[currentind] = fittime_GLM
                 # glm_betas = [poisson_glm.model.pp.beta0; bernoulli_glm.model.pp.beta0]
                 GLM_betaMSE = sum(abs2, glm_betas .- βtrue) / p
