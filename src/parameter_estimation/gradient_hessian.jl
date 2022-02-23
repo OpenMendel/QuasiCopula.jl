@@ -12,12 +12,12 @@ end
     std_res_differential!(gc)
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Negative Binomial.
 """
-function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, NBCopulaARObs{T, D, Link}, NBCopulaCSObs{T, D, Link}}
+function std_res_differential!(gc::Union{NBCopulaVCObs{T, D, Link}, NBCopulaARObs{T, D, Link}, NBCopulaCSObs{T, D, Link}}
     ) where {T<: BlasReal, D<:NegativeBinomial{T}, Link}
-    @inbounds for j in 1:gc.n
-        gc.∇μβ[j, :] .= gc.dμ[j] .* @view(gc.X[j, :])
-        gc.∇σ2β[j, :] .= (gc.μ[j] * inv(gc.d.r) + (1 + inv(gc.d.r) * gc.μ[j])) .* @view(gc.∇μβ[j, :])
-        gc.∇resβ[j, :] .= -inv(sqrt(gc.varμ[j])) .* @view(gc.∇μβ[j, :]) .- (0.5 * inv(gc.varμ[j])) .* gc.res[j] .* @view(gc.∇σ2β[j, :])
+    @turbo for i in 1:gc.p
+         for j in 1:gc.n
+            gc.∇resβ[j, i] = -inv(sqrt(gc.varμ[j])) * gc.dμ[j] * gc.X[j, i] - (0.5 * inv(gc.varμ[j])) * gc.res[j] * (gc.μ[j] * inv(gc.d.r) + (1 + inv(gc.d.r) * gc.μ[j])) *  gc.dμ[j] * gc.X[j, i]
+        end
     end
     nothing
 end

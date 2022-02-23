@@ -9,7 +9,8 @@ successive loglikelihood is less than `tol`.
 """
 function fit!(
         gcm::NBCopulaVCModel,
-        solver=Ipopt.IpoptSolver(print_level=0, max_iter=10,
+        solver=Ipopt.IpoptSolver(print_level = 0, max_iter = 10, limited_memory_max_history = 20,
+                                warm_start_init_point = "yes",  mu_strategy = "adaptive",
                                 hessian_approximation = "limited-memory");
         tol::Float64 = 1e-6,
         maxBlockIter::Int=100
@@ -55,10 +56,12 @@ end
 
 function fit!(
     gcm::NBCopulaARModel,
-    solver=Ipopt.IpoptSolver(print_level=0, max_iter=12, warm_start_init_point="yes",
-                             hessian_approximation = "limited-memory");
-    tol::Float64 = 1e-6,
-    maxBlockIter::Int=100
+    solver=Ipopt.Ipopt.IpoptSolver(print_level = 0, max_iter = 15,
+                            limited_memory_max_history = 20,
+                            warm_start_init_point = "yes",  mu_strategy = "adaptive",
+                            hessian_approximation = "limited-memory");
+    tol::Float64 = 1e-7,
+    maxBlockIter::Int=20
     )
     initialize_model!(gcm)
     npar = gcm.p + 2 # rho and sigma squared
@@ -101,10 +104,11 @@ end
 
 function fit!(
     gcm::NBCopulaCSModel,
-    solver=Ipopt.IpoptSolver(print_level=0, max_iter=20, warm_start_init_point="yes",
+    solver=Ipopt.IpoptSolver(print_level = 0, max_iter = 15, limited_memory_max_history = 20,
+                            warm_start_init_point = "yes", mu_strategy = "adaptive",
                              hessian_approximation = "limited-memory");
-    tol::Float64 = 1e-6,
-    maxBlockIter::Int=100
+    tol::Float64 = 1e-7,
+    maxBlockIter::Int=20
     )
     initialize_model!(gcm)
     npar = gcm.p + 2 # rho and sigma squared

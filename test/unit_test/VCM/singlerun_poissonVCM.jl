@@ -19,7 +19,7 @@ Link = typeof(link)
 T = Float64
 
 samplesize = 10000
-ni = 5
+ni = 25
 
 gcs = Vector{GLMCopulaVCObs{T, D, Link}}(undef, samplesize)
 
@@ -48,8 +48,7 @@ end
 
 # form VarLmmModel
 gcm = GLMCopulaVCModel(gcs);
-
-fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 18, hessian_approximation = "limited-memory"))
+fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 50, accept_after_max_steps = 4, hessian_approximation = "limited-memory"))
 @show fittime
 @show gcm.β
 @show gcm.Σ

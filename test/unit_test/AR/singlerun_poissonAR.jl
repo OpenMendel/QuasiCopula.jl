@@ -36,14 +36,14 @@ T = Float64
 
 gcs = Vector{GLMCopulaARObs{T, D, Link}}(undef, samplesize)
 
-ni = 5# number of observations per individual
+ni = 25# number of observations per individual
 V = get_V(ρtrue[1], ni)
 
 # true Gamma
 Γ = σ2true[1] * V
 
 # for reproducibility I will simulate all the design matrices here
-Random.seed!(12345)
+Random.seed!(1234)
 X_samplesize = [randn(ni, p - 1) for i in 1:samplesize]
 
 for i in 1:samplesize
@@ -68,7 +68,7 @@ end
 # form model
 gcm = GLMCopulaARModel(gcs);
 
-fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 20, accept_after_max_steps = 3, hessian_approximation = "limited-memory"))
+fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 50, accept_after_max_steps = 4, hessian_approximation = "limited-memory"))
 # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
 @show fittime
 @show gcm.θ

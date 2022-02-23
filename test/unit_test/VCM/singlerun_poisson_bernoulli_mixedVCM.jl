@@ -6,7 +6,9 @@ import StatsBase: sem
 p = 3    # number of fixed effects, including intercept
 m = 1    # number of variance components
 # true parameter values
-βtrue = [0.2; 0.1; -0.05; 0.2; 0.1; -0.1]
+# βtrue = [0.2; 0.1; -0.05; 0.2; 0.1; -0.1]
+Random.seed!(123345)
+βtrue = rand(Uniform(-0.2, 0.2), 2 * p)
 Σtrue = [0.1]
 
 # generate data
@@ -57,27 +59,20 @@ end
 
 gcm = Poisson_Bernoulli_VCModel(gcs);
 
-fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-6, limited_memory_max_history = 20, warm_start_init_point="yes", accept_after_max_steps = 5, hessian_approximation = "limited-memory"))
+fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, derivative_test = "first-order", limited_memory_max_history = 16, hessian_approximation = "limited-memory"))
 @show fittime
 @show gcm.β
 @show gcm.Σ
 @show gcm.θ
 @show gcm.∇θ
 
-# using Test
-# gcm.β ≈ [0.1860209299952096, 0.10317203848536331, -0.05217158982432471, 0.17357582848018224, 0.09003965923131003, -0.13325170880834192]
-# gcm.Σ ≈ [0.09854548500696161]
-
 loglikelihood!(gcm, true, true)
 vcov!(gcm)
 @show GLMCopula.confint(gcm)
-# mse and time under our model
-# coverage!(gcm, trueparams, intervals, curcoverage)
+# mse under our model
 mseβ, mseΣ = MSE(gcm, βtrue, Σtrue)
 @show mseβ
 @show mseΣ
-# @test mseβ ≈ 0.00035221889935475105
-# @test mseΣ ≈ 2.1156138649734725e-6
 
 @test mseβ < 0.01
 @test mseΣ < 0.01

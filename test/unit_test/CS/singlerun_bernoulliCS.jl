@@ -37,7 +37,7 @@ T = Float64
 
 gcs = Vector{GLMCopulaCSObs{T, D, Link}}(undef, samplesize)
 
-ni = 5#  number of observations per individual
+ni = 25#  number of observations per individual
 V = get_V(ρtrue[1], ni)
 
 # true Gamma
@@ -69,7 +69,10 @@ end
 # form model
 gcm = GLMCopulaCSModel(gcs);
 
-fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, accept_after_max_steps = 5, limited_memory_max_history = 50, warm_start_init_point="yes", derivative_test = "first-order", hessian_approximation = "limited-memory"))
+fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, derivative_test = "first-order", accept_after_max_steps = 2, limited_memory_max_history = 50, warm_start_init_point="yes",  mu_strategy = "adaptive", mu_oracle = "probing", hessian_approximation = "limited-memory"))
+
+# fittime2 = @elapsed GLMCopula.fit!(gcm2, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, accept_after_max_steps = 4, limited_memory_max_history = 50, warm_start_init_point="yes", mu_strategy = "adaptive", hessian_approximation = "limited-memory"))
+
 @show gcm.θ
 @show trueparams
 @show gcm.∇θ

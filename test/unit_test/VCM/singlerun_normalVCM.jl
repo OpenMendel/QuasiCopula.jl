@@ -15,7 +15,7 @@ Random.seed!(12345)
 
 #simulation parameters
 samplesize = 10000
-ni = 5
+ni = 25
 
 # true Gamma
 Γ = Σtrue[1] * ones(ni, ni)
@@ -46,7 +46,7 @@ end
 # form VarLmmModel
 gcm = GaussianCopulaVCModel(gcs);
 
-fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, hessian_approximation = "limited-memory"))
+fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, limited_memory_max_history = 50, accept_after_max_steps = 4, tol = 10^-8, hessian_approximation = "limited-memory"))
 @show fittime
 @show gcm.β
 @show gcm.Σ

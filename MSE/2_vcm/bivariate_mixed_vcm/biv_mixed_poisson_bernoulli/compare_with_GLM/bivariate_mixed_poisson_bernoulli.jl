@@ -44,9 +44,10 @@ function runtest()
     trueparams = [βtrue; Σtrue] #hold true parameters
 
     #simulation parameters
-    samplesizes = [100; 1000; 10000]
+    samplesizes = [10000]
+    # samplesizes = [100; 1000; 10000]
     ns = [2]
-    nsims = 20
+    nsims = 5
 
     #storage for our results
     βMseResults = ones(nsims * length(ns) * length(samplesizes))
@@ -86,6 +87,7 @@ function runtest()
             vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
             for j in 1:nsims
                 println("rep $j obs per person $ni samplesize $m")
+                Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k)
                 Xstack = [ones(m) randn(m, p - 1)]
                 Ystack = []
                 for i in 1:m
@@ -110,7 +112,7 @@ function runtest()
 
                 gcm = Poisson_Bernoulli_VCModel(gcs);
 
-                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, limited_memory_max_history = 7, accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
+                fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
                 @show fittime
                 @show gcm.β
                 @show gcm.Σ

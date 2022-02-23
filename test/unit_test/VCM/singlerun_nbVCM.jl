@@ -6,7 +6,6 @@ import StatsBase: sem
 p_fixed = 3    # number of fixed effects, including intercept
 m = 1    # number of variance components
 # true parameter values
-#   βtrue = ones(p)
 Random.seed!(12345)
 # try next
 βtrue = rand(Uniform(-2, 2), p_fixed)
@@ -48,8 +47,8 @@ end
 
 # form VarLmmModel
 gcm = NBCopulaVCModel(gcs);
-
-fittime = @elapsed GLMCopula.fit!(gcm, tol = 1e-5, maxBlockIter = 50)
+gcm2 = deepcopy(gcm);
+fittime = @elapsed GLMCopula.fit!(gcm)
 @show fittime
 @show gcm.β
 @show gcm.Σ
@@ -57,11 +56,6 @@ fittime = @elapsed GLMCopula.fit!(gcm, tol = 1e-5, maxBlockIter = 50)
 @show gcm.∇β
 @show gcm.∇Σ
 @show gcm.∇r
-
-# ipopt version 0.9 results
-# @test gcm.β ≈ [0.25203920476125224, 1.4003501217778764, -0.5073708048091656]
-# @test gcm.Σ ≈ [0.4992562490328951]
-# @test gcm.r ≈ [10.2357654206632]
 
 loglikelihood!(gcm, true, true)
 vcov!(gcm)

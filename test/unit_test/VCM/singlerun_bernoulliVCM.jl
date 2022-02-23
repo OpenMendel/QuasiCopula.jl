@@ -19,7 +19,7 @@ Link = typeof(link)
 T = Float64
 
 samplesize = 10000
-ni = 5
+ni = 25
 
 gcs = Vector{GLMCopulaVCObs{T, D, Link}}(undef, samplesize)
 
@@ -48,16 +48,12 @@ end
 
 gcm = GLMCopulaVCModel(gcs);
 
-fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-7, limited_memory_max_history = 20, accept_after_max_steps = 1, hessian_approximation = "limited-memory"))
+fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 50, accept_after_max_steps = 4, warm_start_init_point = "yes", hessian_approximation = "limited-memory"))
 @show fittime
 @show gcm.β
 @show gcm.Σ
 @show gcm.∇β
 @show gcm.∇Σ
-
-# on ipopt most recent version 0.9
-# @test gcm.β ≈ [0.2718906573470128, 1.402611603041587, -0.5134731411739186]
-# @test gcm.Σ ≈ [0.49305430143517737]
 
 loglikelihood!(gcm, true, true)
 vcov!(gcm)
@@ -70,9 +66,6 @@ mseβ, mseΣ = MSE(gcm, βtrue, Σtrue)
 using Test
 @test mseβ < 0.01
 @test mseΣ < 0.01
-
-# @test mseβ ≈ 0.00015021026740224318
-# @test mseΣ ≈ 4.824272855337919e-5
 
 using BenchmarkTools
 println("checking memory allocation for Bernoulli VCM")

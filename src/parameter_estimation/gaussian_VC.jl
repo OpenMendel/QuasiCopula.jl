@@ -177,7 +177,7 @@ end
 function update_res!(
     gcm::GaussianCopulaVCModel{T}
     ) where T <: BlasReal
-    for i in eachindex(gcm.data)
+    @inbounds for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
     end
     nothing

@@ -35,7 +35,7 @@ T = Float64
 
 gcs = Vector{NBCopulaARObs{T, D, Link}}(undef, samplesize)
 
-ni = 5 #  number of observations per individual
+ni = 25 #  number of observations per individual
 V = get_V(ρtrue[1], ni)
 
 # true Gamma
@@ -69,17 +69,13 @@ end
 # form model
 gcm = NBCopulaARModel(gcs);
 
-fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter = 20, tol=1e-6)
+fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter = 20, tol=1e-8)
 @show fittime
 @show gcm.θ
 @show gcm.∇θ
 
-# @test gcm.θ ≈ [0.25408749719321383, 1.394747799442321, -0.5060772204080676, 0.5182372977100089, 0.5088787843885787]
-
 @show gcm.r
 @show gcm.∇r
-
-# @test gcm.r ≈ [10.135298765900169]
 
 loglikelihood!(gcm, true, true)
 vcov!(gcm)
@@ -97,12 +93,6 @@ using Test
 @test mseσ2 < 0.01
 @test mseρ < 0.01
 @test mser < 0.1
-
-# using Test
-# @test mseβ ≈ 3.060579384225827e-5
-# @test mser ≈ 0.01830575605410867
-# @test mseσ2 ≈ 7.88328122188688e-5
-# @test mseρ ≈ 0.00033259902776349684
 
 # need to optimize wrt to memory 13.73 MIB
 # using BenchmarkTools

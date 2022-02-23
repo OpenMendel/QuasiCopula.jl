@@ -21,6 +21,8 @@ end
     include("unit_test/AR/singlerun_nbAR.jl")
     include("unit_test/AR/singlerun_normalAR.jl")
     include("unit_test/AR/singlerun_poissonAR.jl")
+    include("unit_test/AR/Poisson_AR_turbo_macro_LoopVectorization.jl")
+    include("unit_test/AR/NB_AR_turbo_macro_LoopVectorization.jl")
 end
 
 ### CS
