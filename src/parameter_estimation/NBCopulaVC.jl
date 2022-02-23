@@ -105,6 +105,7 @@ struct NBCopulaVCModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalua
     data::Vector{NBCopulaVCObs{T, D, Link}}
     Ytotal::T
     ntotal::Int     # total number of singleton observations
+    n::Int          # number of random vectors
     p::Int          # number of mean parameters in linear regression
     m::Int          # number of variance components
     # parameters
@@ -183,7 +184,7 @@ function NBCopulaVCModel(gcs::Vector{NBCopulaVCObs{T, D, Link}}) where {T <: Bla
     storage_n2 = Vector{T}(undef, n)
     storage_m = Vector{T}(undef, m)
     storage_Σ = Vector{T}(undef, m)
-    NBCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, p, m, β, τ, Σ, r, θ,
+    NBCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, n, p, m, β, τ, Σ, r, θ,
         ∇β, ∇τ, ∇Σ, ∇r, ∇θ, XtX, Hβ, HΣ, Hr, Hτ, Ainv, Aevec, M, vcov, ψ, TR, QF, hess1, hess2,
         storage_n, storage_n2, storage_m, storage_Σ, d, link)
 end
@@ -201,7 +202,7 @@ function loglikelihood!(
   needgrad::Bool = false,
   needhess::Bool = false
   ) where {T <: BlasReal, D, Link}
-  n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
+  # n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
   needgrad = needgrad || needhess
   if needgrad
       fill!(gc.∇β, 0)
@@ -216,7 +217,7 @@ function loglikelihood!(
   std_res_differential!(gc) # this will compute ∇resβ
 
   # evaluate copula loglikelihood
-  @inbounds for k in 1:m
+  @inbounds for k in 1:gc.m
       mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
       if needgrad
           BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual) SHOULDNT THIS BE res^t*Γ*res? NOT ∇resβ*Γ*res
@@ -243,7 +244,7 @@ function loglikelihood!(
           # does adding this term to the approximation of the hessian violate negative semidefinite properties?
           fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
           fill!(gc.added_term2, 0.0) # fill hessian with 0
-          @inbounds for k in 1:m
+          @inbounds for k in 1:gc.m
               mul!(gc.added_term_numerator, gc.V[k], gc.∇resβ) # storage_n = V[k] * res
               BLAS.gemm!('T', 'N', Σ[k], gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2)
           end
@@ -304,7 +305,7 @@ end
 function nb_first_derivative(gc::NBCopulaVCObs, Σ::Vector{T}, r::Number) where T <: BlasReal
     s = zero(T)
     # 2nd term of logl
-    for j in eachindex(gc.y)
+    @inbounds for j in eachindex(gc.y)
         yi, μi = gc.y[j], gc.μ[j]
         s += -(yi+r)/(μi+r) - log(μi+r) + 1 + log(r) + digamma(r+yi) - digamma(r)
     end
@@ -325,7 +326,7 @@ end
 function nb_second_derivative(gc::NBCopulaVCObs, Σ::Vector{T}, r::Number) where T <: BlasReal
     s = zero(T)
     # 2nd term of logl
-    for j in eachindex(gc.y)
+    @inbounds for j in eachindex(gc.y)
         yi, μi = gc.y[j], gc.μ[j]
         s += (yi+r)/(μi+r)^2 - 2/(μi+r) + 1/r + trigamma(r+yi) - trigamma(r)
     end

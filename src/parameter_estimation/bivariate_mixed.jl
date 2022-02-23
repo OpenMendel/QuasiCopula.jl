@@ -4,6 +4,9 @@ mutable struct Poisson_Bernoulli_VCObs{T <: BlasReal, VD, VL}
     y::Vector{T}
     X::Matrix{T}
     V::Vector{Matrix{T}}
+    n::Int
+    p::Int          # number of mean parameters in linear regression
+    m::Int          # number of variance components
     # working arrays
     ∇β::Vector{T}   # gradient wrt β
     ∇μβ::Matrix{T}
@@ -80,7 +83,7 @@ function Poisson_Bernoulli_VCObs(
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
-    Poisson_Bernoulli_VCObs{T, VD, VL}(y, X, V, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇τ, ∇Σ, Hβ, HΣ,
+    Poisson_Bernoulli_VCObs{T, VD, VL}(y, X, V, n, p, m, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇τ, ∇Σ, Hβ, HΣ,
         Hτ, res, t, q, xtx, storage_n, m1, m2, storage_p1, storage_p2, storage_np, storage_pp, added_term_numerator, added_term2, η, μ, varμ, dμ, vecd, veclink, wt, w1, w2)
 end
 

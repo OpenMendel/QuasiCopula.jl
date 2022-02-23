@@ -4,8 +4,8 @@ export GLMCopulaCSObs, GLMCopulaCSModel
 
 struct GLMCopulaCSObs{T <: BlasReal, D, Link} # <: QCobs
     # data
-    n::T
-    p::T
+    n::Int
+    p::Int
     y::Vector{T}
     X::Matrix{T}
     V::Matrix{T}
@@ -190,7 +190,7 @@ Forms the CS covariance structure given ρ (correlation parameter), gc (single c
 """
 function get_V!(ρ, gc::Union{GLMCopulaCSObs{T, D, Link}, NBCopulaCSObs{T, D, Link}, GaussianCopulaCSObs{T}}) where {T, D, Link}
     gc.vec[1] = 1.0
-    @simd for i in 2:Integer(gc.n)
+    @inbounds for i in 2:gc.n
         gc.vec[i] = ρ
     end
     gc.V .= ToeplitzMatrices.SymmetricToeplitz(gc.vec)
@@ -203,7 +203,7 @@ Forms the first derivative of CS covariance structure wrt to ρ, given ρ (corre
 """
 function get_∇V!(gc::Union{GLMCopulaCSObs{T, D, Link}, NBCopulaCSObs{T, D, Link}, GaussianCopulaCSObs{T}}) where {T, D, Link}
     gc.vec[1] = 0.0
-    @simd for i in 2:Integer(gc.n)
+    @inbounds for i in 2:gc.n
         gc.vec[i] = 1.0
     end
     gc.∇CSV .= ToeplitzMatrices.SymmetricToeplitz(gc.vec)
@@ -219,7 +219,7 @@ function loglikelihood!(
     needhess::Bool = false;
     penalized::Bool = false
     ) where {T <: BlasReal}
-    n, p = size(gc.X, 1), size(gc.X, 2)
+    # n, p = size(gc.X, 1), size(gc.X, 2)
     needgrad = needgrad || needhess
     if needgrad
         fill!(gc.∇β, 0)
@@ -241,7 +241,7 @@ function loglikelihood!(
     end
 
     q = dot(gc.res, gc.storage_n)
-    c1 = 1 + (0.5 * n * σ2)
+    c1 = 1 + (0.5 * gc.n * σ2)
     # if q < 0
     #     q = 0
     # end
@@ -264,7 +264,7 @@ function loglikelihood!(
         # gc.∇ρ .= inv(c2) * 0.5 * σ2 * transpose(gc.res) * gc.∇ARV * gc.res
         gc.∇ρ .= inv1pq * 0.5 * σ2 * q2
         # gradient with respect to sigma2
-        gc.∇σ2 .= 0.5 * ((q * inv1pq) - n * inv(c1))
+        gc.∇σ2 .= 0.5 * ((q * inv1pq) - gc.n * inv(c1))
         if penalized
             gc.∇σ2 .-= σ2
         end
@@ -272,7 +272,7 @@ function loglikelihood!(
             gc.Hρ .= -(inv(c2) * 0.5 * σ2 * q2)^2
 
             # hessian for sigma2
-            gc.Hσ2 .= 0.25 * n^2 * inv(c1)^2 - inv1pq^2 * (0.25 * q^2)
+            gc.Hσ2 .= 0.25 * gc.n^2 * inv(c1)^2 - inv1pq^2 * (0.25 * q^2)
             if penalized
                 gc.Hσ2 .-= 1.0
             end

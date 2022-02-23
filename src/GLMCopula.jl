@@ -1,6 +1,6 @@
 module GLMCopula
 using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Distributions, StatsFuns, Statistics, StatsBase, ToeplitzMatrices
-# using LoopVectorization
+using LoopVectorization
 using LinearAlgebra: BlasReal, copytri!
 using SpecialFunctions, Random
 @reexport using Ipopt
@@ -19,6 +19,9 @@ mutable struct GLMCopulaVCObs{T <: BlasReal, D, Link}
     y::Vector{T}
     X::Matrix{T}
     V::Vector{Matrix{T}}
+    n::Int
+    p::Int          # number of mean parameters in linear regression
+    m::Int          # number of variance components
     # working arrays
     ∇β::Vector{T}   # gradient wrt β
     ∇μβ::Matrix{T}
@@ -93,7 +96,7 @@ function GLMCopulaVCObs(
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
-    GLMCopulaVCObs{T, D, Link}(y, X, V, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇τ, ∇Σ, Hβ, HΣ,
+    GLMCopulaVCObs{T, D, Link}(y, X, V, n, p, m, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇τ, ∇Σ, Hβ, HΣ,
         Hτ, res, t, q, xtx, storage_n, m1, m2, storage_p1, storage_p2, storage_np, storage_pp, added_term_numerator, added_term2, η, μ, varμ, dμ, d, link, wt, w1, w2)
 end
 

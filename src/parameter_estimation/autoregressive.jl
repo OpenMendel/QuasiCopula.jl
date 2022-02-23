@@ -3,8 +3,8 @@ export get_V!, get_∇V!, get_∇2V!
 export update_rho!
 struct GLMCopulaARObs{T <: BlasReal, D, Link}
     # data
-    n::T
-    p::T
+    n::Int
+    p::Int
     y::Vector{T}
     X::Matrix{T}
     V::Matrix{T}
@@ -191,7 +191,7 @@ Forms the AR(1) covariance structure given ρ (correlation parameter), gc (singl
 """
 function get_V!(ρ, gc::Union{GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, GaussianCopulaARObs{T}}) where {T, D, Link}
     gc.vec[1] = 1.0
-    for i in 2:Integer(gc.n)
+    @inbounds for i in 2:gc.n
         gc.vec[i] = gc.vec[i-1] * ρ
     end
     # gc.vec .= [ρ^i for i in 0:gc.n-1]
@@ -206,7 +206,7 @@ Forms the first derivative of AR(1) covariance structure wrt to ρ, given ρ (co
 function get_∇V!(ρ, gc::Union{GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, GaussianCopulaARObs{T}}) where {T, D, Link}
     gc.vec[1] = 0.0
     gc.vec[2] = 1.0
-    for i in 3:Integer(gc.n)
+    @inbounds for i in 3:gc.n
         gc.vec[i] = (i-1) * inv(i-2) * gc.vec[i-1] * ρ
     end
     gc.∇ARV .= ToeplitzMatrices.SymmetricToeplitz(gc.vec)
@@ -218,14 +218,13 @@ end
 Forms the second derivative of AR(1) covariance structure wrt to ρ, given ρ (correlation parameter) and gc object
 """
 function get_∇2V!(ρ, gc::Union{GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, GaussianCopulaARObs{T}}) where {T, D, Link}
-    n = gc.n
-    if n <= 2
+    if gc.n <= 2
         fill!(gc.∇2ARV, 0.0)
     else
         gc.vec[1] = 0.0
         gc.vec[2] = 0.0
         gc.vec[3] = 2.0
-        for i in 4:Integer(gc.n)
+        @inbounds for i in 4:gc.n
             gc.vec[i] = (i - 1) * inv(i - 3) * gc.vec[i-1] * ρ
         end
         gc.∇2ARV .= ToeplitzMatrices.SymmetricToeplitz(gc.vec)
@@ -242,7 +241,6 @@ function loglikelihood!(
     needhess::Bool = false;
     penalized::Bool = false
     ) where {T <: BlasReal, D, Link}
-    n, p = size(gc.X, 1), size(gc.X, 2)
     needgrad = needgrad || needhess
     if needgrad
         fill!(gc.∇β, 0)
@@ -268,14 +266,8 @@ function loglikelihood!(
     end
     q = dot(gc.res, gc.storage_n)
 
-    # GLMCopula.storage_n!(gc, ρ, n)
-    # if needgrad
-    #     BLAS.gemv!('T', σ2, gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
-    # end
-    # q = dot(gc.res, gc.storage_n)
-
     # @show q
-    c1 = 1 + 0.5 * n * σ2
+    c1 = 1 + 0.5 * gc.n * σ2
     c2 = 1 + 0.5 * σ2 * q
     # loglikelihood
     logl = GLMCopula.component_loglikelihood(gc)
@@ -296,7 +288,7 @@ function loglikelihood!(
         gc.∇ρ .= inv(c2) * 0.5 * σ2 * q2
 
         # gradient with respect to sigma2
-        gc.∇σ2 .= -0.5 * n * inv(c1) .+ inv(c2) * 0.5 * q
+        gc.∇σ2 .= -0.5 * gc.n * inv(c1) .+ inv(c2) * 0.5 * q
         if penalized
             gc.∇σ2 .-= σ2
         end
@@ -309,7 +301,7 @@ function loglikelihood!(
             gc.Hρ .= 0.5 * σ2 * (inv(c2) * q3 - inv(c2)^2 * 0.5 * σ2 * q2^2)
 
             # hessian for sigma2
-            gc.Hσ2 .= 0.25 * n^2 * inv(c1)^2 - inv(c2)^2 * (0.25 * q^2)
+            gc.Hσ2 .= 0.25 * gc.n^2 * inv(c1)^2 - inv(c2)^2 * (0.25 * q^2)
 
             # hessian cross term for rho and sigma2
             gc.Hρσ2 .= 0.5 * q2 * inv1pq - 0.25 * σ2 * q * q2 * inv1pq^2

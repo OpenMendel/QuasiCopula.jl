@@ -14,7 +14,7 @@ compute the gradient of residual vector ∇resβ (standardized residual) with re
 """
 function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}, NBCopulaARObs{T, D, Link}, NBCopulaCSObs{T, D, Link}}
     ) where {T<: BlasReal, D<:NegativeBinomial{T}, Link}
-    @inbounds for j in 1:length(gc.y)
+    @inbounds for j in 1:gc.n
         gc.∇μβ[j, :] .= gc.dμ[j] .* @view(gc.X[j, :])
         gc.∇σ2β[j, :] .= (gc.μ[j] * inv(gc.d.r) + (1 + inv(gc.d.r) * gc.μ[j])) .* @view(gc.∇μβ[j, :])
         gc.∇resβ[j, :] .= -inv(sqrt(gc.varμ[j])) .* @view(gc.∇μβ[j, :]) .- (0.5 * inv(gc.varμ[j])) .* gc.res[j] .* @view(gc.∇σ2β[j, :])
@@ -30,16 +30,16 @@ compute the gradient of residual vector ∇resβ (standardized residual) with re
 function std_res_differential!(gc::Poisson_Bernoulli_VCObs{T, VD, VL}) where {T<: BlasReal, VD, VL}
     fill!(gc.∇resβ, 0.0)
     fill!(gc.∇μβ, 0.0)
-    @inbounds for i in 1:Integer(size(gc.X, 2) / 2)
+    p1 = Integer(gc.p/2)
+    @inbounds for i in 1:p1
             # first is poisson
             gc.∇resβ[1, i] = gc.X[1, i]
             gc.∇resβ[1, i] *= -(inv(sqrt(gc.varμ[1])) + (0.5 * inv(gc.varμ[1])) * gc.res[1]) * gc.dμ[1]
         end
+    @inbounds for i in (p1 + 1):gc.p
             # second is bernoulli
-            gc.∇μβ[2, Integer((size(gc.X, 2) / 2) + 1):Integer((size(gc.X, 2)))] .= gc.varμ[2] .* @view(gc.X[2, Integer((size(gc.X, 2) / 2) + 1):Integer((size(gc.X, 2)))])
-            gc.∇σ2β[2, Integer((size(gc.X, 2) / 2) + 1):Integer((size(gc.X, 2)))].= gc.varμ[2] * (1 - 2 * gc.μ[2]) .* @view(gc.X[2, Integer((size(gc.X, 2) / 2) + 1):Integer((size(gc.X, 2)))])
-            gc.∇resβ[2, Integer((size(gc.X, 2) / 2) + 1):Integer((size(gc.X, 2)))] .= -inv(sqrt(gc.varμ[2])) .* @view(gc.∇μβ[2, Integer((size(gc.X, 2) / 2) + 1):Integer(size(gc.X, 2))]).- (0.5 * inv(sqrt(gc.varμ[2]))) .* gc.res[2] .* @view(gc.∇σ2β[2, Integer((size(gc.X, 2) / 2) + 1):Integer((size(gc.X, 2)))])
-    nothing
+            gc.∇resβ[2, i] = -sqrt(gc.varμ[2]) * gc.X[2, i] - (0.5 * gc.res[2] * (1 - (2 * gc.μ[2])) * gc.X[2, i])
+        end
 end
 
 """
@@ -47,8 +47,8 @@ end
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Poisson.
 """
 function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}}) where {T<: BlasReal, D<:Poisson{T}, Link}
-    @inbounds for i in 1:size(gc.X, 2)
-        @simd for j in 1:length(gc.y)
+    @turbo for i in 1:gc.p
+        for j in 1:gc.n
             gc.∇resβ[j, i] = gc.X[j, i]
             gc.∇resβ[j, i] *= -(inv(sqrt(gc.varμ[j])) + (0.5 * inv(gc.varμ[j])) * gc.res[j]) * gc.dμ[j]
         end
@@ -61,12 +61,12 @@ end
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Bernoulli.
 """
 function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}}) where {T<: BlasReal, D<:Bernoulli{T}, Link}
-    @inbounds for i in 1:size(gc.X, 2)
-        @inbounds for j in 1:length(gc.y)
-            gc.∇μβ[j, i] = gc.varμ[j] * gc.X[j, i]
-            gc.∇σ2β[j, i] = gc.varμ[j] * (1 - 2 * gc.μ[j]) * gc.X[j, i]
-            # gc.∇σ2β[j, :] .= (1 - (2 * gc.μ[j])) .* gc.∇μβ[j, :]
-            # wrong gc.∇resβ[j, i] = -inv(sqrt(gc.varμ[j])) * gc.∇μβ[j, i] - (0.5 * inv(sqrt(gc.varμ[j])) * gc.res[j] * gc.∇σ2β[j, i])
+    @turbo for i in 1:gc.p
+         for j in 1:gc.n
+            # gc.∇μβ[j, i] = gc.varμ[j] * gc.X[j, i]
+            # gc.∇σ2β[j, i] = gc.varμ[j] * (1 - 2 * gc.μ[j]) * gc.X[j, i]
+            # # gc.∇σ2β[j, :] .= (1 - (2 * gc.μ[j])) .* gc.∇μβ[j, :]
+            # # wrong gc.∇resβ[j, i] = -inv(sqrt(gc.varμ[j])) * gc.∇μβ[j, i] - (0.5 * inv(sqrt(gc.varμ[j])) * gc.res[j] * gc.∇σ2β[j, i])
             gc.∇resβ[j, i] = -sqrt(gc.varμ[j]) * gc.X[j, i] - (0.5 * gc.res[j] * (1 - (2 * gc.μ[j])) * gc.X[j, i])
         end
     end
@@ -122,7 +122,7 @@ function update_HΣ!(
     gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}}) where {T <: BlasReal, D, Link}
     fill!(gcm.HΣ, 0.0)
     @inbounds for j in 1:gcm.m
-        @simd for i in 1:length(gcm.storage_n)
+        @simd for i in 1:gcm.n
             gcm.hess1[j, i] = gcm.QF[i, j] * gcm.storage_n[i]
             gcm.hess2[j, i] = gcm.TR[i, j] * gcm.storage_n2[i]
         end

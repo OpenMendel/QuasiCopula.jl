@@ -7,8 +7,8 @@ A realization of Gaussian copula variance component data.
 """
 struct GaussianCopulaARObs{T <: BlasReal}
     # data
-    n::T
-    p::T
+    n::Int
+    p::Int
     y::Vector{T}
     X::Matrix{T}
     V::Matrix{T}
@@ -175,7 +175,7 @@ function initialize_model!(
     ) where T <: BlasReal
     # accumulate sufficient statistics X'y
     xty = zeros(T, gcm.p)
-    for i in eachindex(gcm.data)
+    @inbounds for i in eachindex(gcm.data)
         BLAS.gemv!('T', one(T), gcm.data[i].X, gcm.data[i].y, one(T), xty)
     end
     # least square solution for β
@@ -183,7 +183,7 @@ function initialize_model!(
     @show gcm.β
     # accumulate residual sum of squares
     rss = zero(T)
-    for i in eachindex(gcm.data)
+    @inbounds for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
         rss += abs2(norm(gcm.data[i].res))
     end
@@ -214,7 +214,7 @@ end
 function update_res!(
     gcm::GaussianCopulaARModel{T}
     ) where T <: BlasReal
-    for i in eachindex(gcm.data)
+    @inbounds for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
     end
     nothing
@@ -232,7 +232,7 @@ function standardize_res!(
     ) where T <: BlasReal
     σinv = sqrt(gcm.τ[1])
     # standardize residual
-    for i in eachindex(gcm.data)
+    @inbounds for i in eachindex(gcm.data)
         standardize_res!(gcm.data[i], σinv)
     end
     nothing
@@ -253,7 +253,7 @@ function update_Σ_jensen!(
     reltol::Number=1e-6,
     verbose::Bool=false) where T <: BlasReal
     rsstotal = zero(T)
-    for i in eachindex(gcm.data)
+    @inbounds for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
         rsstotal += abs2(norm(gcm.data[i].res))
         update_quadform!(gcm.data[i])

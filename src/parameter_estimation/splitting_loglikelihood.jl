@@ -19,7 +19,7 @@ Calculates the loglikelihood of observing `y` given mean `μ`, a distribution
 """
 function component_loglikelihood(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}}) where {T <: BlasReal, D, Link}
   logl = zero(T)
-    @inbounds for j in 1:length(gc.y)
+    @inbounds for j in 1:gc.n
       logl += GLMCopula.loglik_obs(gc.d, gc.y[j], gc.μ[j], gc.wt[j], 1.0)
   end
   logl
@@ -32,7 +32,7 @@ Calculates the loglikelihood of observing `y` given parameters for `μ` and `r` 
 """
 function component_loglikelihood(gc::Union{NBCopulaVCObs{T, D, Link}, NBCopulaARObs{T, D, Link}, NBCopulaCSObs{T, D, Link}}, r::T) where {T <: BlasReal, D<:NegativeBinomial{T}, Link}
     logl = zero(T)
-    @inbounds for j in 1:length(gc.y)
+    @inbounds for j in 1:gc.n
         logl += logpdf(D(r, r / (gc.μ[j] + r)), gc.y[j])
     end
     logl
@@ -45,7 +45,7 @@ Calculates the loglikelihood of observing `y` given mean `μ`, a distribution
 """
 function component_loglikelihood(gc::Poisson_Bernoulli_VCObs{T, VD, VL}) where {T <: BlasReal, VD, VL}
   logl = zero(T)
-    @inbounds for j in eachindex(gc.y)
+    @inbounds for j in 1:gc.n
       logl += GLMCopula.loglik_obs(gc.vecd[j], gc.y[j], gc.μ[j], gc.wt[j], 1.0)
   end
   logl
@@ -62,7 +62,7 @@ function loglikelihood!(
     needgrad::Bool = false,
     needhess::Bool = false
     ) where {T <: BlasReal}
-    n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
+    # n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
     needgrad = needgrad || needhess
     if needgrad
         fill!(gc.∇β, 0)
@@ -77,7 +77,7 @@ function loglikelihood!(
     std_res_differential!(gc) # this will compute ∇resβ
 
     # evaluate copula loglikelihood
-    @inbounds for k in 1:m
+    @inbounds for k in 1:gc.m
         mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
         if needgrad
             BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
@@ -106,7 +106,7 @@ function loglikelihood!(
             # does adding this term to the approximation of the hessian violate negative semidefinite properties?
             fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
             fill!(gc.added_term2, 0.0) # fill hessian with 0
-            @inbounds for k in 1:m
+            @inbounds for k in 1:gc.m
                 mul!(gc.added_term_numerator, gc.V[k], gc.∇resβ) # storage_n = V[k] * res
                 BLAS.gemm!('T', 'N', Σ[k], gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2)
             end

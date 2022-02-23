@@ -11,11 +11,14 @@ struct GaussianCopulaVCObs{T <: BlasReal}
     y::Vector{T}
     X::Matrix{T}
     V::Vector{Matrix{T}}
+    n::Int
+    p::Int          # number of mean parameters in linear regression
+    m::Int          # number of variance components
     # working arrays
     ∇β::Vector{T}   # gradient wrt β
     ∇τ::Vector{T}   # gradient wrt τ
     ∇Σ::Vector{T}   # gradient wrt σ2
-    Hβ::Matrix{T}   # Hessian wrt β 
+    Hβ::Matrix{T}   # Hessian wrt β
     Hτ::Matrix{T}   # Hessian wrt τ
     res::Vector{T}  # residual vector res_i
     xtx::Matrix{T}  # Xi'Xi
@@ -43,7 +46,7 @@ function GaussianCopulaVCObs(
     Hτ  = Matrix{T}(undef, 1, 1)
     res = Vector{T}(undef, n)
     xtx = transpose(X) * X
-    t   = [tr(V[k])/2 for k in 1:m] 
+    t   = [tr(V[k])/2 for k in 1:m]
     q   = Vector{T}(undef, m)
     storage_n = Vector{T}(undef, n)
     storage_p = Vector{T}(undef, p)
@@ -51,14 +54,14 @@ function GaussianCopulaVCObs(
     m2        = Vector{T}(undef, m)
     HΣ  = Matrix{T}(undef, m, m)
     # constructor
-    GaussianCopulaVCObs{T}(y, X, V, ∇β, ∇τ, ∇Σ, Hβ, 
+    GaussianCopulaVCObs{T}(y, X, V, n, p, m, ∇β, ∇τ, ∇Σ, Hβ,
         Hτ, res, xtx, t, q, storage_n, storage_p, m1, m2, HΣ)
 end
 
 """
 GaussianCopulaVCModel
 GaussianCopulaVCModel(gcs)
-Gaussian copula variance component model, which contains a vector of 
+Gaussian copula variance component model, which contains a vector of
 `GaussianCopulaVCObs` as data, model parameters, and working arrays.
 """
 struct GaussianCopulaVCModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
@@ -121,21 +124,21 @@ function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVCObs{T}}) where T <: B
     vcov    = zeros(T, p + m + 1, p + m + 1)
     ψ       = Vector{T}(undef, p + m + 1)
     HΣ  = Matrix{T}(undef, m, m)
-    GaussianCopulaVCModel{T}(gcs, ntotal, p, m, β, τ, Σ, 
+    GaussianCopulaVCModel{T}(gcs, ntotal, p, m, β, τ, Σ,
         ∇β, ∇τ, ∇Σ, Hβ, Hτ, XtX, TR, QF,
         storage_n, storage_m, storage_Σ, Ainv, Aevec, M, vcov, ψ, HΣ)
 end
 
 """
 initialize_model!(gcm)
-Initialize the linear regression parameters `β` and `τ=σ0^{-2}` by the least 
-squares solution. 
+Initialize the linear regression parameters `β` and `τ=σ0^{-2}` by the least
+squares solution.
 """
 function initialize_model!(
     gcm::GaussianCopulaVCModel{T}
     ) where T <: BlasReal
     # accumulate sufficient statistics X'y
-    xty = zeros(T, gcm.p) 
+    xty = zeros(T, gcm.p)
     for i in eachindex(gcm.data)
         BLAS.gemv!('T', one(T), gcm.data[i].X, gcm.data[i].y, one(T), xty)
     end
@@ -163,7 +166,7 @@ update_res!(gc, β)
 Update the residual vector according to `β`.
 """
 function update_res!(
-    gc::GaussianCopulaVCObs{T}, 
+    gc::GaussianCopulaVCObs{T},
     β::Vector{T}
     ) where T <: BlasReal
     copyto!(gc.res, gc.y)
@@ -181,7 +184,7 @@ function update_res!(
 end
 
 function standardize_res!(
-    gc::GaussianCopulaVCObs{T}, 
+    gc::GaussianCopulaVCObs{T},
     σinv::T
     ) where T <: BlasReal
     gc.res .*= σinv
@@ -192,7 +195,7 @@ function standardize_res!(
     ) where T <: BlasReal
     σinv = sqrt(gcm.τ[1])
     # standardize residual
-    for i in eachindex(gcm.data)
+    @inbounds for i in eachindex(gcm.data)
         standardize_res!(gcm.data[i], σinv)
     end
     nothing
@@ -203,14 +206,14 @@ update_quadform!(gc)
 Update the quadratic forms `(r^T V[k] r) / 2` according to the current residual `r`.
 """
 function update_quadform!(gc::GaussianCopulaVCObs)
-    for k in 1:length(gc.V)
+    @inbounds for k in 1:length(gc.V)
         gc.q[k] = dot(gc.res, mul!(gc.storage_n, gc.V[k], gc.res)) / 2
     end
     gc.q
 end
 
 """
-MM update to minimize ``n \\log (\\tau) - rss / 2 \\ln (\\tau) + 
+MM update to minimize ``n \\log (\\tau) - rss / 2 \\ln (\\tau) +
 \\sum_i \\log (1 + \\tau * q_i)``.
 """
 function update_τ(
@@ -236,16 +239,16 @@ function update_τ(
 end
 
 function update_Σ_jensen!(
-    gcm::GaussianCopulaVCModel{T}, 
+    gcm::GaussianCopulaVCModel{T},
     maxiter::Integer=50000,
     reltol::Number=1e-6,
     verbose::Bool=false) where T <: BlasReal
     rsstotal = zero(T)
-    for i in eachindex(gcm.data)
+    @inbounds for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
         rsstotal += abs2(norm(gcm.data[i].res))
         update_quadform!(gcm.data[i])
-        gcm.QF[i, :] = gcm.data[i].q        
+        gcm.QF[i, :] = gcm.data[i].q
     end
     # MM iteration
     for iter in 1:maxiter
@@ -264,9 +267,9 @@ function update_Σ_jensen!(
         mul!(gcm.storage_m, transpose(gcm.TR), gcm.storage_n)
         gcm.Σ ./= gcm.storage_m
         # monotonicity diagnosis
-        verbose && println(sum(log, 1 .+ gcm.τ[1] .* (gcm.QF * gcm.Σ)) - 
-            sum(log, 1 .+ gcm.TR * gcm.Σ) + 
-            gcm.ntotal / 2 * (log(gcm.τ[1]) - log(2π)) - 
+        verbose && println(sum(log, 1 .+ gcm.τ[1] .* (gcm.QF * gcm.Σ)) -
+            sum(log, 1 .+ gcm.TR * gcm.Σ) +
+            gcm.ntotal / 2 * (log(gcm.τ[1]) - log(2π)) -
             rsstotal / 2 * gcm.τ[1])
         # convergence check
         gcm.storage_m .= gcm.Σ .- gcm.storage_Σ
@@ -281,7 +284,7 @@ function update_Σ_jensen!(
 end
 
 function update_Σ_quadratic!(
-    gcm::GaussianCopulaVCModel{T}, 
+    gcm::GaussianCopulaVCModel{T},
     maxiter::Integer=50000,
     reltol::Number=1e-6,
     qpsolver=Ipopt.IpoptSolver(print_level=0),
@@ -289,7 +292,7 @@ function update_Σ_quadratic!(
     n, m = length(gcm.data), length(gcm.data[1].V)
     # pre-compute quadratic forms and RSS
     rsstotal = zero(T)
-    for i in eachindex(gcm.data)
+    @inbounds for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
         rsstotal += abs2(norm(gcm.data[i].res))
         update_quadform!(gcm.data[i])
@@ -331,15 +334,15 @@ function update_Σ_quadratic!(
         # if violate nonnegativity constraint, resort to quadratic programming
         if any(x -> x < 0, gcm.Σ)
             @show "use QP"
-            qpsol = quadprog(-c, H, Matrix{T}(undef, 0, m), 
-                Vector{Char}(undef, 0), Vector{T}(undef, 0), 
+            qpsol = quadprog(-c, H, Matrix{T}(undef, 0, m),
+                Vector{Char}(undef, 0), Vector{T}(undef, 0),
                 fill(T(0), m), fill(T(Inf), m), qpsolver)
             gcm.Σ .= qpsol.sol
         end
         # monotonicity diagnosis
-        verbose && println(sum(log, 1 .+ gcm.τ[1] .* (gcm.QF * gcm.Σ)) - 
-            sum(log, 1 .+ gcm.TR * gcm.Σ) + 
-            gcm.ntotal / 2 * (log(gcm.τ[1]) - log(2π)) - 
+        verbose && println(sum(log, 1 .+ gcm.τ[1] .* (gcm.QF * gcm.Σ)) -
+            sum(log, 1 .+ gcm.TR * gcm.Σ) +
+            gcm.ntotal / 2 * (log(gcm.τ[1]) - log(2π)) -
             rsstotal / 2 * gcm.τ[1])
         # convergence check
         gcm.storage_m .= gcm.Σ .- gcm.storage_Σ
@@ -354,8 +357,8 @@ end
 
 """
 update_Σ!(gc)
-Update `τ` and variance components `Σ` according to the current value of 
-`β` by an MM algorithm. `gcm.QF` needs to hold qudratic forms calculated from 
+Update `τ` and variance components `Σ` according to the current value of
+`β` by an MM algorithm. `gcm.QF` needs to hold qudratic forms calculated from
 un-standardized residuals.
 """
 update_Σ! = update_Σ_jensen!
@@ -368,7 +371,7 @@ function fitted(
     n, m = length(gc.y), length(gc.V)
     μ̂ = gc.X * β
     Ω = Matrix{T}(undef, n, n)
-    for k in 1:m
+    @inbounds for k in 1:m
         Ω .+= Σ[k] .* gc.V[k]
     end
     σ02 = inv(τ)
@@ -392,12 +395,12 @@ function loglikelihood!(
     needgrad::Bool = false,
     needhess::Bool = false
     ) where T <: BlasReal
-    n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
+    # n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
     needgrad = needgrad || needhess
     if needgrad
         fill!(gc.∇β, 0)
         fill!(gc.∇τ, 0)
-        fill!(gc.∇Σ, 0) 
+        fill!(gc.∇Σ, 0)
     end
     needhess && fill!(gc.Hβ, 0)
     # evaluate copula loglikelihood
@@ -406,8 +409,8 @@ function loglikelihood!(
     standardize_res!(gc, sqrtτ)
     rss  = abs2(norm(gc.res)) # RSS of standardized residual
     tsum = dot(abs.(Σ), gc.t)
-    logl = - log(1 + tsum) - (n * log(2π) -  n * log(abs(τ)) + rss) / 2
-    for k in 1:m
+    logl = - log(1 + tsum) - (gc.n * log(2π) -  gc.n * log(abs(τ)) + rss) / 2
+    @inbounds for k in 1:gc.m
         mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
         if needgrad # ∇β stores X'*Γ*res (standardized residual)
             BLAS.gemv!('T', Σ[k], gc.X, gc.storage_n, one(T), gc.∇β)
@@ -436,8 +439,8 @@ function loglikelihood!(
         end
         BLAS.gemv!('T', one(T), gc.X, gc.res, -inv1pq, gc.∇β)
         gc.∇β .*= sqrtτ
-        gc.∇τ  .= (n - rss + 2qsum * inv1pq) / 2τ
-        gc.∇Σ  .= inv1pq .* gc.q .- inv(1 + tsum) .* gc.t 
+        gc.∇τ  .= (gc.n - rss + 2qsum * inv1pq) / 2τ
+        gc.∇Σ  .= inv1pq .* gc.q .- inv(1 + tsum) .* gc.t
     end
     # output
     logl
@@ -458,7 +461,7 @@ function loglikelihood!(
         gcm.Hβ .= - gcm.XtX
         gcm.Hτ .= - gcm.ntotal / 2abs2(gcm.τ[1])
     end
-    for i in eachindex(gcm.data)
+    @inbounds for i in eachindex(gcm.data)
         logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.Σ, needgrad, needhess)
         if needgrad
             gcm.∇β .+= gcm.data[i].∇β
@@ -495,7 +498,7 @@ end
 # end
 
 # function MathProgBase.initialize(
-#     gcm::GaussianCopulaVCModel, 
+#     gcm::GaussianCopulaVCModel,
 #     requested_features::Vector{Symbol})
 #     for feat in requested_features
 #         if !(feat in [:Grad, :Hess])
@@ -507,7 +510,7 @@ end
 # MathProgBase.features_available(gcm::GaussianCopulaVCModel) = [:Grad, :Hess]
 
 # function MathProgBase.eval_f(
-#     gcm::GaussianCopulaVCModel, 
+#     gcm::GaussianCopulaVCModel,
 #     par::Vector)
 #     copy_par!(gcm, par)
 #     # maximize σ2 and τ at current β using MM
@@ -517,8 +520,8 @@ end
 # end
 
 # function MathProgBase.eval_grad_f(
-#     gcm::GaussianCopulaVCModel, 
-#     grad::Vector, 
+#     gcm::GaussianCopulaVCModel,
+#     grad::Vector,
 #     par::Vector)
 #     copy_par!(gcm, par)
 #     # maximize σ2 and τ at current β using MM
@@ -530,7 +533,7 @@ end
 # end
 
 # function copy_par!(
-#     gcm::GaussianCopulaVCModel, 
+#     gcm::GaussianCopulaVCModel,
 #     par::Vector)
 #     copyto!(gcm.β, par)
 #     par

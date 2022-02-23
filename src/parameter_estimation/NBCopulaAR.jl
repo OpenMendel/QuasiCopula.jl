@@ -2,8 +2,8 @@ export NBCopulaARObs, NBCopulaARModel
 ### first structures
 mutable struct NBCopulaARObs{T <: BlasReal, D, Link} # d changes, so must be mutable
     # data
-    n::T
-    p::T
+    n::Int
+    p::Int
     y::Vector{T}
     X::Matrix{T}
     V::Matrix{T}
@@ -209,7 +209,7 @@ function loglikelihood!(
     needhess::Bool = false;
     penalized::Bool = false
     ) where {T <: BlasReal, D, Link}
-    n, p = size(gc.X, 1), size(gc.X, 2)
+    # n, p = size(gc.X, 1), size(gc.X, 2)
     needgrad = needgrad || needhess
     if needgrad
         fill!(gc.∇β, 0)
@@ -242,7 +242,7 @@ function loglikelihood!(
     # q = dot(gc.res, gc.storage_n)
 
     # @show q
-    c1 = 1 + 0.5 * n * σ2
+    c1 = 1 + 0.5 * gc.n * σ2
     c2 = 1 + 0.5 * σ2 * q
     # loglikelihood
     logl = GLMCopula.component_loglikelihood(gc, r)
@@ -263,7 +263,7 @@ function loglikelihood!(
         gc.∇ρ .= inv(c2) * 0.5 * σ2 * q2
 
         # gradient with respect to sigma2
-        gc.∇σ2 .= -0.5 * n * inv(c1) .+ inv(c2) * 0.5 * q
+        gc.∇σ2 .= -0.5 * gc.n * inv(c1) .+ inv(c2) * 0.5 * q
         if penalized
             gc.∇σ2 .-= σ2
         end
@@ -280,7 +280,7 @@ function loglikelihood!(
             gc.Hρ .= 0.5 * σ2 * (inv(c2) * q3 - inv(c2)^2 * 0.5 * σ2 * q2^2)
 
             # hessian for sigma2
-            gc.Hσ2 .= 0.25 * n^2 * inv(c1)^2 - inv(c2)^2 * (0.25 * q^2)
+            gc.Hσ2 .= 0.25 * gc.n^2 * inv(c1)^2 - inv(c2)^2 * (0.25 * q^2)
 
             # hessian cross term for rho and sigma2
             gc.Hρσ2 .= 0.5 * q2 * inv1pq - 0.25 * σ2 * q * q2 * inv1pq^2

@@ -39,7 +39,7 @@ function update_sigma_rho!(gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasRe
     N = length(gcm.data)
     di = length(gcm.data[1].y)
     Y = zeros(N, di)
-    for j in 1:di
+    @inbounds for j in 1:di
         Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
     end
     empirical_covariance_mat = scattermat(Y) ./ N
@@ -88,7 +88,7 @@ function update_sigma_rho!(gcm::NBCopulaCSModel{T, D, Link}) where {T <: BlasRea
     N = length(gcm.data)
     di = length(gcm.data[1].y)
     Y = zeros(N, di)
-    for j in 1:di
+    @inbounds for j in 1:di
         Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
     end
     corY = StatsBase.cor(Y)
@@ -110,7 +110,7 @@ function update_sigma_rho!(gcm::Union{GLMCopulaARModel{T, D, Link}, NBCopulaARMo
     N = length(gcm.data)
     di = length(gcm.data[1].y)
     Y = zeros(N, di)
-    for j in 1:di
+    @inbounds for j in 1:di
         Y[:, j] = [gcm.data[i].y[j] for i in 1:N]
     end
     empirical_covariance_mat = scattermat(Y) ./ N
@@ -201,7 +201,7 @@ function initialize_beta!(gcm::Poisson_Bernoulli_VCModel{T, VD, VL}) where {T <:
     Xstack = []
     Y1stack = zeros(length(gcm.data))
     Y2stack = zeros(length(gcm.data))
-    for i in 1:length(gcm.data)
+    @inbounds for i in 1:length(gcm.data)
         push!(Xstack, gcm.data[i].X[1, 1:Integer((gcm.p)/2)])
         Y1stack[i] = gcm.data[i].y[1]
         Y2stack[i] = gcm.data[i].y[2]
@@ -223,7 +223,7 @@ function initialize_beta!(gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARMo
     # form df
     Xstack = []
     Ystack = []
-    for i in 1:length(gcm.data)
+    @inbounds for i in 1:length(gcm.data)
         push!(Xstack, gcm.data[i].X)
         push!(Ystack, gcm.data[i].y)
     end

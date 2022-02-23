@@ -7,8 +7,8 @@ A realization of Gaussian copula variance component data.
 """
 struct GaussianCopulaCSObs{T <: BlasReal}
     # data
-    n::T
-    p::T
+    n::Int
+    p::Int
     y::Vector{T}
     X::Matrix{T}
     V::Matrix{T}
@@ -173,7 +173,7 @@ function initialize_model!(
     ) where T <: BlasReal
     # accumulate sufficient statistics X'y
     xty = zeros(T, gcm.p)
-    for i in eachindex(gcm.data)
+    @inbounds for i in eachindex(gcm.data)
         BLAS.gemv!('T', one(T), gcm.data[i].X, gcm.data[i].y, one(T), xty)
     end
     # least square solution for β
@@ -212,7 +212,7 @@ end
 function update_res!(
     gcm::GaussianCopulaCSModel{T}
     ) where T <: BlasReal
-    for i in eachindex(gcm.data)
+    @inbounds for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
     end
     nothing
@@ -230,7 +230,7 @@ function standardize_res!(
     ) where T <: BlasReal
     σinv = sqrt(gcm.τ[1])
     # standardize residual
-    for i in eachindex(gcm.data)
+    @inbounds for i in eachindex(gcm.data)
         standardize_res!(gcm.data[i], σinv)
     end
     nothing
@@ -251,7 +251,7 @@ function update_Σ_jensen!(
     reltol::Number=1e-6,
     verbose::Bool=false) where T <: BlasReal
     rsstotal = zero(T)
-    for i in eachindex(gcm.data)
+    @inbounds for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
         rsstotal += abs2(norm(gcm.data[i].res))
         update_quadform!(gcm.data[i])
@@ -318,7 +318,7 @@ function loglikelihood!(
     needhess::Bool = false;
     penalized::Bool = false
     ) where {T <: BlasReal}
-    n, p = size(gc.X, 1), size(gc.X, 2)
+    # n, p = size(gc.X, 1), size(gc.X, 2)
     needgrad = needgrad || needhess
     if needgrad
         fill!(gc.∇β, 0.0)
@@ -341,14 +341,14 @@ function loglikelihood!(
         BLAS.gemv!('T', σ2, gc.X, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
     end
     q = dot(gc.res, gc.storage_n)
-    tsum = 0.5 * n * σ2
+    tsum = 0.5 * gc.n * σ2
     qsum = 0.5 * σ2 * q
     # @show q
     c1 = 1 + tsum # 1 + tsum
     c2 = 1 + qsum # 1 + qsum
     # loglikelihood
     # logl = GLMCopula.component_loglikelihood(gc, β, τ) #### make this function for normal
-    logl = -log(c1) - (n * log(2π) -  n * log(abs(τ)) + rss) / 2
+    logl = -log(c1) - (gc.n * log(2π) -  gc.n * log(abs(τ)) + rss) / 2
     # @show logl
     logl += log(c2)
     # add L2 ridge penalty
@@ -363,7 +363,7 @@ function loglikelihood!(
         q2 = dot(gc.res, gc.storage_n) #
         gc.∇ρ .= inv(c2) * 0.5 * σ2 * q2
         # gradient with respect to sigma2
-        gc.∇σ2 .= -(0.5 * n * inv(c1)) .+ (inv(c2) * 0.5 * q)
+        gc.∇σ2 .= -(0.5 * gc.n * inv(c1)) .+ (inv(c2) * 0.5 * q)
         if penalized
             gc.∇σ2 .-= σ2
         end
@@ -377,7 +377,7 @@ function loglikelihood!(
             gc.Hρ .= - (inv(c2) * 0.5 * σ2 * q2)^2
 
             # hessian for sigma2
-            gc.Hσ2 .= 0.25 * n^2 * inv(c1)^2 - inv(c2)^2 * (0.25 * q^2)
+            gc.Hσ2 .= 0.25 * gc.n^2 * inv(c1)^2 - inv(c2)^2 * (0.25 * q^2)
 
             # hessian cross term for rho and sigma2
             gc.Hρσ2 .= 0.5 * q2 * inv1pq - 0.25 * σ2 * q * q2 * inv1pq^2
@@ -393,7 +393,7 @@ function loglikelihood!(
       end
       BLAS.gemv!('T', one(T), gc.X, gc.res, -inv1pq, gc.∇β)
       gc.∇β .*= sqrtτ
-      gc.∇τ  .= (n - rss + 2qsum * inv1pq) / 2τ
+      gc.∇τ  .= (gc.n - rss + 2qsum * inv1pq) / 2τ
     end
     logl
 end
