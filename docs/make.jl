@@ -8,7 +8,8 @@ makedocs(
     pages = [
         "Home" => "index.md",
         "API" => "man/api.md",
-        "AR(1) Covariance" => "man/AR_Examples.md"
+        "AR(1) Covariance" => "man/AR_Examples.md",
+        "CS Covariance" => "man/CS_Examples.md"
     ]
 )
 

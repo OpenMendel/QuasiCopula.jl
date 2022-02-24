@@ -1,10 +1,10 @@
-# Autoregressive AR(1) Covariance
+# Compound Symmetric (CS) Covariance 
 
-In this notebook we will fit our model on the two example datasets provided in the geepack ang gcmr R packages. For these examples we will use the autoregressive AR(1) parameterization of the covariance matrix $\Gamma,$ estimating correlation parameter $\rho$ and dispersion parameter $\sigma^2$. 
+In this notebook we will fit our model on the two example datasets provided in the geepack ang gcmr R packages. For these examples we will use the compound symmetry (CS) parameterization of the covariance matrix $\Gamma,$ estimating correlation parameter $\rho$ and dispersion parameter $\sigma^2$. 
 
 ### Table of Contents:
-* [Example 1: Poisson AR(1) (gcmr:Epilepsy)](#Example-1:-Poisson-AR(1))
-* [Example 2: Bernoulli AR(1) (geepack:Respiratory)](#Example-2:-Bernoulli-AR(1))
+* [Example 1: Poisson CS (gcmr:Epilepsy)](#Example-1:-Poisson-CS)
+* [Example 2: Bernoulli CS (geepack:Respiratory)](#Example-2:-Bernoulli-CS)
 
     note: For the dispersion parameter, we can an L2 penalty to the loglikelihood to keep the estimates from going off to infinity. This notebook presents results with the unpenalized fit.
 
@@ -28,9 +28,9 @@ versioninfo()
 using CSV, DataFrames, GLMCopula, LinearAlgebra, GLM, RCall, RData, RDatasets
 ```
 
-## Example 1: Poisson AR(1) 
+## Example 1: Poisson CS
 
-We first demonstrate how to fit the model with Poisson base and AR(1) covariance on the "epilepsy" dataset from the "gcmr" package in R.
+We first demonstrate how to fit the model with Poisson base and CS covariance on the "epilepsy" dataset from the "gcmr" package in R.
 
 
 ```julia
@@ -68,8 +68,6 @@ Let's take a preview of the first 10 lines of the epilepsy dataset.
       10 │     2     30      0       3      2.0      1.0
 
 
-#### Forming the Model
-
 To form the model, we give it the following arguments:
 
 - named dataframe
@@ -89,18 +87,19 @@ covariates = [:visit, :trt]
 d = Poisson()
 link = LogLink()
 
-Poisson_AR_model = AR_model(df, y, grouping, covariates, d, link);
+Poisson_CS_model = CS_model(df, y, grouping, covariates, d, link);
 ```
 
 Fit the model
 
 
 ```julia
-GLMCopula.fit!(Poisson_AR_model, IpoptSolver(print_level = 3, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, hessian_approximation = "limited-memory"));
+GLMCopula.fit!(Poisson_CS_model, IpoptSolver(print_level = 3, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, hessian_approximation = "limited-memory"));
 ```
 
     initializing β using Newton's Algorithm under Independence Assumption
-    initializing variance components using MM-Algorithm
+    initializing σ2 and ρ using method of moments
+    par0 = [3.4553888182001127, -1.3288345481797776, -0.026384675366883565, 0.2, 1.0]
     
     ******************************************************************************
     This program contains Ipopt, a library for large-scale nonlinear optimization.
@@ -119,25 +118,25 @@ GLMCopula.fit!(Poisson_AR_model, IpoptSolver(print_level = 3, max_iter = 100, to
             inequality constraints with only upper bounds:        0
     
     
-    Number of Iterations....: 90
+    Number of Iterations....: 92
     
                                        (scaled)                 (unscaled)
-    Objective...............:   2.1688986516850264e+03    2.1688986516850264e+03
-    Dual infeasibility......:   1.2101282776440716e-09    1.2101282776440716e-09
+    Objective...............:   2.1695813266189330e+03    2.1695813266189330e+03
+    Dual infeasibility......:   9.1969454274476448e-09    9.1969454274476448e-09
     Constraint violation....:   0.0000000000000000e+00    0.0000000000000000e+00
     Complementarity.........:   9.9999999999999994e-12    9.9999999999999994e-12
-    Overall NLP error.......:   1.2101282776440716e-09    1.2101282776440716e-09
+    Overall NLP error.......:   9.1969454274476448e-09    9.1969454274476448e-09
     
     
-    Number of objective function evaluations             = 381
-    Number of objective gradient evaluations             = 91
+    Number of objective function evaluations             = 379
+    Number of objective gradient evaluations             = 93
     Number of equality constraint evaluations            = 0
     Number of inequality constraint evaluations          = 0
     Number of equality constraint Jacobian evaluations   = 0
     Number of inequality constraint Jacobian evaluations = 0
     Number of Lagrangian Hessian evaluations             = 0
-    Total CPU secs in IPOPT (w/o function evaluations)   =      0.611
-    Total CPU secs in NLP function evaluations           =      0.025
+    Total CPU secs in IPOPT (w/o function evaluations)   =      0.589
+    Total CPU secs in NLP function evaluations           =      0.024
     
     EXIT: Optimal Solution Found.
 
@@ -146,29 +145,29 @@ We can take a look at the MLE's
 
 
 ```julia
-@show Poisson_AR_model.β
-@show Poisson_AR_model.σ2
-@show Poisson_AR_model.ρ;
+@show Poisson_CS_model.β
+@show Poisson_CS_model.σ2
+@show Poisson_CS_model.ρ;
 ```
 
-    Poisson_AR_model.β = [3.477001434224112, -1.3123828083857931, -0.06552858740032046]
-    Poisson_AR_model.σ2 = [96534.17924265226]
-    Poisson_AR_model.ρ = [0.9499485377184236]
+    Poisson_CS_model.β = [3.479229893235856, -1.3137359424301136, -0.05223916238672295]
+    Poisson_CS_model.σ2 = [133560.55732336888]
+    Poisson_CS_model.ρ = [0.9101785804195232]
 
 
 Calculate the loglikelihood at the maximum
 
 
 ```julia
-@show loglikelihood!(Poisson_AR_model, true, true);
+@show loglikelihood!(Poisson_CS_model, true, true);
 ```
 
-    loglikelihood!(Poisson_AR_model, true, true) = -2168.8986516850264
+    loglikelihood!(Poisson_CS_model, true, true) = -2169.581326618933
 
 
-## Example 2: Bernoulli AR(1)
+## Example 2: Bernoulli CS
 
-We will next demo how to fit the model with Bernoulli base and AR(1) covariance on the "respiratory" dataset from the "geepack" package. 
+We will next demo how to fit the model with Bernoulli base and CS covariance on the "respiratory" dataset from the "geepack" package. 
 
 
 ```julia
@@ -203,8 +202,6 @@ Let's take a preview of the first 10 lines of the respiratory dataset in long fo
       10 │      1      2  P      M        28         0      2        0
 
 
-#### Forming the Model
-
 To form the model, we give it the following arguments:
 
 - named dataframe
@@ -223,18 +220,19 @@ covariates = [:center, :age, :baseline]
 d = Bernoulli()
 link = LogitLink()
 
-Bernoulli_AR_model = AR_model(df, y, grouping, covariates, d, link);
+Bernoulli_CS_model = CS_model(df, y, grouping, covariates, d, link);
 ```
 
 Fit the model
 
 
 ```julia
-GLMCopula.fit!(Bernoulli_AR_model, IpoptSolver(print_level = 3, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, hessian_approximation = "limited-memory"));
+GLMCopula.fit!(Bernoulli_CS_model, IpoptSolver(print_level = 3, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, hessian_approximation = "limited-memory"));
 ```
 
     initializing β using Newton's Algorithm under Independence Assumption
-    initializing variance components using MM-Algorithm
+    initializing σ2 and ρ using method of moments
+    par0 = [-0.7993115972643741, 0.6513519744878128, -0.018744798735221512, 1.6766993967179145, 0.2, 1.0]
     Total number of variables............................:        6
                          variables with only lower bounds:        1
                     variables with lower and upper bounds:        1
@@ -246,25 +244,25 @@ GLMCopula.fit!(Bernoulli_AR_model, IpoptSolver(print_level = 3, max_iter = 100, 
             inequality constraints with only upper bounds:        0
     
     
-    Number of Iterations....: 94
+    Number of Iterations....: 27
     
                                        (scaled)                 (unscaled)
-    Objective...............:   2.4055710825065927e+02    2.4055710825065927e+02
-    Dual infeasibility......:   1.4119798663614347e-09    1.4119798663614347e-09
+    Objective...............:   2.4900152024121175e+02    2.4900152024121175e+02
+    Dual infeasibility......:   8.5782119185751071e-09    8.5782119185751071e-09
     Constraint violation....:   0.0000000000000000e+00    0.0000000000000000e+00
-    Complementarity.........:   1.0000000000000001e-11    1.0000000000000001e-11
-    Overall NLP error.......:   1.4119798663614347e-09    1.4119798663614347e-09
+    Complementarity.........:   1.0000000000000003e-11    1.0000000000000003e-11
+    Overall NLP error.......:   8.5782119185751071e-09    8.5782119185751071e-09
     
     
-    Number of objective function evaluations             = 421
-    Number of objective gradient evaluations             = 95
+    Number of objective function evaluations             = 46
+    Number of objective gradient evaluations             = 28
     Number of equality constraint evaluations            = 0
     Number of inequality constraint evaluations          = 0
     Number of equality constraint Jacobian evaluations   = 0
     Number of inequality constraint Jacobian evaluations = 0
     Number of Lagrangian Hessian evaluations             = 0
-    Total CPU secs in IPOPT (w/o function evaluations)   =      0.659
-    Total CPU secs in NLP function evaluations           =      0.024
+    Total CPU secs in IPOPT (w/o function evaluations)   =      0.134
+    Total CPU secs in NLP function evaluations           =      0.010
     
     EXIT: Optimal Solution Found.
 
@@ -273,22 +271,22 @@ We can take a look at the MLE's
 
 
 ```julia
-@show Bernoulli_AR_model.β
-@show Bernoulli_AR_model.σ2
-@show Bernoulli_AR_model.ρ;
+@show Bernoulli_CS_model.β
+@show Bernoulli_CS_model.σ2
+@show Bernoulli_CS_model.ρ;
 ```
 
-    Bernoulli_AR_model.β = [-0.858664409049024, 0.8334076581881305, -0.026953129746342567, 2.103267661442157]
-    Bernoulli_AR_model.σ2 = [306890.7562627383]
-    Bernoulli_AR_model.ρ = [0.7813892966990003]
+    Bernoulli_CS_model.β = [-0.8073560280686407, 0.8553513879813671, -0.027821756706670475, 2.0702779503223048]
+    Bernoulli_CS_model.σ2 = [0.35242279695900536]
+    Bernoulli_CS_model.ρ = [0.8734724569746284]
 
 
 Calculate the loglikelihood at the maximum
 
 
 ```julia
-@show loglikelihood!(Bernoulli_AR_model, true, true);
+@show loglikelihood!(Bernoulli_CS_model, true, true);
 ```
 
-    loglikelihood!(Bernoulli_AR_model, true, true) = -240.55710825065927
+    loglikelihood!(Bernoulli_CS_model, true, true) = -249.00152024121175
 
