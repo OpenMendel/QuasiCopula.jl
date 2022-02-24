@@ -7,7 +7,8 @@ makedocs(
     modules = [GLMCopula],
     pages = [
         "Home" => "index.md",
-        "API" => "man/api.md"
+        "API" => "man/api.md",
+        "AR(1) Covariance" => "man/AR_Examples.md"
     ]
 )
 
