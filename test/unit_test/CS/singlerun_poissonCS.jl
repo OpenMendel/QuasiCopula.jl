@@ -73,8 +73,6 @@ loglikelihood!(gcm, true, true)
 @show fittime
 @show gcm.θ
 
-# @test gcm.θ ≈ [0.2512643078372366, 1.3979789702777217, -0.5132418587872071, 0.4811172968229514, 0.504087569241636]
-
 @show gcm.∇θ
 vcov!(gcm)
 @show GLMCopula.confint(gcm)
@@ -86,11 +84,6 @@ mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
 @test mseβ < 0.01
 @test mseσ2 < 1
 @test mseρ < 1
-
-# using Test
-# @test mseβ ≈ 1.1483744501546296e-6
-# @test mseσ2 ≈ 1.670823046924042e-5
-# @test mseρ ≈ 0.00035655646529727587
 
 using BenchmarkTools
 println("checking memory allocation for Poisson CS")

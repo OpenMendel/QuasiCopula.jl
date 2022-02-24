@@ -12,8 +12,9 @@ function initialize_model!(
     println("initializing variance components using MM-Algorithm")
     update_Σ!(gcm)
     copyto!(gcm.σ2, gcm.Σ)
-    println("initializing ρ using method of moments")
-    update_sigma_rho!(gcm)
+    # println("initializing ρ using method of moments")
+    copyto!(gcm.ρ, 0.2)
+    # update_sigma_rho!(gcm)
     nothing
 end
 
@@ -22,7 +23,8 @@ function initialize_model!(
     println("initializing β using Newton's Algorithm under Independence Assumption")
     initialize_beta!(gcm)
     println("initializing σ2 and ρ using method of moments")
-    update_sigma_rho!(gcm)
+    # update_sigma_rho!(gcm)
+    copyto!(gcm.ρ, 0.2)
     nothing
 end
 
@@ -315,7 +317,8 @@ function initialize_model!(gcm::Union{NBCopulaARModel{T, D, Link}, NBCopulaCSMod
       GLMCopula.update_r!(gcm)
 
   println("initializing variance parameters in CS model using mom")
-  update_sigma_rho!(gcm)
+  # update_sigma_rho!(gcm)
+  copyto!(gcm.ρ, 0.2)
   nothing
 end
 

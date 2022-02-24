@@ -79,12 +79,6 @@ using Test
 @test mseσ2 < 1
 @test mseρ < 0.01
 @test mseτ < 0.01
-#
-# @test mseβ ≈ 1.0039867593617186e-7
-# @test mseτ ≈ 1.4710553619831918e-8
-# @test mseσ2 ≈ 0.005751264939557955
-# @test mseρ ≈ 0.0006014827365849855
-
 
 # need to optimize wrt to memory 4.88 MIB
 # using BenchmarkTools

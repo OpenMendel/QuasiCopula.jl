@@ -1,6 +1,6 @@
 module GLMCopula
 using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Distributions, StatsFuns, Statistics, StatsBase, ToeplitzMatrices
-using LoopVectorization
+using LoopVectorization, DataFrames
 using LinearAlgebra: BlasReal, copytri!
 using SpecialFunctions, Random
 @reexport using Ipopt
@@ -246,4 +246,6 @@ include("parameter_estimation/fit_new.jl") # only initializes using MM-algorithm
 include("parameter_estimation/fit_nb.jl")
 include("parameter_estimation/inference_ci.jl")
 include("parameter_estimation/fit_newton_normal.jl")
+include("model_interface/AR_interface.jl")
+include("model_interface/CS_interface.jl")
 end # module

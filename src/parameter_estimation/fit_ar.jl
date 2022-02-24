@@ -7,7 +7,7 @@ should be provided in `gcm.β`, `gcm.ρ`, `gcm.σ2`.
 """
 function fit!(
         gcm::GLMCopulaARModel,
-        solver=Ipopt.IpoptSolver(print_level = 5)
+        solver=Ipopt.IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, hessian_approximation = "limited-memory")
     )
     initialize_model!(gcm)
     npar = gcm.p + 2 # rho and sigma squared

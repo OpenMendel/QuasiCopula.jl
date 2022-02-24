@@ -68,7 +68,6 @@ fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 1
 @show fittime
 @show gcm.θ
 
-# @test gcm.θ ≈ [0.2508090433697577, 1.3995119487872831, -0.5131506757666188, 0.5180608396044223, 0.46679346899411533, 99.51142330753797]
 @show gcm.∇θ
 loglikelihood!(gcm, true, true)
 vcov!(gcm)
@@ -84,12 +83,6 @@ mseβ, mseρ, mseσ2, mseτ = MSE(gcm, βtrue, τtrue[1], ρtrue, σ2true)
 @test mseσ2 < 1
 @test mseρ < 0.01
 @test mseτ < 0.01
-
-# using Test
-# @test mseβ ≈ 8.19246277605586e-8
-# @test mseτ ≈ 2.410569261283852e-9
-# @test mseσ2 ≈ 0.0011026737014447796
-# @test mseρ ≈ 0.00032619392721666853
 
 # needs to be optimized for memory  4.43 MiB
 # using BenchmarkTools

@@ -19,6 +19,7 @@ This package supports Julia `v1.6`+.
 Pages = [
     "index.md"
     "man/api.md"
+    "man/AR_Examples.md"
 ]
 Depth = 2
 ```

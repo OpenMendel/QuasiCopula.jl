@@ -71,10 +71,6 @@ using Test
 @test mseΣ < 0.01
 @test mser < 0.1
 
-# @test mseβ ≈ 1.3429466418437811e-5
-# @test mser ≈ 0.05558533358049526
-# @test mseΣ ≈ 5.531655010694497e-7
-
 # need to optimize memory allocation 13.73 MIB
 # using BenchmarkTools
 # println("checking memory allocation for Nb VCM")

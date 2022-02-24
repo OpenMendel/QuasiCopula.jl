@@ -90,7 +90,7 @@ mseβ, mseρ, mseσ2, mser = MSE(gcm, βtrue, ρtrue, σ2true, rtrue)
 
 using Test
 @test mseβ < 0.01
-@test mseσ2 < 0.01
+@test mseσ2 < 1
 @test mseρ < 0.01
 @test mser < 0.1
 
