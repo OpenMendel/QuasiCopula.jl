@@ -71,8 +71,12 @@ gcm = NBCopulaARModel(gcs);
 
 fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter = 20, tol=1e-8)
 @show fittime
-@show gcm.θ
-@show gcm.∇θ
+@show gcm.β
+@show gcm.σ2
+@show gcm.ρ
+@show gcm.∇β
+@show gcm.∇σ2
+@show gcm.∇ρ
 
 @show gcm.r
 @show gcm.∇r

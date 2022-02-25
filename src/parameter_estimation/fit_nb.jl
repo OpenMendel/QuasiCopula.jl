@@ -2,8 +2,8 @@
     fit!(gcm::NBCopulaVCModel, solver=Ipopt.IpoptSolver(print_level=5))
 
 Fit an `NBCopulaVCModel` object by block MLE using a nonlinear programming solver.
-Start point should be provided in `gcm.β`, `gcm.Σ`, `gcm.r`. In our block updates,
-we fit 10 iterations of `gcm.β`, `gcm.Σ` using IPOPT, followed by 10 iterations of
+Start point should be provided in `gcm.β`, `gcm.θ`, `gcm.r`. In our block updates,
+we fit 10 iterations of `gcm.β`, `gcm.θ` using IPOPT, followed by 10 iterations of
 Newton on nuisance parameter `gcm.r`. Convergence is declared when difference of
 successive loglikelihood is less than `tol`.
 """
@@ -167,7 +167,7 @@ function modelpar_to_optimpar!(
     # L
     offset = gcm.p + 1
     @inbounds for k in 1:gcm.m
-        par[offset] = gcm.Σ[k]
+        par[offset] = gcm.θ[k]
         offset += 1
     end
     par
@@ -187,10 +187,9 @@ function optimpar_to_modelpar!(
     # L
     offset = gcm.p + 1
     @inbounds for k in 1:gcm.m
-        gcm.Σ[k] = par[offset]
+        gcm.θ[k] = par[offset]
         offset   += 1
     end
-    copyto!(gcm.θ, par)
     gcm
 end
 
@@ -226,12 +225,9 @@ function MathProgBase.eval_grad_f(
     # gradient wrt L
     offset = gcm.p + 1
     @inbounds for k in 1:gcm.m
-        grad[offset] = gcm.∇Σ[k]
+        grad[offset] = gcm.∇θ[k]
         offset += 1
     end
-    copyto!(gcm.∇θ, grad)
-    # @show gcm.∇θ
-    # return objective
     obj
 end
 
@@ -287,7 +283,7 @@ function MathProgBase.eval_hesslag(
     end
     # Haa block
     @inbounds for j in 1:gcm.m, i in 1:j
-        H[idx] = gcm.HΣ[i, j]
+        H[idx] = gcm.Hθ[i, j]
         idx   += 1
     end
     # lmul!(σ, H)

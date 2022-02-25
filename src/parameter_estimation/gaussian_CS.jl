@@ -91,14 +91,12 @@ struct GaussianCopulaCSModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     τ::Vector{T}    # inverse of linear regression variance parameter
     ρ::Vector{T}            # autocorrelation parameter
     σ2::Vector{T}           # autoregressive noise parameter
-    Σ::Vector{T}
-    θ::Vector{T}   # all parameters
+    θ::Vector{T}
     # working arrays
     ∇β::Vector{T}   # gradient of beta from all observations
     ∇τ::Vector{T}   # gradient of tau from all observations
     ∇ρ::Vector{T}           # gradient of rho from all observations
     ∇σ2::Vector{T}          # gradient of sigmasquared from all observations
-    ∇θ::Vector{T}
     XtX::Matrix{T}  # X'X = sum_i Xi'Xi
     Hβ::Matrix{T}    # Hessian β from all observations
     Hτ::Matrix{T}    # Hessian τ from all observations
@@ -116,7 +114,7 @@ struct GaussianCopulaCSModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     QF::Matrix{T}         # n-by-1 matrix with qik = res_i' Vi res_i
     storage_n::Vector{T}
     storage_m::Vector{T}
-    storage_Σ::Vector{T}
+    storage_θ::Vector{T}
 end
 
 function GaussianCopulaCSModel(gcs::Vector{GaussianCopulaCSObs{T}}) where T <: BlasReal
@@ -125,13 +123,11 @@ function GaussianCopulaCSModel(gcs::Vector{GaussianCopulaCSObs{T}}) where T <: B
     τ   = [1.0]
     ρ = [1.0]
     σ2 = [1.0]
-    Σ   = Vector{T}(undef, 1) # initial MM update for crude estimate of noise
-    θ = Vector{T}(undef, p + 3)
+    θ   = Vector{T}(undef, 1) # initial MM update for crude estimate of noise
     ∇β  = Vector{T}(undef, p)
     ∇τ  = Vector{T}(undef, 1)
     ∇ρ  = Vector{T}(undef, 1)
     ∇σ2  = Vector{T}(undef, 1)
-    ∇θ = Vector{T}(undef, p + 3)
     XtX = zeros(T, p, p) # sum_i xi'xi
     Hβ  = Matrix{T}(undef, p, p)
     Hτ  = Matrix{T}(undef, 1, 1)
@@ -157,10 +153,10 @@ function GaussianCopulaCSModel(gcs::Vector{GaussianCopulaCSObs{T}}) where T <: B
     end
     storage_n = Vector{T}(undef, n)
     storage_m = Vector{T}(undef, 1)
-    storage_Σ = Vector{T}(undef, 1)
-    GaussianCopulaCSModel{T}(gcs, Ytotal, ntotal, p, β, τ, ρ, σ2, Σ, θ,
-        ∇β, ∇τ, ∇ρ, ∇σ2, ∇θ, XtX, Hβ, Hτ, Hρ, Hσ2, Hρσ2, Hβσ2, Ainv, Aevec,  M, vcov, ψ,
-        TR, QF, storage_n, storage_m, storage_Σ)
+    storage_θ = Vector{T}(undef, 1)
+    GaussianCopulaCSModel{T}(gcs, Ytotal, ntotal, p, β, τ, ρ, σ2, θ,
+        ∇β, ∇τ, ∇ρ, ∇σ2, XtX, Hβ, Hτ, Hρ, Hσ2, Hρσ2, Hβσ2, Ainv, Aevec,  M, vcov, ψ,
+        TR, QF, storage_n, storage_m, storage_θ)
 end
 
 """
@@ -190,9 +186,9 @@ function initialize_model!(
     @show gcm.τ
     println("initializing CS noise paramter using MM-algorithm")
     fill!(gcm.ρ, 1.0)
-    fill!(gcm.Σ, 1.0)
-    update_Σ!(gcm)
-    copyto!(gcm.σ2, gcm.Σ)
+    fill!(gcm.θ, 1.0)
+    update_θ!(gcm)
+    copyto!(gcm.σ2, gcm.θ)
     nothing
 end
 
@@ -245,7 +241,7 @@ function update_quadform!(gc::GaussianCopulaCSObs)
     gc.q
 end
 
-function update_Σ_jensen!(
+function update_θ_jensen!(
     gcm::GaussianCopulaCSModel{T},
     maxiter::Integer=50000,
     reltol::Number=1e-6,
@@ -260,34 +256,34 @@ function update_Σ_jensen!(
     # MM iteration
     for iter in 1:maxiter
         # store previous iterate
-        copyto!(gcm.storage_Σ, gcm.Σ)
+        copyto!(gcm.storage_θ, gcm.θ)
         # update τ
-        mul!(gcm.storage_n, gcm.QF, gcm.Σ) # gcm.storage_n[i] = q[i]
+        mul!(gcm.storage_n, gcm.QF, gcm.θ) # gcm.storage_n[i] = q[i]
         gcm.τ[1] = update_τ(gcm.τ[1], gcm.storage_n, gcm.ntotal, rsstotal, 1)
         # numerator in the multiplicative update
-        gcm.storage_n .= inv.(inv(gcm.τ[1]) .+ gcm.storage_n) # use newest τ to update Σ
+        gcm.storage_n .= inv.(inv(gcm.τ[1]) .+ gcm.storage_n) # use newest τ to update θ
         mul!(gcm.storage_m, transpose(gcm.QF), gcm.storage_n)
-        gcm.Σ .*= gcm.storage_m
+        gcm.θ .*= gcm.storage_m
         # denominator in the multiplicative update
-        mul!(gcm.storage_n, gcm.TR, gcm.storage_Σ)
+        mul!(gcm.storage_n, gcm.TR, gcm.storage_θ)
         gcm.storage_n .= inv.(1 .+ gcm.storage_n)
         mul!(gcm.storage_m, transpose(gcm.TR), gcm.storage_n)
-        gcm.Σ ./= gcm.storage_m
+        gcm.θ ./= gcm.storage_m
         # monotonicity diagnosis
-        verbose && println(sum(log, 1 .+ gcm.τ[1] .* (gcm.QF * gcm.Σ)) -
-            sum(log, 1 .+ gcm.TR * gcm.Σ) +
+        verbose && println(sum(log, 1 .+ gcm.τ[1] .* (gcm.QF * gcm.θ)) -
+            sum(log, 1 .+ gcm.TR * gcm.θ) +
             gcm.ntotal / 2 * (log(gcm.τ[1]) - log(2π)) -
             rsstotal / 2 * gcm.τ[1])
         # convergence check
-        gcm.storage_m .= gcm.Σ .- gcm.storage_Σ
-        # norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1) && break
-        if norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1)
+        gcm.storage_m .= gcm.θ .- gcm.storage_θ
+        # norm(gcm.storage_m) < reltol * (norm(gcm.storage_θ) + 1) && break
+        if norm(gcm.storage_m) < reltol * (norm(gcm.storage_θ) + 1)
             verbose && println("iters=$iter")
             break
         end
         verbose && iter == maxiter && @warn "maximum iterations $maxiter reached"
     end
-    gcm.Σ
+    gcm.θ
 end
 
 # loglik_obs(::Normal, y, μ, wt, ϕ) = wt*GLM.logpdf(Normal(μ, sqrt(abs(ϕ))), y)

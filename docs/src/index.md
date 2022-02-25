@@ -21,6 +21,7 @@ Pages = [
     "man/api.md"
     "man/AR_Examples.md"
     "man/CS_Examples.md"
+    "man/VC_Examples.md"
 ]
 Depth = 2
 ```

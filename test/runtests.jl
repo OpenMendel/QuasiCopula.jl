@@ -6,7 +6,7 @@ using Test
     include("unit_test/generate_random_deviates/rand_multivariate.jl")
 end
 
-# VCM
+## VCM
 @testset "VCM Covariance" begin
     include("unit_test/VCM/singlerun_bernoulliVCM.jl")
     include("unit_test/VCM/singlerun_nbVCM.jl")
@@ -15,14 +15,12 @@ end
     include("unit_test/VCM/singlerun_poisson_bernoulli_mixedVCM.jl")
 end
 
-### AR
+## AR
 @testset "AR Covariance" begin
     include("unit_test/AR/singlerun_bernoulliAR.jl")
     include("unit_test/AR/singlerun_nbAR.jl")
     include("unit_test/AR/singlerun_normalAR.jl")
     include("unit_test/AR/singlerun_poissonAR.jl")
-    include("unit_test/AR/Poisson_AR_turbo_macro_LoopVectorization.jl")
-    include("unit_test/AR/NB_AR_turbo_macro_LoopVectorization.jl")
 end
 
 ### CS

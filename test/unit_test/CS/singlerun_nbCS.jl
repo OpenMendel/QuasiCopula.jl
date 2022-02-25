@@ -71,10 +71,13 @@ gcm = NBCopulaCSModel(gcs);
 gcm2 = deepcopy(gcm);
 
 fittime = @elapsed GLMCopula.fit!(gcm)
-@show fittime
-@show gcm.θ
+@show gcm.β
+@show gcm.σ2
+@show gcm.ρ
+@show gcm.∇β
+@show gcm.∇σ2
+@show gcm.∇ρ
 
-@show gcm.∇θ
 @show gcm.r
 @show gcm.∇r
 loglikelihood!(gcm, true, true)

@@ -6,9 +6,9 @@ using SpecialFunctions, Random
 @reexport using Ipopt
 @reexport using NLopt
 
-export fit!, update_Σ_jensen!, init_β!, initialize_model!, loglikelihood!, standardize_res!, std_res_differential!
-export update_res!, update_Σ!
-export update_∇Σ!, update_HΣ! # update gradient and hessian of variance components
+export fit!, update_θ_jensen!, init_β!, initialize_model!, loglikelihood!, standardize_res!, std_res_differential!
+export update_res!, update_θ!
+export update_∇θ!, update_Hθ! # update gradient and hessian of variance components
 export glm_regress_jl, glm_regress_model, glm_score_statistic!  # these are to initialize our model
 export component_loglikelihood, glm_gradient, hessian_glm
 export GLMCopulaVCObs, GLMCopulaVCModel
@@ -24,13 +24,11 @@ mutable struct GLMCopulaVCObs{T <: BlasReal, D, Link}
     m::Int          # number of variance components
     # working arrays
     ∇β::Vector{T}   # gradient wrt β
-    ∇μβ::Matrix{T}
-    ∇σ2β::Matrix{T}
     ∇resβ::Matrix{T}# residual gradient matrix d/dβ_p res_ij (each observation has a gradient of residual is px1)
     ∇τ::Vector{T}   # gradient wrt τ
-    ∇Σ::Vector{T}   # gradient wrt σ2
+    ∇θ::Vector{T}   # gradient wrt θ
     Hβ::Matrix{T}   # Hessian wrt β
-    HΣ::Matrix{T}   # Hessian wrt variance components Σ
+    Hθ::Matrix{T}   # Hessian wrt variance components θ
     Hτ::Matrix{T}   # Hessian wrt τ
     res::Vector{T}  # residual vector res_i
     t::Vector{T}    # t[k] = tr(V_i[k]) / 2
@@ -66,13 +64,11 @@ function GLMCopulaVCObs(
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
     ∇β  = Vector{T}(undef, p)
-    ∇μβ = Matrix{T}(undef, n, p)
-    ∇σ2β = Matrix{T}(undef, n, p)
     ∇resβ  = Matrix{T}(undef, n, p)
     ∇τ  = Vector{T}(undef, 1)
-    ∇Σ  = Vector{T}(undef, m)
+    ∇θ  = Vector{T}(undef, m)
     Hβ  = Matrix{T}(undef, p, p)
-    HΣ  = Matrix{T}(undef, m, m)
+    Hθ  = Matrix{T}(undef, m, m)
     Hτ  = Matrix{T}(undef, 1, 1)
     res = Vector{T}(undef, n)
     t   = [tr(V[k])/2 for k in 1:m]
@@ -96,8 +92,9 @@ function GLMCopulaVCObs(
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
-    GLMCopulaVCObs{T, D, Link}(y, X, V, n, p, m, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇τ, ∇Σ, Hβ, HΣ,
-        Hτ, res, t, q, xtx, storage_n, m1, m2, storage_p1, storage_p2, storage_np, storage_pp, added_term_numerator, added_term2, η, μ, varμ, dμ, d, link, wt, w1, w2)
+    GLMCopulaVCObs{T, D, Link}(y, X, V, n, p, m, ∇β, ∇resβ, ∇τ, ∇θ, Hβ, Hθ,
+        Hτ, res, t, q, xtx, storage_n, m1, m2, storage_p1, storage_p2, storage_np,
+        storage_pp, added_term_numerator, added_term2, η, μ, varμ, dμ, d, link, wt, w1, w2)
 end
 
 """
@@ -116,16 +113,14 @@ struct GLMCopulaVCModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalu
     # parameters
     β::Vector{T}    # p-vector of mean regression coefficients
     τ::Vector{T}    # inverse of linear regression variance parameter
-    Σ::Vector{T}    # m-vector: [σ12, ..., σm2]
-    θ::Vector{T}
+    θ::Vector{T}    # m-vector: [θ12, ..., θm2]
     # working arrays
     ∇β::Vector{T}   # gradient from all observations
     ∇τ::Vector{T}
-    ∇Σ::Vector{T}
-    ∇θ::Vector{T}   # overall gradient for beta and variance components vector Σ
+    ∇θ::Vector{T}
     XtX::Matrix{T}  # X'X = sum_i Xi'Xi
     Hβ::Matrix{T}    # Hessian from all observations
-    HΣ::Matrix{T}
+    Hθ::Matrix{T}
     Hτ::Matrix{T}
     Ainv::Matrix{T}
     Aevec::Matrix{T}
@@ -136,7 +131,7 @@ struct GLMCopulaVCModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalu
     QF::Matrix{T}         # n-by-m matrix with qik = res_i' Vi[k] res_i
     storage_n::Vector{T}
     storage_m::Vector{T}
-    storage_Σ::Vector{T}
+    storage_θ::Vector{T}
     d::Vector{D}
     link::Vector{Link}
 end
@@ -145,15 +140,13 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: B
     n, p, m = length(gcs), size(gcs[1].X, 2), length(gcs[1].V)
     β       = Vector{T}(undef, p)
     τ       = [1.0]
-    Σ       = Vector{T}(undef, m)
-    θ       = Vector{T}(undef, m + p)
+    θ       = Vector{T}(undef, m)
     ∇β      = Vector{T}(undef, p)
     ∇τ      = Vector{T}(undef, 1)
-    ∇Σ      = Vector{T}(undef, m)
-    ∇θ      = Vector{T}(undef, m + p)
+    ∇θ      = Vector{T}(undef, m)
     XtX     = zeros(T, p, p) # sum_i xi'xi
     Hβ      = Matrix{T}(undef, p, p)
-    HΣ      = Matrix{T}(undef, m, m)
+    Hθ      = Matrix{T}(undef, m, m)
     Hτ      = Matrix{T}(undef, 1, 1)
     Ainv    = zeros(T, p + m, p + m)
     Aevec   = zeros(T, p + m, p + m)
@@ -176,53 +169,52 @@ function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: B
     QF        = Matrix{T}(undef, n, m)
     storage_n = Vector{T}(undef, n)
     storage_m = Vector{T}(undef, m)
-    storage_Σ = Vector{T}(undef, m)
-    GLMCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, p, m, β, τ, Σ, θ,
-        ∇β, ∇τ, ∇Σ, ∇θ, XtX, Hβ, HΣ, Hτ, Ainv, Aevec, M, vcov, ψ, TR, QF,
-        storage_n, storage_m, storage_Σ, d, link)
+    storage_θ = Vector{T}(undef, m)
+    GLMCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, p, m, β, τ, θ,
+        ∇β, ∇τ, ∇θ, XtX, Hβ, Hθ, Hτ, Ainv, Aevec, M, vcov, ψ, TR, QF,
+        storage_n, storage_m, storage_θ, d, link)
 end
 
-
-function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: BlasReal, D<:Normal, Link}
-    n, p, m = length(gcs), size(gcs[1].X, 2), length(gcs[1].V)
-    β       = Vector{T}(undef, p)
-    τ       = [1.0]
-    Σ       = Vector{T}(undef, m)
-    θ       = Vector{T}(undef, m + p + 1)
-    ∇β      = Vector{T}(undef, p)
-    ∇τ      = Vector{T}(undef, 1)
-    ∇Σ      = Vector{T}(undef, m)
-    ∇θ      = Vector{T}(undef, m + p + 1)
-    XtX     = zeros(T, p, p) # sum_i xi'xi
-    Hβ      = Matrix{T}(undef, p, p)
-    HΣ      = Matrix{T}(undef, m, m)
-    Hτ      = Matrix{T}(undef, 1, 1)
-    Ainv    = zeros(T, p + m + 1, p + m + 1)
-    Aevec   = zeros(T, p + m + 1, p + m + 1)
-    M       = zeros(T, p + m + 1, p + m + 1)
-    vcov    = zeros(T, p + m + 1, p + m + 1)
-    ψ       = Vector{T}(undef, p + m + 1)
-    TR      = Matrix{T}(undef, n, m) # collect trace terms
-    Ytotal  = 0.0
-    ntotal  = 0.0
-    d       = Vector{D}(undef, n)
-    link    = Vector{Link}(undef, n)
-    for i in eachindex(gcs)
-        ntotal  += length(gcs[i].y)
-        Ytotal  += sum(gcs[i].y)
-        BLAS.axpy!(one(T), gcs[i].xtx, XtX)
-        TR[i, :] = gcs[i].t
-        d[i] = gcs[i].d
-        link[i] = gcs[i].link
-    end
-    QF        = Matrix{T}(undef, n, m)
-    storage_n = Vector{T}(undef, n)
-    storage_m = Vector{T}(undef, m)
-    storage_Σ = Vector{T}(undef, m)
-    GLMCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, p, m, β, τ, Σ, θ,
-        ∇β, ∇τ, ∇Σ, ∇θ, XtX, Hβ, HΣ, Hτ, Ainv, Aevec, M, vcov, ψ, TR, QF,
-        storage_n, storage_m, storage_Σ, d, link)
-end
+#
+# function GLMCopulaVCModel(gcs::Vector{GLMCopulaVCObs{T, D, Link}}) where {T <: BlasReal, D<:Normal, Link}
+#     n, p, m = length(gcs), size(gcs[1].X, 2), length(gcs[1].V)
+#     β       = Vector{T}(undef, p)
+#     τ       = [1.0]
+#     θ       = Vector{T}(undef, m)
+#     θ       = Vector{T}(undef, m + p + 1)
+#     ∇β      = Vector{T}(undef, p)
+#     ∇τ      = Vector{T}(undef, 1)
+#     ∇θ      = Vector{T}(undef, m)
+#     XtX     = zeros(T, p, p) # sum_i xi'xi
+#     Hβ      = Matrix{T}(undef, p, p)
+#     Hθ      = Matrix{T}(undef, m, m)
+#     Hτ      = Matrix{T}(undef, 1, 1)
+#     Ainv    = zeros(T, p + m + 1, p + m + 1)
+#     Aevec   = zeros(T, p + m + 1, p + m + 1)
+#     M       = zeros(T, p + m + 1, p + m + 1)
+#     vcov    = zeros(T, p + m + 1, p + m + 1)
+#     ψ       = Vector{T}(undef, p + m + 1)
+#     TR      = Matrix{T}(undef, n, m) # collect trace terms
+#     Ytotal  = 0.0
+#     ntotal  = 0.0
+#     d       = Vector{D}(undef, n)
+#     link    = Vector{Link}(undef, n)
+#     for i in eachindex(gcs)
+#         ntotal  += length(gcs[i].y)
+#         Ytotal  += sum(gcs[i].y)
+#         BLAS.axpy!(one(T), gcs[i].xtx, XtX)
+#         TR[i, :] = gcs[i].t
+#         d[i] = gcs[i].d
+#         link[i] = gcs[i].link
+#     end
+#     QF        = Matrix{T}(undef, n, m)
+#     storage_n = Vector{T}(undef, n)
+#     storage_m = Vector{T}(undef, m)
+#     storage_θ = Vector{T}(undef, m)
+#     GLMCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, p, m, β, τ, θ, θ,
+#         ∇β, ∇τ, ∇θ, ∇θ, XtX, Hβ, Hθ, Hτ, Ainv, Aevec, M, vcov, ψ, TR, QF,
+#         storage_n, storage_m, storage_θ, d, link)
+# end
 
 include("parameter_estimation/gaussian_CS.jl")
 include("parameter_estimation/NBCopulaCS.jl")
@@ -248,4 +240,5 @@ include("parameter_estimation/inference_ci.jl")
 include("parameter_estimation/fit_newton_normal.jl")
 include("model_interface/AR_interface.jl")
 include("model_interface/CS_interface.jl")
+include("model_interface/VC_interface.jl")
 end # module

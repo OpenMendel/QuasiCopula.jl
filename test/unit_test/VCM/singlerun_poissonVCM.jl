@@ -10,7 +10,7 @@ m = 1    # number of variance components
 Random.seed!(12345)
 # try next
 βtrue = rand(Uniform(-2, 2), p)
-Σtrue = [0.5]
+θtrue = [0.5]
 
 d = Poisson()
 link = LogLink()
@@ -23,7 +23,7 @@ ni = 25
 
 gcs = Vector{GLMCopulaVCObs{T, D, Link}}(undef, samplesize)
 
-Γ = Σtrue[1] * ones(ni, ni)
+Γ = θtrue[1] * ones(ni, ni)
 
 # for reproducibility I will simulate all the design matrices here
 Random.seed!(12345)
@@ -51,21 +51,21 @@ gcm = GLMCopulaVCModel(gcs);
 fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 50, accept_after_max_steps = 4, hessian_approximation = "limited-memory"))
 @show fittime
 @show gcm.β
-@show gcm.Σ
+@show gcm.θ
 @show gcm.∇β
-@show gcm.∇Σ
+@show gcm.∇θ
 
 loglikelihood!(gcm, true, true)
 vcov!(gcm)
 @show GLMCopula.confint(gcm)
 # mse and time under our model
-mseβ, mseΣ = MSE(gcm, βtrue, Σtrue)
+mseβ, mseθ = MSE(gcm, βtrue, θtrue)
 @show mseβ
-@show mseΣ
+@show mseθ
 
 using Test
 @test mseβ < 0.01
-@test mseΣ < 0.01
+@test mseθ < 0.01
 
 using BenchmarkTools
 println("checking memory allocation for Poisson VCM")

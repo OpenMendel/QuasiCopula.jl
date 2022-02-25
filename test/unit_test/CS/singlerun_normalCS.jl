@@ -57,18 +57,19 @@ end
 
 # form VarLmmModel
 gcm = GaussianCopulaCSModel(gcs);
-# gcm2 = deepcopy(gcm);
-# gcm3 = deepcopy(gcm);
 
 loglikelihood!(gcm, true, true)
 fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 50, accept_after_max_steps = 4, hessian_approximation = "limited-memory"))
-# fittime2 = @elapsed GLMCopula.fit!(gcm2, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 50, accept_after_max_steps = 2, warm_start_init_point="yes",  mu_strategy = "adaptive", mu_oracle = "probing", hessian_approximation = "limited-memory"))
-# fittime3 = @elapsed GLMCopula.fit!(gcm3, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 50, accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
+@show gcm.β
+@show gcm.σ2
+@show gcm.ρ
+@show gcm.∇β
+@show gcm.∇σ2
+@show gcm.∇ρ
 
-@show fittime
-@show gcm.θ
+@show gcm.τ
+@show gcm.∇τ
 
-@show gcm.∇θ
 loglikelihood!(gcm, true, true)
 vcov!(gcm)
 @show GLMCopula.confint(gcm)

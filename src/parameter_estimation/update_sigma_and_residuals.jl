@@ -1,9 +1,9 @@
 """
-update_Σ_jensen!(gcm)
+update_θ_jensen!(gcm)
 
-Update Σ using the MM algorithm and Jensens inequality, given β.
+Update θ using the MM algorithm and Jensens inequality, given β.
 """
-function update_Σ_jensen!(
+function update_θ_jensen!(
     gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, GLMCopulaCSModel{T, D, Link}, NBCopulaARModel{T, D, Link}, NBCopulaCSModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}},
     maxiter::Integer=50000,
     reltol::Number=1e-6,
@@ -19,39 +19,39 @@ function update_Σ_jensen!(
     # MM iteration
     for iter in 1:maxiter
         # store previous iterate
-        copyto!(gcm.storage_Σ, gcm.Σ)
+        copyto!(gcm.storage_θ, gcm.θ)
 
         # update τ if necessary
-        mul!(gcm.storage_n, gcm.QF, gcm.Σ) # gcm.storage_n[i] = sum_k^m qi[k] sigmai_[k] # denom of numerator
+        mul!(gcm.storage_n, gcm.QF, gcm.θ) # gcm.storage_n[i] = sum_k^m qi[k] sigmai_[k] # denom of numerator
         fill!(gcm.τ, 1.0)
 
         ##### Numerator in the multiplicative update ##########
         # when its logistic gcm.τ = 1.0
         gcm.storage_n .= inv.(inv.(gcm.τ) .+ gcm.storage_n) # 1/ (1 + sum_k^m qi[k] sigmai_[k]) # denom of numerator
         mul!(gcm.storage_m, transpose(gcm.QF), gcm.storage_n) # store numerator of numerator
-        gcm.Σ .*= gcm.storage_m # multiply by the numerator
+        gcm.θ .*= gcm.storage_m # multiply by the numerator
 
         ######## Denominator in the multiplicative update  ###########
-        mul!(gcm.storage_n, gcm.TR, gcm.storage_Σ)
+        mul!(gcm.storage_n, gcm.TR, gcm.storage_θ)
         gcm.storage_n .= inv.(1 .+ gcm.storage_n) # denominator of the denominator
 
         mul!(gcm.storage_m, transpose(gcm.TR), gcm.storage_n) # numerator of the denominator
-        gcm.Σ ./= gcm.storage_m # divide by the denominator
+        gcm.θ ./= gcm.storage_m # divide by the denominator
 
         # monotonicity diagnosis (for the normal distribution there is an extra term)
-        verbose && println(sum(log, 1 .+ (gcm.QF * gcm.Σ)) -
-            sum(log, 1 .+ gcm.TR * gcm.Σ))
+        verbose && println(sum(log, 1 .+ (gcm.QF * gcm.θ)) -
+            sum(log, 1 .+ gcm.TR * gcm.θ))
         # convergence check
-        gcm.storage_m .= gcm.Σ .- gcm.storage_Σ
+        gcm.storage_m .= gcm.θ .- gcm.storage_θ
 
-        # norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1) && break
-        if norm(gcm.storage_m) < reltol * (norm(gcm.storage_Σ) + 1)
+        # norm(gcm.storage_m) < reltol * (norm(gcm.storage_θ) + 1) && break
+        if norm(gcm.storage_m) < reltol * (norm(gcm.storage_θ) + 1)
             verbose && println("iters=$iter")
             break
         end
         verbose && iter == maxiter && @warn "maximum iterations $maxiter reached"
     end
-    gcm.Σ
+    gcm.θ
 end
 
 """
@@ -217,7 +217,7 @@ function first_derivative(gcm::NBCopulaVCModel, r::T) where T <: AbstractFloat
         resid = gcm.data[i].res
         Γ = gcm.data[i].storage_nn # Γ = a1*V1 + ... + am*Vm
         η = gcm.data[i].η
-        # Γ = gcm.Σ' * gcm.data[i].V
+        # Γ = gcm.θ' * gcm.data[i].V
         # D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
         # dD = Diagonal([-exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r))) for j in 1:length(η)])
         # dresid = -inv(D)*dD*resid
@@ -286,7 +286,7 @@ function second_derivative(gcm::NBCopulaVCModel, r::T) where T <: AbstractFloat
         Γ = gcm.data[i].storage_nn # Γ = a1*V1 + ... + am*Vm
         η = gcm.data[i].η
         resid = gcm.data[i].res
-        # Γ = gcm.Σ' * gcm.data[i].V
+        # Γ = gcm.θ' * gcm.data[i].V
         # D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
         # dD = Diagonal([-exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r))) for j in 1:length(η)])
         # d2D = Diagonal([(exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) +
@@ -405,13 +405,13 @@ function negbin_component_loglikelihood(gcm::NBCopulaVCModel, r::T) where T <: A
         @inbounds for k in 1:m
             mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
             gc.q[k] = dot(gc.res, gc.storage_n) / 2 # gc.q[k] = 0.5res' * V[k] * res
-            # BLAS.gemv!('T', gcm.Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # gc.∇β += ∇resβ*Γ*res (standardized residual)
-            gc.storage_nn .+= gcm.Σ[k] .* gc.V[k] # compute Γ = a1*V1 + ... am*Vm
+            # BLAS.gemv!('T', gcm.θ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # gc.∇β += ∇resβ*Γ*res (standardized residual)
+            gc.storage_nn .+= gcm.θ[k] .* gc.V[k] # compute Γ = a1*V1 + ... am*Vm
         end
         # 2nd term of logl
         logl += component_loglikelihood(gc, r)
         # 3rd term of logl
-        qsum  = dot(gcm.Σ, gc.q) # q[k] = res_i' * V_i[k] * res_i / 2, so qsum = 0.5r(β)*Γ*r(β)
+        qsum  = dot(gcm.θ, gc.q) # q[k] = res_i' * V_i[k] * res_i / 2, so qsum = 0.5r(β)*Γ*r(β)
         logl += log(1 + qsum)
     end
     return logl

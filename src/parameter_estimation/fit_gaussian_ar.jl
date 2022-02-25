@@ -7,7 +7,7 @@ should be provided in `gcm.β`, `gcm.τ`, `gcm.ρ`, `gcm.σ2`.
 """
 function fit!(
         gcm::Union{GaussianCopulaARModel, GaussianCopulaCSModel},
-        solver=Ipopt.IpoptSolver(print_level = 5)
+        solver=Ipopt.IpoptSolver(print_level=3,  max_iter = 100, tol = 10^-6, limited_memory_max_history = 20)
     )
     initialize_model!(gcm)
     npar = gcm.p + 3 # tau, rho and sigma squared
@@ -71,7 +71,6 @@ function optimpar_to_modelpar!(
     gcm.σ2[1] = par[gcm.p + 2]
     # τ
     gcm.τ[1] = par[gcm.p + 3]
-    copyto!(gcm.θ, par)
     gcm
 end
 
@@ -110,11 +109,6 @@ function MathProgBase.eval_grad_f(
     grad[gcm.p + 2] = gcm.∇σ2[1]
     # gradient wrt τ
     grad[gcm.p + 3] = gcm.∇τ[1]
-    # @show gcm.θ
-    # @show gcm.θ
-    copyto!(gcm.∇θ, grad)
-    # @show gcm.∇θ
-    # return objective
     obj
 end
 

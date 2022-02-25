@@ -61,8 +61,15 @@ gcm = GaussianCopulaARModel(gcs);
 
 fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 50, accept_after_max_steps = 4, hessian_approximation = "limited-memory"))
 @show fittime
-@show gcm.θ
-@show gcm.∇θ
+@show gcm.β
+@show gcm.σ2
+@show gcm.ρ
+@show gcm.∇β
+@show gcm.∇σ2
+@show gcm.∇ρ
+
+@show gcm.τ
+@show gcm.∇τ
 
 loglikelihood!(gcm, true, true)
 vcov!(gcm)

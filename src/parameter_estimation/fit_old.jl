@@ -17,7 +17,7 @@ function fit2!(
 end
 
 function MathProgBase.initialize(
-    gcm::GLMCopulaVCModel, 
+    gcm::GLMCopulaVCModel,
     requested_features::Vector{Symbol})
     for feat in requested_features
         if !(feat in [:Grad, :Hess])
@@ -29,7 +29,7 @@ end
 MathProgBase.features_available(gcm::GLMCopulaVCModel) = [:Grad, :Hess]
 
 function MathProgBase.eval_f(
-    gcm::GLMCopulaVCModel, 
+    gcm::GLMCopulaVCModel,
     par::Vector)
     copy_par!(gcm, par)
     # update nuisance parameter
@@ -38,15 +38,15 @@ function MathProgBase.eval_f(
         @show new_d
     end
     # maximize σ2 and τ at current β using MM
-    update_Σ!(gcm)
-    @show gcm.Σ
+    update_θ!(gcm)
+    @show gcm.θ
     # evaluate loglikelihood
     loglikelihood!(gcm, false, false)
 end
 
 function MathProgBase.eval_grad_f(
-    gcm::GLMCopulaVCModel, 
-    grad::Vector, 
+    gcm::GLMCopulaVCModel,
+    grad::Vector,
     par::Vector)
     # println("reached eval_grad_f")
     copy_par!(gcm, par)
@@ -57,8 +57,8 @@ function MathProgBase.eval_grad_f(
         new_d = update_r!(gcm)
         @show new_d
     end
-    update_Σ!(gcm)
-    @show gcm.Σ
+    update_θ!(gcm)
+    @show gcm.θ
     # evaluate gradient
     logl = loglikelihood!(gcm, true, false)
     copyto!(grad, gcm.∇β)
@@ -66,7 +66,7 @@ function MathProgBase.eval_grad_f(
 end
 
 function copy_par!(
-    gcm::GLMCopulaVCModel, 
+    gcm::GLMCopulaVCModel,
     par::Vector)
     copyto!(gcm.β, par)
     par
@@ -99,7 +99,7 @@ function MathProgBase.eval_hesslag(
         @show new_d
     end
     # maximize σ2 and τ at current β using MM
-    update_Σ!(gcm)
+    update_θ!(gcm)
     # evaluate Hessian
     loglikelihood!(gcm, true, true)
     # copy Hessian elements into H

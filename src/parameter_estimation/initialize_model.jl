@@ -8,10 +8,10 @@ function initialize_model!(
     println("initializing β using Newton's Algorithm under Independence Assumption")
     initialize_beta!(gcm)
     fill!(gcm.τ, 1.0)
-    fill!(gcm.Σ, 1.0)
+    fill!(gcm.θ, 1.0)
     println("initializing variance components using MM-Algorithm")
-    update_Σ!(gcm)
-    copyto!(gcm.σ2, gcm.Σ)
+    update_θ!(gcm)
+    copyto!(gcm.σ2, gcm.θ)
     # println("initializing ρ using method of moments")
     copyto!(gcm.ρ, 0.2)
     # update_sigma_rho!(gcm)
@@ -64,9 +64,9 @@ function update_sigma_rho!(gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasRe
         @inbounds for i in eachindex(gcm.data)
             get_V!(gcm.ρ[1], gcm.data[i])
         end
-        fill!(gcm.Σ, 1.0)
-        update_Σ!(gcm)
-        copyto!(gcm.σ2, gcm.Σ[1])
+        fill!(gcm.θ, 1.0)
+        update_θ!(gcm)
+        copyto!(gcm.σ2, gcm.θ[1])
     else
         copyto!(gcm.σ2, σ2hat)
     end
@@ -135,13 +135,13 @@ function update_sigma_rho!(gcm::Union{GLMCopulaARModel{T, D, Link}, NBCopulaARMo
         @inbounds for i in eachindex(gcm.data)
             get_V!(ρhat, gcm.data[i])
         end
-        fill!(gcm.Σ, σ2_k_mean)
-        update_Σ!(gcm)
-        @show gcm.Σ
-        if gcm.Σ[1] > 1
+        fill!(gcm.θ, σ2_k_mean)
+        update_θ!(gcm)
+        @show gcm.θ
+        if gcm.θ[1] > 1
             copyto!(gcm.σ2, 1.0)
         else
-            copyto!(gcm.σ2, gcm.Σ)
+            copyto!(gcm.σ2, gcm.θ)
         end
         copyto!(gcm.ρ, ρhat)
     end
@@ -160,12 +160,12 @@ function initialize_model!(
     @show gcm.β
     fill!(gcm.τ, 1.0)
     println("initializing variance components using MM-Algorithm")
-    fill!(gcm.Σ, 1.0)
-    update_Σ!(gcm)
-    if sum(gcm.Σ) >= 20
-      fill!(gcm.Σ, 1.0)
+    fill!(gcm.θ, 1.0)
+    update_θ!(gcm)
+    if sum(gcm.θ) >= 20
+      fill!(gcm.θ, 1.0)
     end
-    @show gcm.Σ
+    @show gcm.θ
     nothing
 end
 
@@ -184,12 +184,12 @@ end
 #     GLMCopula.update_r!(gcm)
 #     fill!(gcm.τ, 1.0)
 #     println("initializing variance components using MM-Algorithm")
-#     fill!(gcm.Σ, 1.0)
-#     update_Σ!(gcm)
-#     if sum(gcm.Σ) >= 20
-#       fill!(gcm.Σ, 1.0)
+#     fill!(gcm.θ, 1.0)
+#     update_θ!(gcm)
+#     if sum(gcm.θ) >= 20
+#       fill!(gcm.θ, 1.0)
 #     end
-#     @show gcm.Σ
+#     @show gcm.θ
 #     nothing
 # end
 
@@ -266,13 +266,13 @@ function initialize_model!(
         # update r using maximum likelihood with Newton's method
         for gc in gcm.data
             fill!(gcm.τ, 1.0)
-            fill!(gcm.Σ, 1.0)
+            fill!(gcm.θ, 1.0)
             fill!(gc.∇β, 0)
             fill!(gc.∇τ, 0)
-            fill!(gc.∇Σ, 0)
+            fill!(gc.∇θ, 0)
             fill!(gc.Hβ, 0)
             fill!(gc.Hτ, 0)
-            fill!(gc.HΣ, 0)
+            fill!(gc.Hθ, 0)
         end
         println("initializing r using Newton update")
         GLMCopula.update_r!(gcm)
@@ -282,8 +282,8 @@ function initialize_model!(
     end
 
     println("initializing variance components using MM-Algorithm")
-    fill!(gcm.Σ, 1)
-    update_Σ!(gcm)
+    fill!(gcm.θ, 1)
+    update_θ!(gcm)
 
     nothing
 end

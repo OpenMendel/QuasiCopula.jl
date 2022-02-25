@@ -2,19 +2,19 @@ export vcov!, coef, stderror, confint, MSE, coverage!
 """
     vcov!(gcm::GLMCopulaVCModel)
 Calculate the asymptotic covariance of the parameters,
-based on values `gcm.Hββ`, `gcm.HΣ`, `gcm.data[i].∇β`,
-`gcm.data[i].∇Σ`, and `gcm.vcov` is updated and returned.
+based on values `gcm.Hββ`, `gcm.Hθ`, `gcm.data[i].∇β`,
+`gcm.data[i].∇θ`, and `gcm.vcov` is updated and returned.
 """
 function vcov!(gcm::Union{GLMCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}}) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link, VD, VL}
     p, m = gcm.p, gcm.m
     # form A matrix in the sandwich formula
     fill!(gcm.Ainv, 0.0)
     gcm.Ainv[          1:p,                 1:p      ] = gcm.Hβ
-    gcm.Ainv[    (p + 1):(p + m),     (p + 1):(p + m)] = gcm.HΣ
+    gcm.Ainv[    (p + 1):(p + m),     (p + 1):(p + m)] = gcm.Hθ
     fill!(gcm.M, 0.0)
     for obs in gcm.data
         copyto!(gcm.ψ, 1, obs.∇β)
-        copyto!(gcm.ψ, p + 1, obs.∇Σ)
+        copyto!(gcm.ψ, p + 1, obs.∇θ)
         BLAS.syr!('U', T(1), gcm.ψ, gcm.M)
     end
     copytri!(gcm.M, 'U')
@@ -29,14 +29,14 @@ end
 """
     vcov!(gcm::GaussianCopulaVCModel)
 For the Gaussian base, calculate the asymptotic covariance of the parameters,
-based on expected information `gcm.Hββ`, `gcm.HΣ`, `gcm.data[i].∇β`,
-`gcm.data[i].∇Σ`, and `gcm.vcov` is updated and returned.
+based on expected information `gcm.Hββ`, `gcm.Hθ`, `gcm.data[i].∇β`,
+`gcm.data[i].∇θ`, and `gcm.vcov` is updated and returned.
 """
 function vcov!(gcm::GaussianCopulaVCModel{T}) where {T <: BlasReal}
-    fill!(gcm.HΣ, 0)
+    fill!(gcm.Hθ, 0)
     for i in 1:length(gcm.data)
-        qsum  = dot(gcm.Σ, gcm.data[i].q)
-        tsum = dot(gcm.Σ, gcm.data[i].t)
+        qsum  = dot(gcm.θ, gcm.data[i].q)
+        tsum = dot(gcm.θ, gcm.data[i].t)
         inv1pq = inv(1 + qsum)
         inv1pt = inv(1 + tsum)
         gcm.data[i].m1 .= gcm.data[i].q
@@ -44,23 +44,23 @@ function vcov!(gcm::GaussianCopulaVCModel{T}) where {T <: BlasReal}
         gcm.data[i].m2 .= gcm.data[i].t
         gcm.data[i].m2 .*= inv1pt
         # hessian for vc
-        fill!(gcm.data[i].HΣ, 0.0)
-        BLAS.syr!('U', one(T), gcm.data[i].m2, gcm.data[i].HΣ)
-        BLAS.syr!('U', -one(T), gcm.data[i].m1, gcm.data[i].HΣ)
-        copytri!(gcm.data[i].HΣ, 'U')
-        gcm.HΣ .+= gcm.data[i].HΣ
+        fill!(gcm.data[i].Hθ, 0.0)
+        BLAS.syr!('U', one(T), gcm.data[i].m2, gcm.data[i].Hθ)
+        BLAS.syr!('U', -one(T), gcm.data[i].m1, gcm.data[i].Hθ)
+        copytri!(gcm.data[i].Hθ, 'U')
+        gcm.Hθ .+= gcm.data[i].Hθ
     end
     p, m = gcm.p, gcm.m
     # form A matrix in the sandwich formula
     fill!(gcm.Ainv, 0.0)
     gcm.Ainv[          1:p,                 1:p      ] = gcm.Hβ
     gcm.Ainv[          p + 1:p + 1,                 p + 1:p + 1      ] = gcm.Hτ
-    gcm.Ainv[    (p + 2):(p + 1 + m),     (p + 2):(p + 1 + m)] = gcm.HΣ
+    gcm.Ainv[    (p + 2):(p + 1 + m),     (p + 2):(p + 1 + m)] = gcm.Hθ
     fill!(gcm.M, 0.0)
     for obs in gcm.data
         copyto!(gcm.ψ, 1, obs.∇β)
         copyto!(gcm.ψ, p + 1, obs.∇τ)
-        copyto!(gcm.ψ, p + 2, obs.∇Σ)
+        copyto!(gcm.ψ, p + 2, obs.∇θ)
         BLAS.syr!('U', T(1), gcm.ψ, gcm.M)
     end
     copytri!(gcm.M, 'U')
@@ -76,8 +76,8 @@ end
 """
     vcov!(gcm::NBCopulaVCModel)
 Calculate the asymptotic covariance of the parameters,
-based on values `gcm.Hββ`, `gcm.HΣ`, `gcm.Hr`, `gcm.data[i].∇β`,
-`gcm.data[i].∇Σ`, `gcm.data[i].∇r`, and `gcm.vcov` is updated and returned.
+based on values `gcm.Hββ`, `gcm.Hθ`, `gcm.Hr`, `gcm.data[i].∇β`,
+`gcm.data[i].∇θ`, `gcm.data[i].∇r`, and `gcm.vcov` is updated and returned.
 """
 function vcov!(gcm::NBCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
     p, m = gcm.p, gcm.m
@@ -85,12 +85,12 @@ function vcov!(gcm::NBCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
     fill!(gcm.Ainv, 0.0)
     gcm.Ainv[          1:p,                 1:p      ] = gcm.Hβ
     gcm.Ainv[          p + 1:p + 1,                 p + 1:p + 1      ] = gcm.Hr
-    gcm.Ainv[    (p + 2):(p + 1 + m),     (p + 2):(p + 1 + m)] = gcm.HΣ
+    gcm.Ainv[    (p + 2):(p + 1 + m),     (p + 2):(p + 1 + m)] = gcm.Hθ
     fill!(gcm.M, 0.0)
     for obs in gcm.data
         copyto!(gcm.ψ, 1, gcm.∇β)
         copyto!(gcm.ψ, p + 1, gcm.∇r)
-        copyto!(gcm.ψ, p + 2, gcm.∇Σ)
+        copyto!(gcm.ψ, p + 2, gcm.∇θ)
         BLAS.syr!('U', T(1), gcm.ψ, gcm.M)
     end
     copytri!(gcm.M, 'U')
@@ -205,7 +205,7 @@ end
 Get the estimated parameter coefficients from the model.
 """
 function coef(gcm::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
-    [gcm.β; gcm.Σ]
+    [gcm.β; gcm.θ]
 end
 
 """
@@ -213,7 +213,7 @@ end
 Get the estimated parameter coefficients from the model.
 """
 function coef(gcm::GaussianCopulaVCModel{T}) where {T <: BlasReal}
-    [gcm.β; gcm.τ; gcm.Σ]
+    [gcm.β; gcm.τ; gcm.θ]
 end
 
 """
@@ -221,7 +221,7 @@ end
 Get the estimated parameter coefficients from the model.
 """
 function coef(gcm::NBCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
-    [gcm.β; gcm.r; gcm.Σ]
+    [gcm.β; gcm.r; gcm.θ]
 end
 
 """
@@ -253,7 +253,7 @@ end
 Get the estimated parameter coefficients from the model.
 """
 function coef(gcm::Poisson_Bernoulli_VCModel{T, VD, VL}) where {T <: BlasReal, VD, VL}
-    [gcm.β; gcm.Σ]
+    [gcm.β; gcm.θ]
 end
 
 """
@@ -321,35 +321,35 @@ confint(gcm::Union{GLMCopulaVCModel, GaussianCopulaVCModel, GLMCopulaARModel, GL
 confint(gcm::Union{GLMCopulaVCModel, GaussianCopulaVCModel, GLMCopulaARModel, GLMCopulaCSModel, NBCopulaVCModel, GaussianCopulaARModel, GaussianCopulaCSModel, NBCopulaARModel, NBCopulaCSModel, Poisson_Bernoulli_VCModel}) = confint(gcm, 0.95)
 
 """
-    MSE(gcm::GLMCopulaVCModel, β::Vector, Σ::Vector)
-Get the mean squared error of the parameters `β` and `Σ`.
+    MSE(gcm::GLMCopulaVCModel, β::Vector, θ::Vector)
+Get the mean squared error of the parameters `β` and `θ`.
 """
-function MSE(gcm::GLMCopulaVCModel{T, D, Link}, β::Vector, Σ::Vector) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
+function MSE(gcm::GLMCopulaVCModel{T, D, Link}, β::Vector, θ::Vector) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
     mseβ = sum(abs2, gcm.β .- β) / gcm.p
-    mseΣ = sum(abs2, gcm.Σ .- Σ) / gcm.m
-    return mseβ, mseΣ
+    mseθ = sum(abs2, gcm.θ .- θ) / gcm.m
+    return mseβ, mseθ
 end
 
 """
-    MSE(gcm::GLMCopulaVCModel, β::Vector, τ::Float64, Σ::Vector)
-Get the mean squared error of the parameters `β`, `τ` and `Σ`.
+    MSE(gcm::GLMCopulaVCModel, β::Vector, τ::Float64, θ::Vector)
+Get the mean squared error of the parameters `β`, `τ` and `θ`.
 """
-function MSE(gcm::GaussianCopulaVCModel{T}, β::Vector, τ::T, Σ::Vector) where {T <: BlasReal}
+function MSE(gcm::GaussianCopulaVCModel{T}, β::Vector, τ::T, θ::Vector) where {T <: BlasReal}
     mseβ = sum(abs2, gcm.β .- β) / gcm.p
     mseτ = sum(abs2, inv(gcm.τ[1]) - inv(τ))
-    mseΣ = sum(abs2, gcm.Σ .- Σ) / gcm.m
-    return mseβ, mseτ, mseΣ
+    mseθ = sum(abs2, gcm.θ .- θ) / gcm.m
+    return mseβ, mseτ, mseθ
 end
 
 """
-    MSE(gcm::NBCopulaVCModel, β::Vector, r::T, Σ::Vector)
-Get the mean squared error of the parameters `β`, `r` and `Σ`.
+    MSE(gcm::NBCopulaVCModel, β::Vector, r::T, θ::Vector)
+Get the mean squared error of the parameters `β`, `r` and `θ`.
 """
-function MSE(gcm::NBCopulaVCModel{T, D, Link}, β::Vector, r::T, Σ::Vector) where {T <: BlasReal, D, Link}
+function MSE(gcm::NBCopulaVCModel{T, D, Link}, β::Vector, r::T, θ::Vector) where {T <: BlasReal, D, Link}
     mseβ = sum(abs2, gcm.β .- β) / gcm.p
     mser = sum(abs2, gcm.r .- r)
-    mseΣ = sum(abs2, gcm.Σ .- Σ) / gcm.m
-    return mseβ, mser, mseΣ
+    mseθ = sum(abs2, gcm.θ .- θ) / gcm.m
+    return mseβ, mser, mseθ
 end
 
 """
@@ -388,20 +388,20 @@ function MSE(gcm::Union{GaussianCopulaARModel{T}, GaussianCopulaCSModel{T}}, β:
 end
 
 """
-    MSE(gcm::GLMCopulaVCModel, β::Vector, Σ::Vector)
-Get the mean squared error of the parameters `β` and `Σ`.
+    MSE(gcm::GLMCopulaVCModel, β::Vector, θ::Vector)
+Get the mean squared error of the parameters `β` and `θ`.
 """
-function MSE(gcm::Poisson_Bernoulli_VCModel{T, VD, VL}, β::Vector, Σ::Vector) where {T <: BlasReal, VD, VL}
+function MSE(gcm::Poisson_Bernoulli_VCModel{T, VD, VL}, β::Vector, θ::Vector) where {T <: BlasReal, VD, VL}
     mseβ = sum(abs2, gcm.β .- β) / gcm.p
-    mseΣ = sum(abs2, gcm.Σ .- Σ) / gcm.m
-    return mseβ, mseΣ
+    mseθ = sum(abs2, gcm.θ .- θ) / gcm.m
+    return mseβ, mseθ
 end
 
 
 """
     coverage!(gcm::Union{GLMCopulaVCModel, GLMCopulaARModel}, trueparams::Vector,
 intervals::Matrix, curcoverage::Vector)
-Find the coverage of the estimated parameters `β` and `Σ`, given the true parameters.
+Find the coverage of the estimated parameters `β` and `θ`, given the true parameters.
 """
 function coverage!(gcm::Union{GLMCopulaVCModel, GaussianCopulaVCModel, GLMCopulaARModel, GLMCopulaCSModel, NBCopulaVCModel, GaussianCopulaARModel, GaussianCopulaCSModel, NBCopulaARModel, NBCopulaCSModel, Poisson_Bernoulli_VCModel}, trueparams::Vector,
     intervals::Matrix, curcoverage::Vector)

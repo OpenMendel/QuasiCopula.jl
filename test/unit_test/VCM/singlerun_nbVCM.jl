@@ -9,7 +9,7 @@ m = 1    # number of variance components
 Random.seed!(12345)
 # try next
 βtrue = rand(Uniform(-2, 2), p_fixed)
-Σtrue = [0.5]
+θtrue = [0.5]
 rtrue = 10.0
 
 d = NegativeBinomial()
@@ -23,7 +23,7 @@ ni = 5
 
 gcs = Vector{NBCopulaVCObs{T, D, Link}}(undef, samplesize)
 
-Γ = Σtrue[1] * ones(ni, ni)
+Γ = θtrue[1] * ones(ni, ni)
 
 # for reproducibility I will simulate all the design matrices here
 Random.seed!(12345)
@@ -47,28 +47,28 @@ end
 
 # form VarLmmModel
 gcm = NBCopulaVCModel(gcs);
-gcm2 = deepcopy(gcm);
+
 fittime = @elapsed GLMCopula.fit!(gcm)
 @show fittime
 @show gcm.β
-@show gcm.Σ
+@show gcm.θ
 @show gcm.r
 @show gcm.∇β
-@show gcm.∇Σ
+@show gcm.∇θ
 @show gcm.∇r
 
 loglikelihood!(gcm, true, true)
 vcov!(gcm)
 @show GLMCopula.confint(gcm)
 # mse and time under our model
-mseβ, mser, mseΣ = MSE(gcm, βtrue, rtrue, Σtrue)
+mseβ, mser, mseθ = MSE(gcm, βtrue, rtrue, θtrue)
 @show mseβ
 @show mser
-@show mseΣ
+@show mseθ
 
 using Test
 @test mseβ < 0.01
-@test mseΣ < 0.01
+@test mseθ < 0.01
 @test mser < 0.1
 
 # need to optimize memory allocation 13.73 MIB

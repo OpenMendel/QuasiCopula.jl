@@ -10,14 +10,12 @@ mutable struct NBCopulaVCObs{T <: BlasReal, D, Link} # d changes, so must be mut
     m::Int # number of variance components
     # working arrays
     ∇β::Vector{T}   # gradient wrt β
-    ∇μβ::Matrix{T}
-    ∇σ2β::Matrix{T}
     ∇resβ::Matrix{T}# residual gradient matrix d/dβ_p res_ij (each observation has a gradient of residual is px1)
     ∇τ::Vector{T}   # gradient wrt τ
-    ∇Σ::Vector{T}   # gradient wrt σ2
+    ∇θ::Vector{T}   # gradient wrt θ2
     ∇r::Vector{T}   # gradient wrt r (NB)
     Hβ::Matrix{T}   # Hessian wrt β
-    HΣ::Matrix{T}   # Hessian wrt variance components Σ
+    Hθ::Matrix{T}   # Hessian wrt variance components θ
     Hr::Matrix{T}   # Hessian wrt r (NB)
     Hτ::Matrix{T}   # Hessian wrt τ
     res::Vector{T}  # residual vector res_i
@@ -55,14 +53,12 @@ function NBCopulaVCObs(
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
     ∇β  = Vector{T}(undef, p)
-    ∇μβ = Matrix{T}(undef, n, p)
-    ∇σ2β = Matrix{T}(undef, n, p)
     ∇resβ  = Matrix{T}(undef, n, p)
     ∇τ  = Vector{T}(undef, 1)
-    ∇Σ  = Vector{T}(undef, m)
+    ∇θ  = Vector{T}(undef, m)
     ∇r  = Vector{T}(undef, 1)
     Hβ  = Matrix{T}(undef, p, p)
-    HΣ  = Matrix{T}(undef, m, m)
+    Hθ  = Matrix{T}(undef, m, m)
     Hr  = Matrix{T}(undef, 1, 1)
     Hτ  = Matrix{T}(undef, 1, 1)
     res = Vector{T}(undef, n)
@@ -88,7 +84,7 @@ function NBCopulaVCObs(
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
-    NBCopulaVCObs{T, D, Link}(y, X, V, n, p, m, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇τ, ∇Σ, ∇r, Hβ, HΣ, Hr,
+    NBCopulaVCObs{T, D, Link}(y, X, V, n, p, m, ∇β, ∇resβ, ∇τ, ∇θ, ∇r, Hβ, Hθ, Hr,
         Hτ, res, t, q, xtx, storage_n, storage_n2, storage_n3, storage_p1,
         storage_p2, storage_nn, storage_np, storage_pp, added_term_numerator, added_term2,
         η, μ, varμ, dμ, d, link, wt, w1, w2)
@@ -111,18 +107,16 @@ struct NBCopulaVCModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalua
     # parameters
     β::Vector{T}    # p-vector of mean regression coefficients
     τ::Vector{T}    # inverse of linear regression variance parameter
-    Σ::Vector{T}    # m-vector: [σ12, ..., σm2]
+    θ::Vector{T}    # m-vector: [θ12, ..., θm2]
     r::Vector{T}    # r parameter for negative binomial
-    θ::Vector{T}    # all parameters, beta vector, variance components vector and r
     # working arrays
     ∇β::Vector{T}   # gradient from all observations
     ∇τ::Vector{T}
-    ∇Σ::Vector{T}
+    ∇θ::Vector{T}
     ∇r::Vector{T}
-    ∇θ::Vector{T}   # overall gradient for beta and variance components vector Σ
     XtX::Matrix{T}  # X'X = sum_i Xi'Xi
     Hβ::Matrix{T}    # Hessian from all observations
-    HΣ::Matrix{T}
+    Hθ::Matrix{T}
     Hr::Matrix{T}
     Hτ::Matrix{T}
     Ainv::Matrix{T}
@@ -137,7 +131,7 @@ struct NBCopulaVCModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalua
     storage_n::Vector{T}
     storage_n2::Vector{T}
     storage_m::Vector{T}
-    storage_Σ::Vector{T}
+    storage_θ::Vector{T}
     d::Vector{D}
     link::Vector{Link}
 end
@@ -146,17 +140,15 @@ function NBCopulaVCModel(gcs::Vector{NBCopulaVCObs{T, D, Link}}) where {T <: Bla
     n, p, m = length(gcs), size(gcs[1].X, 2), length(gcs[1].V)
     β   = Vector{T}(undef, p)
     τ   = [1.0]
-    Σ   = Vector{T}(undef, m)
+    θ   = Vector{T}(undef, m)
     r   = [1.0]
-    θ   = Vector{T}(undef, m + p + 1) # should this +1 ??
     ∇β  = Vector{T}(undef, p)
     ∇τ  = Vector{T}(undef, 1)
-    ∇Σ  = Vector{T}(undef, m)
+    ∇θ  = Vector{T}(undef, m)
     ∇r  = Vector{T}(undef, 1)
-    ∇θ  = Vector{T}(undef, m + p + 1) # should this +1 ??
     XtX = zeros(T, p, p) # sum_i xi'xi
     Hβ  = Matrix{T}(undef, p, p)
-    HΣ  = Matrix{T}(undef, m, m)
+    Hθ  = Matrix{T}(undef, m, m)
     Hr  = Matrix{T}(undef, 1, 1)
     Hτ  = Matrix{T}(undef, 1, 1)
     Ainv    = zeros(T, p + m + 1, p + m + 1)
@@ -183,21 +175,21 @@ function NBCopulaVCModel(gcs::Vector{NBCopulaVCObs{T, D, Link}}) where {T <: Bla
     storage_n = Vector{T}(undef, n)
     storage_n2 = Vector{T}(undef, n)
     storage_m = Vector{T}(undef, m)
-    storage_Σ = Vector{T}(undef, m)
-    NBCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, n, p, m, β, τ, Σ, r, θ,
-        ∇β, ∇τ, ∇Σ, ∇r, ∇θ, XtX, Hβ, HΣ, Hr, Hτ, Ainv, Aevec, M, vcov, ψ, TR, QF, hess1, hess2,
-        storage_n, storage_n2, storage_m, storage_Σ, d, link)
+    storage_θ = Vector{T}(undef, m)
+    NBCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, n, p, m, β, τ, θ, r,
+        ∇β, ∇τ, ∇θ, ∇r, XtX, Hβ, Hθ, Hr, Hτ, Ainv, Aevec, M, vcov, ψ, TR, QF, hess1, hess2,
+        storage_n, storage_n2, storage_m, storage_θ, d, link)
 end
 
 """
-    loglikelihood!(gc::NBCopulaVCObs{T, D, Link}, β, τ, Σ, r)
-Calculates the loglikelihood of observing `y` given parameters for `β`, `τ = 1`, `Σ`, and `r`for Negative Binomial distribution.
+    loglikelihood!(gc::NBCopulaVCObs{T, D, Link}, β, τ, θ, r)
+Calculates the loglikelihood of observing `y` given parameters for `β`, `τ = 1`, `θ`, and `r`for Negative Binomial distribution.
 """
 function loglikelihood!(
   gc::NBCopulaVCObs{T, D, Link},
   β::Vector{T},
   τ::T, # inverse of linear regression variance
-  Σ::Vector{T},
+  θ::Vector{T},
   r::T,
   needgrad::Bool = false,
   needhess::Bool = false
@@ -207,7 +199,7 @@ function loglikelihood!(
   if needgrad
       fill!(gc.∇β, 0)
       fill!(gc.∇τ, 0)
-      fill!(gc.∇Σ, 0)
+      fill!(gc.∇θ, 0)
   end
   needhess && fill!(gc.Hβ, 0)
   fill!(gc.∇β, 0.0)
@@ -220,24 +212,24 @@ function loglikelihood!(
   @inbounds for k in 1:gc.m
       mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
       if needgrad
-          BLAS.gemv!('T', Σ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual) SHOULDNT THIS BE res^t*Γ*res? NOT ∇resβ*Γ*res
+          BLAS.gemv!('T', θ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual) SHOULDNT THIS BE res^t*Γ*res? NOT ∇resβ*Γ*res
       end
       gc.q[k] = dot(gc.res, gc.storage_n) / 2
   end
   # 2nd term of loglikelihood
   logl = GLMCopula.component_loglikelihood(gc, r)
   # 1st term of loglikelihood
-  tsum = dot(Σ, gc.t)
+  tsum = dot(θ, gc.t)
   logl += -log(1 + tsum)
   # 3rd term of loglikelihood
-  qsum  = dot(Σ, gc.q)
+  qsum  = dot(θ, gc.q)
   logl += log(1 + qsum)
 
   if needgrad
       inv1pq = inv(1 + qsum)
 
         # gradient with respect to r
-        gc.∇r .= nb_first_derivative(gc, Σ, r)
+        gc.∇r .= nb_first_derivative(gc, θ, r)
 
       if needhess
           BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 1.0, gc.Hβ) # only lower triangular
@@ -246,14 +238,14 @@ function loglikelihood!(
           fill!(gc.added_term2, 0.0) # fill hessian with 0
           @inbounds for k in 1:gc.m
               mul!(gc.added_term_numerator, gc.V[k], gc.∇resβ) # storage_n = V[k] * res
-              BLAS.gemm!('T', 'N', Σ[k], gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2)
+              BLAS.gemm!('T', 'N', θ[k], gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2)
           end
           gc.added_term2 .*= inv1pq
           gc.Hβ .+= gc.added_term2
           gc.Hβ .+= GLMCopula.glm_hessian(gc)
 
           # hessian for r
-          gc.Hr .= nb_second_derivative(gc, Σ, r)
+          gc.Hr .= nb_second_derivative(gc, θ, r)
       end
       gc.storage_p2 .= gc.∇β .* inv1pq
       gc.res .= gc.y .- gc.μ
@@ -271,16 +263,16 @@ function loglikelihood!(
   logl = zero(T)
   if needgrad
       fill!(gcm.∇β, 0.0)
-      fill!(gcm.∇Σ, 0.0)
+      fill!(gcm.∇θ, 0.0)
       fill!(gcm.∇r, 0.0)
   end
   if needhess
       fill!(gcm.Hβ, 0.0)
-      fill!(gcm.HΣ, 0.0)
+      fill!(gcm.Hθ, 0.0)
       fill!(gcm.Hr, 0.0)
   end
   @inbounds for i in eachindex(gcm.data)
-      logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.Σ, gcm.r[1], needgrad, needhess)
+      logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.θ, gcm.r[1], needgrad, needhess)
       if needgrad
           gcm.∇β .+= gcm.data[i].∇β
           gcm.∇r .+= gcm.data[i].∇r
@@ -291,18 +283,18 @@ function loglikelihood!(
       end
   end
     if needgrad
-        gcm.∇Σ .= update_∇Σ!(gcm)
+        gcm.∇θ .= update_∇θ!(gcm)
     end
     if needhess
-        gcm.HΣ .= update_HΣ!(gcm)
+        gcm.Hθ .= update_Hθ!(gcm)
     end
   logl
 end
 
 """
-1st derivative of loglikelihood of a sample with Σ being the variance components
+1st derivative of loglikelihood of a sample with θ being the variance components
 """
-function nb_first_derivative(gc::NBCopulaVCObs, Σ::Vector{T}, r::Number) where T <: BlasReal
+function nb_first_derivative(gc::NBCopulaVCObs, θ::Vector{T}, r::Number) where T <: BlasReal
     s = zero(T)
     # 2nd term of logl
     @inbounds for j in eachindex(gc.y)
@@ -311,7 +303,7 @@ function nb_first_derivative(gc::NBCopulaVCObs, Σ::Vector{T}, r::Number) where 
     end
     # 3rd term of logl
     resid = gc.res # res = inv(D)(y - μ)
-    Γ = Σ' * gc.V # Γ = a1*V1 + ... + am*Vm
+    Γ = θ' * gc.V # Γ = a1*V1 + ... + am*Vm
     η = gc.η
     D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
     dD = Diagonal([-exp(2η[i]) / (2r^1.5 * sqrt(exp(η[i])*(exp(η[i])+r))) for i in 1:length(η)])
@@ -321,9 +313,9 @@ function nb_first_derivative(gc::NBCopulaVCObs, Σ::Vector{T}, r::Number) where 
 end
 
 """
-2nd derivative of loglikelihood of a sample with Σ being the variance components
+2nd derivative of loglikelihood of a sample with θ being the variance components
 """
-function nb_second_derivative(gc::NBCopulaVCObs, Σ::Vector{T}, r::Number) where T <: BlasReal
+function nb_second_derivative(gc::NBCopulaVCObs, θ::Vector{T}, r::Number) where T <: BlasReal
     s = zero(T)
     # 2nd term of logl
     @inbounds for j in eachindex(gc.y)
@@ -331,7 +323,7 @@ function nb_second_derivative(gc::NBCopulaVCObs, Σ::Vector{T}, r::Number) where
         s += (yi+r)/(μi+r)^2 - 2/(μi+r) + 1/r + trigamma(r+yi) - trigamma(r)
     end
     # 3rd term of logl
-    Γ = Σ' * gc.V # Γ = a1*V1 + ... + am*Vm
+    Γ = θ' * gc.V # Γ = a1*V1 + ... + am*Vm
     η = gc.η
     D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
     dD = Diagonal([-exp(2η[i]) / (2r^1.5 * sqrt(exp(η[i])*(exp(η[i])+r))) for i in 1:length(η)])

@@ -2,11 +2,11 @@
     fit!(gcm::GLMCopulaVCModel, solver=Ipopt.IpoptSolver(print_level=5))
 
 Fit an `GLMCopulaVCModel` object by MLE using a nonlinear programming solver. Start point
-should be provided in `gcm.β`, `gcm.Σ`, this is for Poisson and Bernoulli base with no additional parameters than the mean.
+should be provided in `gcm.β`, `gcm.θ`, this is for Poisson and Bernoulli base with no additional parameters than the mean.
 """
 function fit!(
         gcm::Union{GLMCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}},
-        solver=Ipopt.IpoptSolver(print_level=5)
+        solver=Ipopt.IpoptSolver(print_level=3, tol = 10^-6, max_iter = 100, limited_memory_max_history = 20)
     )  where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link, VD, VL}
     initialize_model!(gcm)
     npar = gcm.p + gcm.m
@@ -50,7 +50,7 @@ function modelpar_to_optimpar!(
     # L
     offset = gcm.p + 1
     @inbounds for k in 1:gcm.m
-        par[offset] = gcm.Σ[k]
+        par[offset] = gcm.θ[k]
         offset += 1
     end
     par
@@ -69,10 +69,9 @@ function optimpar_to_modelpar!(
     copyto!(gcm.β, 1, par, 1, gcm.p)
     offset = gcm.p + 1
     @inbounds for k in 1:gcm.m
-        gcm.Σ[k] = par[offset]
+        gcm.θ[k] = par[offset]
         offset   += 1
     end
-    # copyto!(gcm.θ, par)
     gcm
 end
 
@@ -108,14 +107,9 @@ copyto!(grad, gcm.∇β)
 # gradient wrt variance comps
 offset = gcm.p + 1
 @inbounds for k in 1:gcm.m
-    grad[offset] = gcm.∇Σ[k]
+    grad[offset] = gcm.∇θ[k]
     offset += 1
 end
-# update nuisance parameter
-# @show gcm.θ
-# copyto!(gcm.∇θ, grad)
-# @show gcm.∇θ
-# return objective
 obj
 end
 
@@ -165,7 +159,7 @@ function MathProgBase.eval_hesslag(
     end
     # Haa block
     @inbounds for j in 1:gcm.m, i in 1:j
-        H[idx] = gcm.HΣ[i, j]
+        H[idx] = gcm.Hθ[i, j]
         idx   += 1
     end
     # lmul!(σ, H)

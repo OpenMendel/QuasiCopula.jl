@@ -1,6 +1,15 @@
 # Autoregressive AR(1) Covariance
 
-In this notebook we will fit our model on the two example datasets provided in the geepack ang gcmr R packages. For these examples we will use the autoregressive AR(1) parameterization of the covariance matrix $\Gamma,$ estimating correlation parameter $\rho$ and dispersion parameter $\sigma^2$. 
+In this notebook we will fit our model with autoregressive AR(1) structured covariance on two example datasets provided in the gcmr and geepack R packages. For these examples we will use the AR(1) parameterization of the covariance matrix $\mathbf{\Gamma},$ and estimate correlation parameter $\rho$ and dispersion parameter $\sigma^2$. 
+
+For the $i^{th}$ cluster with cluster size $d_i$, $\mathbf{\Gamma_i}$ is given by 
+
+$$\mathbf{\Gamma_i}(\rho, \sigma^2) = \sigma^2 \times \left[\begin{array}{ccccccc}
+1 & \rho & \rho^2 & \rho^3 & ...  &\rho^{d_i - 1}\\
+ \rho & 1 & \rho & \rho^2 & ... \\
+ & & ... & & \\ & &...& \rho & 1 & \rho \\
+ \rho^{d_i - 1} & \rho^{d_i - 2} & ...& \rho^2 & \rho & 1
+\end{array}\right]$$
 
 ### Table of Contents:
 * [Example 1: Poisson AR(1) (gcmr:Epilepsy)](#Example-1:-Poisson-AR(1))
@@ -92,11 +101,11 @@ link = LogLink()
 Poisson_AR_model = AR_model(df, y, grouping, covariates, d, link);
 ```
 
-Fit the model
+Fit the model. By default, we limit the maximum number of Quasi-Newton iterations to 100, and set the convergence tolerance to $10^{-6}.$ 
 
 
 ```julia
-GLMCopula.fit!(Poisson_AR_model, IpoptSolver(print_level = 3, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, hessian_approximation = "limited-memory"));
+GLMCopula.fit!(Poisson_AR_model);
 ```
 
     initializing β using Newton's Algorithm under Independence Assumption
@@ -119,25 +128,25 @@ GLMCopula.fit!(Poisson_AR_model, IpoptSolver(print_level = 3, max_iter = 100, to
             inequality constraints with only upper bounds:        0
     
     
-    Number of Iterations....: 90
+    Number of Iterations....: 89
     
                                        (scaled)                 (unscaled)
     Objective...............:   2.1688986516850264e+03    2.1688986516850264e+03
-    Dual infeasibility......:   1.2101282776440716e-09    1.2101282776440716e-09
+    Dual infeasibility......:   5.9531302554205467e-08    5.9531302554205467e-08
     Constraint violation....:   0.0000000000000000e+00    0.0000000000000000e+00
     Complementarity.........:   9.9999999999999994e-12    9.9999999999999994e-12
-    Overall NLP error.......:   1.2101282776440716e-09    1.2101282776440716e-09
+    Overall NLP error.......:   5.9531302554205467e-08    5.9531302554205467e-08
     
     
-    Number of objective function evaluations             = 381
-    Number of objective gradient evaluations             = 91
+    Number of objective function evaluations             = 380
+    Number of objective gradient evaluations             = 90
     Number of equality constraint evaluations            = 0
     Number of inequality constraint evaluations          = 0
     Number of equality constraint Jacobian evaluations   = 0
     Number of inequality constraint Jacobian evaluations = 0
     Number of Lagrangian Hessian evaluations             = 0
-    Total CPU secs in IPOPT (w/o function evaluations)   =      0.611
-    Total CPU secs in NLP function evaluations           =      0.025
+    Total CPU secs in IPOPT (w/o function evaluations)   =      0.600
+    Total CPU secs in NLP function evaluations           =      0.023
     
     EXIT: Optimal Solution Found.
 
@@ -151,19 +160,19 @@ We can take a look at the MLE's
 @show Poisson_AR_model.ρ;
 ```
 
-    Poisson_AR_model.β = [3.477001434224112, -1.3123828083857931, -0.06552858740032046]
+    Poisson_AR_model.β = [3.477001434202149, -1.3123828083769642, -0.06552858739753331]
     Poisson_AR_model.σ2 = [96534.17924265226]
-    Poisson_AR_model.ρ = [0.9499485377184236]
+    Poisson_AR_model.ρ = [0.949948537714978]
 
 
 Calculate the loglikelihood at the maximum
 
 
 ```julia
-@show loglikelihood!(Poisson_AR_model, true, true);
+@show loglikelihood!(Poisson_AR_model, false, false);
 ```
 
-    loglikelihood!(Poisson_AR_model, true, true) = -2168.8986516850264
+    loglikelihood!(Poisson_AR_model, false, false) = -2168.8986516850264
 
 
 ## Example 2: Bernoulli AR(1)
@@ -226,11 +235,11 @@ link = LogitLink()
 Bernoulli_AR_model = AR_model(df, y, grouping, covariates, d, link);
 ```
 
-Fit the model
+Fit the model. By default, we limit the maximum number of Quasi-Newton iterations to 100, and set the convergence tolerance to $10^{-6}.$ 
 
 
 ```julia
-GLMCopula.fit!(Bernoulli_AR_model, IpoptSolver(print_level = 3, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, hessian_approximation = "limited-memory"));
+GLMCopula.fit!(Bernoulli_AR_model);
 ```
 
     initializing β using Newton's Algorithm under Independence Assumption
@@ -246,25 +255,25 @@ GLMCopula.fit!(Bernoulli_AR_model, IpoptSolver(print_level = 3, max_iter = 100, 
             inequality constraints with only upper bounds:        0
     
     
-    Number of Iterations....: 94
+    Number of Iterations....: 93
     
                                        (scaled)                 (unscaled)
-    Objective...............:   2.4055710825065927e+02    2.4055710825065927e+02
-    Dual infeasibility......:   1.4119798663614347e-09    1.4119798663614347e-09
+    Objective...............:   2.4055710825065918e+02    2.4055710825065918e+02
+    Dual infeasibility......:   1.9741609591505949e-07    1.9741609591505949e-07
     Constraint violation....:   0.0000000000000000e+00    0.0000000000000000e+00
-    Complementarity.........:   1.0000000000000001e-11    1.0000000000000001e-11
-    Overall NLP error.......:   1.4119798663614347e-09    1.4119798663614347e-09
+    Complementarity.........:   9.9999999999999994e-12    9.9999999999999994e-12
+    Overall NLP error.......:   1.9741609591505949e-07    1.9741609591505949e-07
     
     
-    Number of objective function evaluations             = 421
-    Number of objective gradient evaluations             = 95
+    Number of objective function evaluations             = 420
+    Number of objective gradient evaluations             = 94
     Number of equality constraint evaluations            = 0
     Number of inequality constraint evaluations          = 0
     Number of equality constraint Jacobian evaluations   = 0
     Number of inequality constraint Jacobian evaluations = 0
     Number of Lagrangian Hessian evaluations             = 0
-    Total CPU secs in IPOPT (w/o function evaluations)   =      0.659
-    Total CPU secs in NLP function evaluations           =      0.024
+    Total CPU secs in IPOPT (w/o function evaluations)   =      0.661
+    Total CPU secs in NLP function evaluations           =      0.021
     
     EXIT: Optimal Solution Found.
 
@@ -278,17 +287,17 @@ We can take a look at the MLE's
 @show Bernoulli_AR_model.ρ;
 ```
 
-    Bernoulli_AR_model.β = [-0.858664409049024, 0.8334076581881305, -0.026953129746342567, 2.103267661442157]
+    Bernoulli_AR_model.β = [-0.8586644089629349, 0.8334076580604213, -0.02695312973934001, 2.1032676612358934]
     Bernoulli_AR_model.σ2 = [306890.7562627383]
-    Bernoulli_AR_model.ρ = [0.7813892966990003]
+    Bernoulli_AR_model.ρ = [0.7813892966698839]
 
 
 Calculate the loglikelihood at the maximum
 
 
 ```julia
-@show loglikelihood!(Bernoulli_AR_model, true, true);
+@show loglikelihood!(Bernoulli_AR_model, false, false);
 ```
 
-    loglikelihood!(Bernoulli_AR_model, true, true) = -240.55710825065927
+    loglikelihood!(Bernoulli_AR_model, false, false) = -240.55710825065918
 

@@ -1,6 +1,10 @@
 # Compound Symmetric (CS) Covariance 
 
-In this notebook we will fit our model on the two example datasets provided in the geepack ang gcmr R packages. For these examples we will use the compound symmetry (CS) parameterization of the covariance matrix $\Gamma,$ estimating correlation parameter $\rho$ and dispersion parameter $\sigma^2$. 
+In this notebook we will fit our model with compound symmetric CS structured covariance on two example datasets provided in the gcmr and geepack R packages. For these examples we will use the CS parameterization of the covariance matrix $\mathbf{\Gamma},$ and estimate correlation parameter $\rho$ and dispersion parameter $\sigma^2$. 
+
+For the $i^{th}$ cluster with cluster size $d_i$, $\mathbf{\Gamma_i}$ is given by 
+
+$$\mathbf{\Gamma_i}(\rho, \sigma^2) =  \sigma^2 * \Big[ \rho * \mathbf{1_{d_i}} \mathbf{1_{d_i}}^t + (1 - \rho) * \mathbf{I_{d_i}} \Big]$$
 
 ### Table of Contents:
 * [Example 1: Poisson CS (gcmr:Epilepsy)](#Example-1:-Poisson-CS)
@@ -90,16 +94,15 @@ link = LogLink()
 Poisson_CS_model = CS_model(df, y, grouping, covariates, d, link);
 ```
 
-Fit the model
+Fit the model. By default, we limit the maximum number of Quasi-Newton iterations to 100, and set the convergence tolerance to $10^{-6}.$ 
 
 
 ```julia
-GLMCopula.fit!(Poisson_CS_model, IpoptSolver(print_level = 3, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, hessian_approximation = "limited-memory"));
+GLMCopula.fit!(Poisson_CS_model);
 ```
 
     initializing β using Newton's Algorithm under Independence Assumption
     initializing σ2 and ρ using method of moments
-    par0 = [3.4553888182001127, -1.3288345481797776, -0.026384675366883565, 0.2, 1.0]
     
     ******************************************************************************
     This program contains Ipopt, a library for large-scale nonlinear optimization.
@@ -135,8 +138,8 @@ GLMCopula.fit!(Poisson_CS_model, IpoptSolver(print_level = 3, max_iter = 100, to
     Number of equality constraint Jacobian evaluations   = 0
     Number of inequality constraint Jacobian evaluations = 0
     Number of Lagrangian Hessian evaluations             = 0
-    Total CPU secs in IPOPT (w/o function evaluations)   =      0.589
-    Total CPU secs in NLP function evaluations           =      0.024
+    Total CPU secs in IPOPT (w/o function evaluations)   =      0.591
+    Total CPU secs in NLP function evaluations           =      0.022
     
     EXIT: Optimal Solution Found.
 
@@ -159,10 +162,10 @@ Calculate the loglikelihood at the maximum
 
 
 ```julia
-@show loglikelihood!(Poisson_CS_model, true, true);
+@show loglikelihood!(Poisson_CS_model, false, false);
 ```
 
-    loglikelihood!(Poisson_CS_model, true, true) = -2169.581326618933
+    loglikelihood!(Poisson_CS_model, false, false) = -2169.581326618933
 
 
 ## Example 2: Bernoulli CS
@@ -223,16 +226,15 @@ link = LogitLink()
 Bernoulli_CS_model = CS_model(df, y, grouping, covariates, d, link);
 ```
 
-Fit the model
+Fit the model. By default, we limit the maximum number of Quasi-Newton iterations to 100, and set the convergence tolerance to $10^{-6}.$ 
 
 
 ```julia
-GLMCopula.fit!(Bernoulli_CS_model, IpoptSolver(print_level = 3, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, hessian_approximation = "limited-memory"));
+GLMCopula.fit!(Bernoulli_CS_model);
 ```
 
     initializing β using Newton's Algorithm under Independence Assumption
     initializing σ2 and ρ using method of moments
-    par0 = [-0.7993115972643741, 0.6513519744878128, -0.018744798735221512, 1.6766993967179145, 0.2, 1.0]
     Total number of variables............................:        6
                          variables with only lower bounds:        1
                     variables with lower and upper bounds:        1
@@ -244,25 +246,25 @@ GLMCopula.fit!(Bernoulli_CS_model, IpoptSolver(print_level = 3, max_iter = 100, 
             inequality constraints with only upper bounds:        0
     
     
-    Number of Iterations....: 27
+    Number of Iterations....: 23
     
                                        (scaled)                 (unscaled)
-    Objective...............:   2.4900152024121175e+02    2.4900152024121175e+02
-    Dual infeasibility......:   8.5782119185751071e-09    8.5782119185751071e-09
+    Objective...............:   2.4900152024121172e+02    2.4900152024121172e+02
+    Dual infeasibility......:   8.6271114696501172e-08    8.6271114696501172e-08
     Constraint violation....:   0.0000000000000000e+00    0.0000000000000000e+00
-    Complementarity.........:   1.0000000000000003e-11    1.0000000000000003e-11
-    Overall NLP error.......:   8.5782119185751071e-09    8.5782119185751071e-09
+    Complementarity.........:   9.9999999999999962e-12    9.9999999999999962e-12
+    Overall NLP error.......:   8.6271114696501172e-08    8.6271114696501172e-08
     
     
-    Number of objective function evaluations             = 46
-    Number of objective gradient evaluations             = 28
+    Number of objective function evaluations             = 42
+    Number of objective gradient evaluations             = 24
     Number of equality constraint evaluations            = 0
     Number of inequality constraint evaluations          = 0
     Number of equality constraint Jacobian evaluations   = 0
     Number of inequality constraint Jacobian evaluations = 0
     Number of Lagrangian Hessian evaluations             = 0
-    Total CPU secs in IPOPT (w/o function evaluations)   =      0.134
-    Total CPU secs in NLP function evaluations           =      0.010
+    Total CPU secs in IPOPT (w/o function evaluations)   =      0.110
+    Total CPU secs in NLP function evaluations           =      0.008
     
     EXIT: Optimal Solution Found.
 
@@ -276,17 +278,17 @@ We can take a look at the MLE's
 @show Bernoulli_CS_model.ρ;
 ```
 
-    Bernoulli_CS_model.β = [-0.8073560280686407, 0.8553513879813671, -0.027821756706670475, 2.0702779503223048]
-    Bernoulli_CS_model.σ2 = [0.35242279695900536]
-    Bernoulli_CS_model.ρ = [0.8734724569746284]
+    Bernoulli_CS_model.β = [-0.8073560276241856, 0.855351387584879, -0.02782175669676549, 2.070277949288066]
+    Bernoulli_CS_model.σ2 = [0.3524227966855694]
+    Bernoulli_CS_model.ρ = [0.8734724574644481]
 
 
 Calculate the loglikelihood at the maximum
 
 
 ```julia
-@show loglikelihood!(Bernoulli_CS_model, true, true);
+@show loglikelihood!(Bernoulli_CS_model, false, false);
 ```
 
-    loglikelihood!(Bernoulli_CS_model, true, true) = -249.00152024121175
+    loglikelihood!(Bernoulli_CS_model, false, false) = -249.00152024121172
 

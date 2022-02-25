@@ -13,8 +13,6 @@ struct GLMCopulaARObs{T <: BlasReal, D, Link}
     ∇ARV::Matrix{T}
     ∇2ARV::Matrix{T}
     ∇β::Vector{T}   # gradient wrt β
-    ∇μβ::Matrix{T}
-    ∇σ2β::Matrix{T}
     ∇resβ::Matrix{T}# residual gradient matrix d/dβ_p res_ij (each observation has a gradient of residual is px1)
     ∇ρ::Vector{T}
     ∇σ2::Vector{T}
@@ -58,8 +56,6 @@ function GLMCopulaARObs(
     ∇ARV = Matrix{T}(undef, n, n)
     ∇2ARV = Matrix{T}(undef, n, n)
     ∇β  = Vector{T}(undef, p)
-    ∇μβ = Matrix{T}(undef, n, p)
-    ∇σ2β = Matrix{T}(undef, n, p)
     ∇resβ  = Matrix{T}(undef, n, p)
     ∇ρ  = Vector{T}(undef, 1)
     ∇σ2  = Vector{T}(undef, 1)
@@ -88,7 +84,7 @@ function GLMCopulaARObs(
     w1 = Vector{T}(undef, n)
     w2 = Vector{T}(undef, n)
     # constructor
-    GLMCopulaARObs{T, D, Link}(n, p, y, X, V, vec, ∇ARV, ∇2ARV, ∇β, ∇μβ, ∇σ2β, ∇resβ, ∇ρ, ∇σ2, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2, Hβρ,
+    GLMCopulaARObs{T, D, Link}(n, p, y, X, V, vec, ∇ARV, ∇2ARV, ∇β, ∇resβ, ∇ρ, ∇σ2, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2, Hβρ,
        res, t, q, xtx, storage_n, storage_p1, storage_np, storage_pp, added_term_numerator, added_term2,
         η, μ, varμ, dμ, d, link, wt, w1, w2)
 end
@@ -110,13 +106,11 @@ struct GLMCopulaARModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalu
     τ::Vector{T}    # inverse of linear regression variance parameter
     ρ::Vector{T}            # autocorrelation parameter
     σ2::Vector{T}           # autoregressive noise parameter
-    Σ::Vector{T}
-    θ::Vector{T}   # all parameters
+    θ::Vector{T}
     # working arrays
     ∇β::Vector{T}   # gradient of beta from all observations
     ∇ρ::Vector{T}           # gradient of rho from all observations
     ∇σ2::Vector{T}          # gradient of sigmasquared from all observations
-    ∇θ::Vector{T}
     XtX::Matrix{T}  # X'X = sum_i Xi'Xi
     Hβ::Matrix{T}    # Hessian from all observations
     Hρ::Matrix{T}    # Hessian from all observations
@@ -133,7 +127,7 @@ struct GLMCopulaARModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalu
     QF::Matrix{T}         # n-by-1 matrix with qik = res_i' Vi res_i
     storage_n::Vector{T}
     storage_m::Vector{T}
-    storage_Σ::Vector{T}
+    storage_θ::Vector{T}
     d::Vector{D}
     link::Vector{Link}
 end
@@ -144,12 +138,10 @@ function GLMCopulaARModel(gcs::Vector{GLMCopulaARObs{T, D, Link}}) where {T <: B
     τ   = [1.0]
     ρ = [1.0]
     σ2 = [1.0]
-    Σ   = Vector{T}(undef, 1)
-    θ = Vector{T}(undef, p + 2)
+    θ   = Vector{T}(undef, 1)
     ∇β  = Vector{T}(undef, p)
     ∇ρ  = Vector{T}(undef, 1)
     ∇σ2  = Vector{T}(undef, 1)
-    ∇θ = Vector{T}(undef, p + 2)
     XtX = zeros(T, p, p) # sum_i xi'xi
     Hβ  = Matrix{T}(undef, p, p)
     Hρ  = Matrix{T}(undef, 1, 1)
@@ -178,10 +170,10 @@ function GLMCopulaARModel(gcs::Vector{GLMCopulaARObs{T, D, Link}}) where {T <: B
     end
     storage_n = Vector{T}(undef, n)
     storage_m = Vector{T}(undef, 1)
-    storage_Σ = Vector{T}(undef, 1)
-    GLMCopulaARModel{T, D, Link}(gcs, Ytotal, ntotal, p, β, τ, ρ, σ2, Σ, θ,
-        ∇β, ∇ρ, ∇σ2, ∇θ, XtX, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2, Ainv, Aevec,  M, vcov, ψ, Hβρ,
-        TR, QF, storage_n, storage_m, storage_Σ, d, link)
+    storage_θ = Vector{T}(undef, 1)
+    GLMCopulaARModel{T, D, Link}(gcs, Ytotal, ntotal, p, β, τ, ρ, σ2, θ,
+        ∇β, ∇ρ, ∇σ2, XtX, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2, Ainv, Aevec,  M, vcov, ψ, Hβρ,
+        TR, QF, storage_n, storage_m, storage_θ, d, link)
 end
 
 # use ToeplitzMatrices

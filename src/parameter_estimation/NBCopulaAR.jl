@@ -119,15 +119,13 @@ struct NBCopulaARModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalua
     τ::Vector{T}    # inverse of linear regression variance parameter (IS THIS NEEDED??)
     ρ::Vector{T}            # autocorrelation parameter
     σ2::Vector{T}           # autoregressive noise parameter
-    Σ::Vector{T}
+    θ::Vector{T}
     r::Vector{T}   # r parameter for negative binomial
-    θ::Vector{T}   # all parameters
     # working arrays
     ∇β::Vector{T}   # gradient of beta from all observations
     ∇ρ::Vector{T}           # gradient of rho from all observations
     ∇σ2::Vector{T}          # gradient of sigmasquared from all observations
     ∇r::Vector{T}
-    ∇θ::Vector{T}
     XtX::Matrix{T}  # X'X = sum_i Xi'Xi
     Hβ::Matrix{T}    # Hessian from all observations
     Hρ::Matrix{T}    # Hessian from all observations
@@ -145,7 +143,7 @@ struct NBCopulaARModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalua
     QF::Matrix{T}         # n-by-1 matrix with qik = res_i' Vi res_i
     storage_n::Vector{T}
     storage_m::Vector{T}
-    storage_Σ::Vector{T}
+    storage_θ::Vector{T}
     d::Vector{D}
     link::Vector{Link}
 end
@@ -156,14 +154,12 @@ function NBCopulaARModel(gcs::Vector{NBCopulaARObs{T, D, Link}}) where {T <: Bla
     τ   = [one(T)]
     ρ = [one(T)]
     σ2 = [one(T)]
-    Σ = [one(T)]
+    θ = [one(T)]
     r = [one(T)]
-    θ = Vector{T}(undef, p + 2)
     ∇β  = Vector{T}(undef, p)
     ∇ρ  = Vector{T}(undef, 1)
     ∇σ2  = Vector{T}(undef, 1)
     ∇r  = Vector{T}(undef, 1)
-    ∇θ = Vector{T}(undef, p + 2)
     XtX = zeros(T, p, p) # sum_i xi'xi
     Hβ  = Matrix{T}(undef, p, p)
     Hρ  = Matrix{T}(undef, 1, 1)
@@ -193,10 +189,10 @@ function NBCopulaARModel(gcs::Vector{NBCopulaARObs{T, D, Link}}) where {T <: Bla
     end
     storage_n = Vector{T}(undef, n)
     storage_m = Vector{T}(undef, 1)
-    storage_Σ = Vector{T}(undef, 1)
-    NBCopulaARModel{T, D, Link}(gcs, Ytotal, ntotal, p, β, τ, ρ, σ2, Σ, r, θ,
-        ∇β, ∇ρ, ∇σ2, ∇r, ∇θ, XtX, Hβ, Hρ, Hσ2, Hr, Hρσ2, Hβσ2, Ainv, Aevec,  M, vcov, ψ,
-        TR, QF, storage_n, storage_m, storage_Σ, d, link)
+    storage_θ = Vector{T}(undef, 1)
+    NBCopulaARModel{T, D, Link}(gcs, Ytotal, ntotal, p, β, τ, ρ, σ2, θ, r,
+        ∇β, ∇ρ, ∇σ2, ∇r, XtX, Hβ, Hρ, Hσ2, Hr, Hρσ2, Hβσ2, Ainv, Aevec,  M, vcov, ψ,
+        TR, QF, storage_n, storage_m, storage_θ, d, link)
 end
 
 function loglikelihood!(

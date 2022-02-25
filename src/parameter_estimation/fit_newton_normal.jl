@@ -2,14 +2,14 @@
     fit_quasi!(gcm::GaussianCopulaVCModel, solver=Ipopt.IpoptSolver(print_level=5))
 
 Fit an `GaussianCopulaVCModel` object by MLE using a nonlinear programming solver. Start point
-should be provided in `gcm.β`, `gcm.Σ`, `gcm.τ` this is for Normal base.
+should be provided in `gcm.β`, `gcm.θ`, `gcm.τ` this is for Normal base.
 """
 function fit!(
         gcm::GaussianCopulaVCModel,
-        solver=Ipopt.IpoptSolver(print_level=5)
+        solver=Ipopt.IpoptSolver(print_level = 3, tol = 10^-6, max_iter = 100, limited_memory_max_history = 20)
     )
     initialize_model!(gcm)
-    npar = gcm.p + gcm.m + 1 
+    npar = gcm.p + gcm.m + 1
     optm = MathProgBase.NonlinearModel(solver)
     # set lower bounds and upper bounds of parameters
     lb   = fill(-Inf, npar)
@@ -48,7 +48,7 @@ function modelpar_to_optimpar!(
     # L
     offset = gcm.p + 1
     @inbounds for k in 1:gcm.m
-        par[offset] = gcm.Σ[k]
+        par[offset] = gcm.θ[k]
         offset += 1
     end
     par[offset] = gcm.τ[1]
@@ -68,17 +68,15 @@ function optimpar_to_modelpar!(
     copyto!(gcm.β, 1, par, 1, gcm.p)
     offset = gcm.p + 1
     @inbounds for k in 1:gcm.m
-        gcm.Σ[k] = par[offset]
+        gcm.θ[k] = par[offset]
         offset   += 1
     end
     gcm.τ[1] = par[offset]
-    # @show par
-    # copyto!(gcm.θ, par)
     gcm
 end
 
 function MathProgBase.initialize(
-    gcm::GaussianCopulaVCModel, 
+    gcm::GaussianCopulaVCModel,
     requested_features::Vector{Symbol})
     for feat in requested_features
         if !(feat in [:Grad, :Hess])
@@ -101,23 +99,18 @@ function MathProgBase.eval_grad_f(
     gcm  :: GaussianCopulaVCModel,
     grad :: Vector,
     par  :: Vector
-)
-optimpar_to_modelpar!(gcm, par)
-obj = loglikelihood!(gcm, true, false)
-# gradient wrt β
-copyto!(grad, gcm.∇β)
-# gradient wrt variance comps
-offset = gcm.p + 1
-@inbounds for k in 1:gcm.m
-    grad[offset] = gcm.∇Σ[k]
-    offset += 1
-end
-grad[offset] = gcm.∇τ[1]
-# update nuisance parameter
-# @show grad
-# copyto!(gcm.∇θ, grad)
-# @show gcm.∇θ
-# return objective
+    )
+    optimpar_to_modelpar!(gcm, par)
+    obj = loglikelihood!(gcm, true, false)
+    # gradient wrt β
+    copyto!(grad, gcm.∇β)
+    # gradient wrt variance comps
+    offset = gcm.p + 1
+    @inbounds for k in 1:gcm.m
+        grad[offset] = gcm.∇θ[k]
+        offset += 1
+    end
+    grad[offset] = gcm.∇τ[1]
 obj
 end
 
@@ -169,7 +162,7 @@ function MathProgBase.eval_hesslag(
     end
     # Haa block
     @inbounds for j in 1:gcm.m, i in 1:j
-        H[idx] = gcm.HΣ[i, j]
+        H[idx] = gcm.Hθ[i, j]
         idx   += 1
     end
     H[idx] = gcm.Hτ[1, 1]

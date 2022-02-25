@@ -71,10 +71,12 @@ gcm = GLMCopulaARModel(gcs);
 fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 50, accept_after_max_steps = 4, hessian_approximation = "limited-memory"))
 # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
 @show fittime
-@show gcm.θ
-@show gcm.∇θ
-
-# @test gcm.θ ≈ [0.24591703050925756, 1.4006002322220799, -0.5135116347672279, 0.4991177406151103, 0.5214932641901242]
+@show gcm.β
+@show gcm.σ2
+@show gcm.ρ
+@show gcm.∇β
+@show gcm.∇σ2
+@show gcm.∇ρ
 
 loglikelihood!(gcm, true, true)
 vcov!(gcm)

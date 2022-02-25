@@ -28,8 +28,6 @@ end
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Poisson.
 """
 function std_res_differential!(gc::Poisson_Bernoulli_VCObs{T, VD, VL}) where {T<: BlasReal, VD, VL}
-    fill!(gc.∇resβ, 0.0)
-    fill!(gc.∇μβ, 0.0)
     p1 = Integer(gc.p/2)
     @inbounds for i in 1:p1
             # first is poisson
@@ -63,10 +61,6 @@ compute the gradient of residual vector ∇resβ (standardized residual) with re
 function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}}) where {T<: BlasReal, D<:Bernoulli{T}, Link}
     @turbo for i in 1:gc.p
          for j in 1:gc.n
-            # gc.∇μβ[j, i] = gc.varμ[j] * gc.X[j, i]
-            # gc.∇σ2β[j, i] = gc.varμ[j] * (1 - 2 * gc.μ[j]) * gc.X[j, i]
-            # # gc.∇σ2β[j, :] .= (1 - (2 * gc.μ[j])) .* gc.∇μβ[j, :]
-            # # wrong gc.∇resβ[j, i] = -inv(sqrt(gc.varμ[j])) * gc.∇μβ[j, i] - (0.5 * inv(sqrt(gc.varμ[j])) * gc.res[j] * gc.∇σ2β[j, i])
             gc.∇resβ[j, i] = -sqrt(gc.varμ[j]) * gc.X[j, i] - (0.5 * gc.res[j] * (1 - (2 * gc.μ[j])) * gc.X[j, i])
         end
     end
@@ -94,39 +88,39 @@ function glm_hessian(gc::Union{GLMCopulaVCObs, NBCopulaVCObs, GLMCopulaARObs, NB
 end
 
 """
-    update_∇Σ!(gcm)
+    update_∇θ!(gcm)
 
-Update Σ gradient for Newton's Algorithm, given β.
+Update θ gradient for Newton's Algorithm, given β.
 """
-function update_∇Σ!(
+function update_∇θ!(
     gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}}) where {T <: BlasReal, D, Link}
     @inbounds for i in eachindex(gcm.data)
         standardize_res!(gcm.data[i])            # standardize the residuals GLM variance(μ)
         GLMCopula.update_quadform!(gcm.data[i]) # with standardized residuals
         gcm.QF[i, :] .= gcm.data[i].q
     end
-    BLAS.gemv!('N', T(1), gcm.QF,  gcm.Σ, T(0), gcm.storage_n)
+    BLAS.gemv!('N', T(1), gcm.QF,  gcm.θ, T(0), gcm.storage_n)
     gcm.storage_n .= inv.(1 .+ gcm.storage_n)
-    BLAS.gemv!('N', T(1), gcm.TR,  gcm.Σ, T(0), gcm.storage_n2)
+    BLAS.gemv!('N', T(1), gcm.TR,  gcm.θ, T(0), gcm.storage_n2)
     gcm.storage_n2 .= inv.(1 .+ gcm.storage_n2)
-    BLAS.gemv!('T', T(1), gcm.QF, gcm.storage_n, T(0), gcm.∇Σ)
-    BLAS.gemv!('T', -T(1), gcm.TR, gcm.storage_n2, T(1), gcm.∇Σ)
+    BLAS.gemv!('T', T(1), gcm.QF, gcm.storage_n, T(0), gcm.∇θ)
+    BLAS.gemv!('T', -T(1), gcm.TR, gcm.storage_n2, T(1), gcm.∇θ)
 end
 
 """
-    update_HΣ!(gcm)
+    update_Hθ!(gcm)
 
-Update Σ Hessian for Newton's Algorithm, given β.
+Update θ Hessian for Newton's Algorithm, given β.
 """
-function update_HΣ!(
+function update_Hθ!(
     gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}}) where {T <: BlasReal, D, Link}
-    fill!(gcm.HΣ, 0.0)
+    fill!(gcm.Hθ, 0.0)
     @inbounds for j in 1:gcm.m
         @simd for i in 1:gcm.n
             gcm.hess1[j, i] = gcm.QF[i, j] * gcm.storage_n[i]
             gcm.hess2[j, i] = gcm.TR[i, j] * gcm.storage_n2[i]
         end
     end
-    BLAS.gemm!('N', 'T', -T(1), gcm.hess1, gcm.hess1, T(0), gcm.HΣ)
-    BLAS.gemm!('N', 'T', T(1), gcm.hess2, gcm.hess2, T(1), gcm.HΣ)
+    BLAS.gemm!('N', 'T', -T(1), gcm.hess1, gcm.hess1, T(0), gcm.Hθ)
+    BLAS.gemm!('N', 'T', T(1), gcm.hess2, gcm.hess2, T(1), gcm.Hθ)
 end

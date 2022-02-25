@@ -1,4 +1,11 @@
 export CS_model
+
+"""
+    CS_model(df, y, grouping, covariates, d, link)
+Form the compound symmetric (CS) model with named dataframe (df), outcome variable name of interest(y) as a symbol,
+grouping variable name of interest as a symbol (grouping), covariate names of interest as a vector of symbols (covariates),
+base distribution (d), and link function (link).
+"""
 function CS_model(
     df::DataFrame,
     y::Symbol,
