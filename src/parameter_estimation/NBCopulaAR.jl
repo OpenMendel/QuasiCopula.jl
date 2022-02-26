@@ -265,7 +265,7 @@ function loglikelihood!(
         # gradient with respect to r
         gc.∇r .= nb_first_derivative(gc, ρ, σ2, r)
 
-      if needhess
+        if needhess
             # gc.∇2ARV .= get_∇2ARV(n, ρ, σ2, gc.∇2ARV)
             get_∇2V!(ρ, gc)
             mul!(gc.storage_n, gc.∇2ARV, gc.res) # storage_n = ∇ARV * res
@@ -296,10 +296,10 @@ function loglikelihood!(
             gc.Hβ .+= GLMCopula.glm_hessian(gc)
             # hessian for r
             gc.Hr .= nb_second_derivative(gc, ρ, σ2, r)
-      end
-      gc.∇β .= gc.∇β .* inv1pq
-      gc.res .= gc.y .- gc.μ
-      gc.∇β .+= GLMCopula.glm_gradient(gc)
+        end
+        gc.∇β .= gc.∇β .* inv1pq
+        gc.res .= gc.y .- gc.μ
+        gc.∇β .+= GLMCopula.glm_gradient(gc)
     end
     logl
 end
@@ -356,19 +356,42 @@ end
 function nb_first_derivative(gc::Union{NBCopulaARObs, NBCopulaCSObs}, ρ::T, σ2::T, r::Number) where T <: BlasReal
     s = zero(T)
     # 2nd term of logl
-    for j in eachindex(gc.y)
+    @inbounds for j in eachindex(gc.y)
         yi, μi = gc.y[j], gc.μ[j]
         s += -(yi+r)/(μi+r) - log(μi+r) + 1 + log(r) + digamma(r+yi) - digamma(r)
     end
     # 3rd term of logl
     resid = gc.res # res = inv(D)(y - μ)
-    get_V!(ρ, gc)
-    Γ = σ2 * gc.V
+    get_V!(ρ * σ2, gc)
+    Γ = gc.V
     η = gc.η
-    D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
-    dD = Diagonal([-exp(2η[i]) / (2r^1.5 * sqrt(exp(η[i])*(exp(η[i])+r))) for i in 1:length(η)])
-    dresid = -inv(D)*dD*resid
-    s += resid'*Γ*dresid / (1 + 0.5resid'*Γ*resid)
+    for j in 1:length(η)
+        gc.storage_n[j] = inv(sqrt(exp(η[j])*(exp(η[j])+r) / r)) # storage_n = inv(Di) = 1 / sqrt(var(yi))
+    end
+    for j in 1:length(η)
+        # storage_n2 = -inv(D) * d2D
+        gc.storage_n2[j] = -gc.storage_n[j] *
+            ((exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) +
+            (3exp(2η[j]) / (4r^(2.5)*sqrt(exp(η[j])*(exp(η[j])+r)))))
+    end
+    for j in 1:length(η)
+        # storage_n = inv(D) * dD
+        gc.storage_n[j] *= -exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r)))
+    end
+    for j in 1:length(η)
+        # storage_n2 = 2inv(D)*dD*inv(D)*dD -inv(D)*d2D
+        gc.storage_n2[j] += 2 * abs2(gc.storage_n[j])
+    end
+    gc.storage_n .*= -1.0 .* resid # storage_n = dr(β) = derivative of residuals
+    gc.storage_n2 .*= resid # storage_n2 = dr²(β) = 2nd derivative of residuals
+    mul!(gc.storage_n3, Γ, resid, one(T), zero(T)) # storage_n3 = Γ * resid
+    denom = 1 + 0.5 * dot(resid, gc.storage_n3)
+    mul!(gc.storage_n3, Γ, gc.storage_n, one(T), zero(T)) # storage_n3 = Γ * dresid
+    term1 = (dot(resid, gc.storage_n3) / denom)^2 # (resid'*Γ*dresid / denom)^2
+    term2 = dot(gc.storage_n, gc.storage_n3) / denom # term2 = dresid'*Γ*dresid / denom
+    mul!(gc.storage_n3, Γ, gc.storage_n2, one(T), zero(T)) # storage_n3 = Γ * d2resid
+    term3 = dot(resid, gc.storage_n3) / denom # term3 = resid'*Γ*d2resid / denom
+    s += -term1 + term2 + term3
     return s
 end
 
@@ -388,6 +411,7 @@ function nb_second_derivative(gc::Union{NBCopulaARObs, NBCopulaCSObs}, ρ::T, σ
     # Γ = σ2 * AR1(ρ)
     Γ = σ2 * gc.V
     η = gc.η
+    # todo: get rid of allocations. See update_sigma_and_residual.jl for example
     D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
     dD = Diagonal([-exp(2η[i]) / (2r^1.5 * sqrt(exp(η[i])*(exp(η[i])+r))) for i in 1:length(η)])
     d2D = Diagonal([(exp(3η[i]) / (4r^1.5 * (exp(η[i])*(exp(η[i])+r))^(1.5))) +
