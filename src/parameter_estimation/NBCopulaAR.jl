@@ -6,11 +6,11 @@ mutable struct NBCopulaARObs{T <: BlasReal, D, Link} # d changes, so must be mut
     p::Int
     y::Vector{T}
     X::Matrix{T}
-    V::Matrix{T}
+    V::SymmetricToeplitz{T}
     vec::Vector{T}
     # working arrays
-    ∇ARV::Matrix{T}
-    ∇2ARV::Matrix{T}
+    ∇ARV::SymmetricToeplitz{T}
+    ∇2ARV::SymmetricToeplitz{T}
     ∇β::Vector{T}   # gradient wrt β
     ∇μβ::Matrix{T}
     ∇σ2β::Matrix{T}
@@ -56,10 +56,10 @@ function NBCopulaARObs(
     n, p = size(X, 1), size(X, 2)
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
-    V = ones(T, n, n)
+    V = SymmetricToeplitz(ones(T, n))
     vec = Vector{T}(undef, n)
-    ∇ARV = Matrix{T}(undef, n, n)
-    ∇2ARV = Matrix{T}(undef, n, n)
+    ∇ARV = SymmetricToeplitz(ones(T, n))
+    ∇2ARV = SymmetricToeplitz(ones(T, n))
     ∇β  = Vector{T}(undef, p)
     ∇μβ = Matrix{T}(undef, n, p)
     ∇σ2β = Matrix{T}(undef, n, p)
@@ -220,7 +220,6 @@ function loglikelihood!(
     std_res_differential!(gc) # this will compute ∇resβ
 
     # form V
-    # gc.V .= get_AR_cov(n, ρ, σ2, gc.V)
     get_V!(ρ, gc)
 
     #evaluate copula loglikelihood

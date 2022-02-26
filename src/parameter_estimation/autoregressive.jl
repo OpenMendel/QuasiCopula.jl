@@ -7,11 +7,11 @@ struct GLMCopulaARObs{T <: BlasReal, D, Link}
     p::Int
     y::Vector{T}
     X::Matrix{T}
-    V::Matrix{T}
+    V::SymmetricToeplitz{T}
     vec::Vector{T}
     # working arrays
-    ∇ARV::Matrix{T}
-    ∇2ARV::Matrix{T}
+    ∇ARV::SymmetricToeplitz{T}
+    ∇2ARV::SymmetricToeplitz{T}
     ∇β::Vector{T}   # gradient wrt β
     ∇resβ::Matrix{T}# residual gradient matrix d/dβ_p res_ij (each observation has a gradient of residual is px1)
     ∇ρ::Vector{T}
@@ -51,10 +51,10 @@ function GLMCopulaARObs(
     n, p = size(X, 1), size(X, 2)
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
-    V = ones(T, n, n)
+    V = SymmetricToeplitz(ones(T, n))
     vec = Vector{T}(undef, n)
-    ∇ARV = Matrix{T}(undef, n, n)
-    ∇2ARV = Matrix{T}(undef, n, n)
+    ∇ARV = SymmetricToeplitz(ones(T, n))
+    ∇2ARV = SymmetricToeplitz(ones(T, n))
     ∇β  = Vector{T}(undef, p)
     ∇resβ  = Matrix{T}(undef, n, p)
     ∇ρ  = Vector{T}(undef, 1)
@@ -179,20 +179,21 @@ end
 # use ToeplitzMatrices
 """
     get_V!(ρ, gc)
-Forms the AR(1) covariance structure given ρ (correlation parameter), gc (single cluster observation) object.
+
+Forms the AR(1) covariance structure given ρ (correlation parameter), gc
+(single cluster observation) object.
 """
 function get_V!(ρ, gc::Union{GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, GaussianCopulaARObs{T}}) where {T, D, Link}
-    gc.vec[1] = 1.0
+    gc.vec[1] = one(T)
     @inbounds for i in 2:gc.n
         gc.vec[i] = gc.vec[i-1] * ρ
     end
-    # gc.vec .= [ρ^i for i in 0:gc.n-1]
-    gc.V .= ToeplitzMatrices.SymmetricToeplitz(gc.vec)
-    nothing
+    gc.V.vc .= gc.vec
 end
 
 """
     get_∇V!(ρ, gc)
+
 Forms the first derivative of AR(1) covariance structure wrt to ρ, given ρ (correlation parameter)
 """
 function get_∇V!(ρ, gc::Union{GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, GaussianCopulaARObs{T}}) where {T, D, Link}
@@ -201,7 +202,7 @@ function get_∇V!(ρ, gc::Union{GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D,
     @inbounds for i in 3:gc.n
         gc.vec[i] = (i-1) * inv(i-2) * gc.vec[i-1] * ρ
     end
-    gc.∇ARV .= ToeplitzMatrices.SymmetricToeplitz(gc.vec)
+    gc.∇ARV.vc .= gc.vec
     nothing
 end
 
@@ -247,11 +248,10 @@ function loglikelihood!(
     std_res_differential!(gc) # this will compute ∇resβ
 
     # form V
-    # gc.V .= get_AR_cov(n, ρ, σ2, gc.V)
     get_V!(ρ, gc)
 
-    #evaluate copula loglikelihood
-    mul!(gc.storage_n, gc.V, gc.res) # storage_n = V[k] * res
+    # evaluate copula loglikelihood
+    mul!(gc.storage_n, gc.V, gc.res, one(T), zero(T)) # storage_n = V[k] * res
 
     if needgrad
         BLAS.gemv!('T', σ2, gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
@@ -274,7 +274,7 @@ function loglikelihood!(
     if needgrad
         inv1pq = inv(c2)
         # gradient with respect to rho
-        mul!(gc.storage_n, gc.∇ARV, gc.res) # storage_n = ∇ARV * res
+        mul!(gc.storage_n, gc.∇ARV, gc.res, one(T), zero(T)) # storage_n = ∇ARV * res
         q2 = dot(gc.res, gc.storage_n) #
         # gc.∇ρ .= inv(c2) * 0.5 * σ2 * transpose(gc.res) * gc.∇ARV * gc.res
         gc.∇ρ .= inv(c2) * 0.5 * σ2 * q2
