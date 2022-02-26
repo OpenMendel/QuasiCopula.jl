@@ -209,7 +209,6 @@ function loglikelihood!(
     needgrad = needgrad || needhess
     if needgrad
         fill!(gc.∇β, 0)
-        # gc.∇ARV .= get_∇ARV(n, ρ, σ2, gc.∇ARV)
         get_∇V!(ρ, gc)
     end
     needhess && fill!(gc.Hβ, 0)
@@ -311,7 +310,6 @@ function loglikelihood!(
     needgrad::Bool = false,
     needhess::Bool = false
     ) where {T <: BlasReal, D, Link}
-    logl = zero(T)
     if needgrad
         fill!(gcm.∇β, 0.0)
         fill!(gcm.∇ρ, 0.0)
@@ -326,8 +324,14 @@ function loglikelihood!(
         fill!(gcm.Hβσ2, 0.0)
         fill!(gcm.Hr, 0.0)
     end
+    # sum individual loglikelihoods
+    logl = zeros(Threads.nthreads())
+    Threads.@threads for i in eachindex(gcm.data)
+        @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
+            gcm.ρ[1], gcm.σ2[1], gcm.r[1], needgrad, needhess)
+    end
+    # update grad/hess
     @inbounds for i in eachindex(gcm.data)
-        logl += loglikelihood!(gcm.data[i], gcm.β, gcm.ρ[1], gcm.σ2[1], gcm.r[1], needgrad, needhess)
         if needgrad
             gcm.∇β .+= gcm.data[i].∇β
             gcm.∇ρ .+= gcm.data[i].∇ρ
@@ -343,7 +347,7 @@ function loglikelihood!(
             gcm.Hr .+= gcm.data[i].Hr
         end
     end
-    logl
+    return sum(logl)
 end
 
 """
