@@ -287,7 +287,7 @@ function loglikelihood!(
       if needhess
             # gc.∇2ARV .= get_∇2ARV(n, ρ, σ2, gc.∇2ARV)
             get_∇2V!(ρ, gc)
-            mul!(gc.storage_n, gc.∇2ARV, gc.res) # storage_n = ∇ARV * res
+            mul!(gc.storage_n, gc.∇2ARV, gc.res, one(T), zero(T)) # storage_n = ∇ARV * res
             q3 = dot(gc.res, gc.storage_n) #
             # hessian for rho
             gc.Hρ .= 0.5 * σ2 * (inv(c2) * q3 - inv(c2)^2 * 0.5 * σ2 * q2^2)
@@ -326,7 +326,6 @@ function loglikelihood!(
     needgrad::Bool = false,
     needhess::Bool = false
     ) where {T <: BlasReal, D, Link}
-    logl = zero(T)
     if needgrad
         fill!(gcm.∇β, 0.0)
         fill!(gcm.∇ρ, 0.0)
@@ -341,8 +340,14 @@ function loglikelihood!(
         # @show gcm.Hβσ2
         fill!(gcm.Hβρ, 0)
     end
+    # sum individual loglikelihoods
+    logl = zeros(Threads.nthreads())
+    Threads.@threads for i in eachindex(gcm.data)
+        @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
+            gcm.ρ[1], gcm.σ2[1], needgrad, needhess)
+    end
+    # update grad/hess
     @inbounds for i in eachindex(gcm.data)
-        logl += loglikelihood!(gcm.data[i], gcm.β, gcm.ρ[1], gcm.σ2[1], needgrad, needhess)
         if needgrad
             gcm.∇β .+= gcm.data[i].∇β
             gcm.∇ρ .+= gcm.data[i].∇ρ
@@ -357,5 +362,5 @@ function loglikelihood!(
             gcm.Hβρ .+= gcm.data[i].Hβρ
         end
     end
-    logl
+    return sum(logl)
 end

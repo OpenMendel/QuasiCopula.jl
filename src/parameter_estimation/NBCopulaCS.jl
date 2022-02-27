@@ -6,10 +6,10 @@ mutable struct NBCopulaCSObs{T <: BlasReal, D, Link} # d changes, so must be mut
     p::Int
     y::Vector{T}
     X::Matrix{T}
-    V::Matrix{T}
+    V::SymmetricToeplitz{T}
     vec::Vector{T}
     # working arrays
-    ∇CSV::Matrix{T}
+    ∇CSV::SymmetricToeplitz{T}
     ∇β::Vector{T}   # gradient wrt β
     ∇resβ::Matrix{T}# residual gradient matrix d/dβ_p res_ij (each observation has a gradient of residual is px1)
     ∇ρ::Vector{T}
@@ -53,9 +53,9 @@ function NBCopulaCSObs(
     n, p = size(X, 1), size(X, 2)
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
-    V = ones(T, n, n)
+    V = SymmetricToeplitz(ones(T, n))
     vec = Vector{T}(undef, n)
-    ∇CSV = Matrix{T}(undef, n, n)
+    ∇CSV = SymmetricToeplitz(ones(T, n))
     ∇β  = Vector{T}(undef, p)
     ∇resβ  = Matrix{T}(undef, n, p)
     ∇ρ  = Vector{T}(undef, 1)
@@ -216,7 +216,7 @@ function loglikelihood!(
     get_V!(ρ, gc)
 
     #evaluate copula loglikelihood
-    mul!(gc.storage_n, gc.V, gc.res) # storage_n = V[k] * res
+    mul!(gc.storage_n, gc.V, gc.res, one(T), zero(T)) # storage_n = V[k] * res
 
     if needgrad
         BLAS.gemv!('T', σ2, gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
@@ -239,7 +239,7 @@ function loglikelihood!(
     if needgrad
         inv1pq = inv(c2)
         # gradient with respect to rho
-        mul!(gc.storage_n, gc.∇CSV, gc.res) # storage_n = ∇ARV * res
+        mul!(gc.storage_n, gc.∇CSV, gc.res, one(T), zero(T)) # storage_n = ∇ARV * res
         q2 = dot(gc.res, gc.storage_n) #
 
         gc.∇ρ .= inv(c2) * 0.5 * σ2 * q2
@@ -279,7 +279,7 @@ function loglikelihood!(
             fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
             fill!(gc.added_term2, 0.0) # fill hessian with 0
             # gc.V .= get_AR_cov(n, ρ, σ2, gc.V)
-            mul!(gc.added_term_numerator, gc.V, gc.∇resβ) # storage_n = V[k] * res
+            mul!(gc.added_term_numerator, gc.V, gc.∇resβ, one(T), zero(T)) # storage_n = V[k] * res
             BLAS.gemm!('T', 'N', σ2, gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2)
             gc.added_term2 .*= inv1pq
             gc.Hβ .+= gc.added_term2
@@ -294,13 +294,11 @@ function loglikelihood!(
     logl
 end
 
-
 function loglikelihood!(
     gcm::NBCopulaCSModel{T, D, Link},
     needgrad::Bool = false,
     needhess::Bool = false
     ) where {T <: BlasReal, D, Link}
-    logl = zero(T)
     if needgrad
         fill!(gcm.∇β, 0.0)
         fill!(gcm.∇ρ, 0.0)
@@ -316,8 +314,12 @@ function loglikelihood!(
         fill!(gcm.Hr, 0.0)
         # fill!(gcm.Hβρ, 0.0)
     end
+    logl = zeros(Threads.nthreads())
+    Threads.@threads for i in eachindex(gcm.data)
+        @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i],
+            gcm.β, gcm.ρ[1], gcm.σ2[1], gcm.r[1], needgrad, needhess)
+    end
     @inbounds for i in eachindex(gcm.data)
-        logl += loglikelihood!(gcm.data[i], gcm.β, gcm.ρ[1], gcm.σ2[1], gcm.r[1], needgrad, needhess)
         if needgrad
             gcm.∇β .+= gcm.data[i].∇β
             gcm.∇ρ .+= gcm.data[i].∇ρ
@@ -334,5 +336,5 @@ function loglikelihood!(
             gcm.Hr .+= gcm.data[i].Hr
         end
     end
-    logl
+    return sum(logl)
 end

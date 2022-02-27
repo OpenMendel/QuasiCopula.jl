@@ -8,10 +8,10 @@ struct GLMCopulaCSObs{T <: BlasReal, D, Link} # <: QCobs
     p::Int
     y::Vector{T}
     X::Matrix{T}
-    V::Matrix{T}
+    V::SymmetricToeplitz{T}
     vec::Vector{T}
     # working arrays
-    ∇CSV::Matrix{T}
+    ∇CSV::SymmetricToeplitz{T}
     ∇β::Vector{T}   # gradient wrt β
     ∇resβ::Matrix{T}# residual gradient matrix d/dβ_p res_ij (each observation has a gradient of residual is px1)
     ∇ρ::Vector{T}
@@ -51,9 +51,9 @@ function GLMCopulaCSObs(
     n, p = size(X, 1), size(X, 2)
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
-    V = ones(T, n, n)
+    V = SymmetricToeplitz(ones(T, n))
     vec = Vector{T}(undef, n)
-    ∇CSV = Matrix{T}(undef, n, n)
+    ∇CSV = SymmetricToeplitz(ones(T, n))
     ∇β  = Vector{T}(undef, p)
     ∇resβ  = Matrix{T}(undef, n, p)
     ∇ρ  = Vector{T}(undef, 1)
@@ -185,8 +185,7 @@ function get_V!(ρ, gc::Union{GLMCopulaCSObs{T, D, Link}, NBCopulaCSObs{T, D, Li
     @inbounds for i in 2:gc.n
         gc.vec[i] = ρ
     end
-    gc.V .= ToeplitzMatrices.SymmetricToeplitz(gc.vec)
-    nothing
+    gc.V.vc .= gc.vec
 end
 
 """
@@ -198,8 +197,7 @@ function get_∇V!(gc::Union{GLMCopulaCSObs{T, D, Link}, NBCopulaCSObs{T, D, Lin
     @inbounds for i in 2:gc.n
         gc.vec[i] = 1.0
     end
-    gc.∇CSV .= ToeplitzMatrices.SymmetricToeplitz(gc.vec)
-    nothing
+    gc.∇CSV.vc .= gc.vec
 end
 
 function loglikelihood!(
@@ -224,10 +222,11 @@ function loglikelihood!(
     fill!(gc.∇resβ, 0.0) # fill gradient of residual vector with 0
     std_res_differential!(gc) # this will compute ∇resβ
 
+    # form V
     get_V!(ρ, gc)
 
     #evaluate copula loglikelihood
-    mul!(gc.storage_n, gc.V, gc.res) # storage_n = V[k] * res
+    mul!(gc.storage_n, gc.V, gc.res, one(T), zero(T)) # storage_n = V[k] * res
     if needgrad
         BLAS.gemv!('T', σ2, gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
     end
@@ -251,7 +250,7 @@ function loglikelihood!(
     if needgrad
         inv1pq = inv(c2)
         # gradient with respect to rho
-        mul!(gc.storage_n, gc.∇CSV, gc.res) # storage_n = ∇ARV * res
+        mul!(gc.storage_n, gc.∇CSV, gc.res, one(T), zero(T)) # storage_n = ∇ARV * res
         q2 = dot(gc.res, gc.storage_n) #
         # gc.∇ρ .= inv(c2) * 0.5 * σ2 * transpose(gc.res) * gc.∇ARV * gc.res
         gc.∇ρ .= inv1pq * 0.5 * σ2 * q2
@@ -286,7 +285,7 @@ function loglikelihood!(
             fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
             fill!(gc.added_term2, 0.0) # fill hessian with 0
             # gc.V .= get_AR_cov(n, ρ, σ2, gc.V)
-            mul!(gc.added_term_numerator, gc.V, gc.∇resβ) # storage_n = V[k] * res
+            mul!(gc.added_term_numerator, gc.V, gc.∇resβ, one(T), zero(T)) # storage_n = V[k] * res
             BLAS.gemm!('T', 'N', σ2, gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2)
             gc.added_term2 .*= inv1pq
             gc.Hβ .+= gc.added_term2
