@@ -279,7 +279,7 @@ function loglikelihood!(
             fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
             fill!(gc.added_term2, 0.0) # fill hessian with 0
             # gc.V .= get_AR_cov(n, ρ, σ2, gc.V)
-            mul!(gc.added_term_numerator, gc.V, gc.∇resβ, one(T), zero(T)) # storage_n = V[k] * res
+            mul!(gc.added_term_numerator, Matrix(gc.V), gc.∇resβ) # storage_n = V[k] * res (note: we cannot use SymmetricToeplitz for matrix-matrix multiplication)
             BLAS.gemm!('T', 'N', σ2, gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2)
             gc.added_term2 .*= inv1pq
             gc.Hβ .+= gc.added_term2

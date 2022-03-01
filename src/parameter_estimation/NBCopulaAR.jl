@@ -222,7 +222,7 @@ function loglikelihood!(
     get_V!(ρ, gc)
 
     #evaluate copula loglikelihood
-    mul!(gc.storage_n, gc.V, gc.res) # storage_n = V[k] * res
+    mul!(gc.storage_n, gc.V, gc.res, one(T), zero(T)) # storage_n = V[k] * res
 
     if needgrad
         BLAS.gemv!('T', σ2, gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
@@ -251,7 +251,7 @@ function loglikelihood!(
     if needgrad
         inv1pq = inv(c2)
         # gradient with respect to rho
-        mul!(gc.storage_n, gc.∇ARV, gc.res) # storage_n = ∇ARV * res
+        mul!(gc.storage_n, gc.∇ARV, gc.res, one(T), zero(T)) # storage_n = ∇ARV * res
         q2 = dot(gc.res, gc.storage_n) #
         # gc.∇ρ .= inv(c2) * 0.5 * σ2 * transpose(gc.res) * gc.∇ARV * gc.res
         gc.∇ρ .= inv(c2) * 0.5 * σ2 * q2
@@ -268,7 +268,7 @@ function loglikelihood!(
         if needhess
             # gc.∇2ARV .= get_∇2ARV(n, ρ, σ2, gc.∇2ARV)
             get_∇2V!(ρ, gc)
-            mul!(gc.storage_n, gc.∇2ARV, gc.res) # storage_n = ∇ARV * res
+            mul!(gc.storage_n, gc.∇2ARV, gc.res, one(T), zero(T)) # storage_n = ∇ARV * res
             q3 = dot(gc.res, gc.storage_n) #
             # hessian for rho
             gc.Hρ .= 0.5 * σ2 * (inv(c2) * q3 - inv(c2)^2 * 0.5 * σ2 * q2^2)
@@ -289,7 +289,7 @@ function loglikelihood!(
             fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
             fill!(gc.added_term2, 0.0) # fill hessian with 0
             # gc.V .= get_AR_cov(n, ρ, σ2, gc.V)
-            mul!(gc.added_term_numerator, gc.V, gc.∇resβ) # storage_n = V[k] * res
+            mul!(gc.added_term_numerator, Matrix(gc.V), gc.∇resβ) # storage_n = V[k] * res (note: we cannot use SymmetricToeplitz for matrix-matrix multiplication)
             BLAS.gemm!('T', 'N', σ2, gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2)
             gc.added_term2 .*= inv1pq
             gc.Hβ .+= gc.added_term2
