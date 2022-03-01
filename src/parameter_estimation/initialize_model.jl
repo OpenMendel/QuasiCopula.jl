@@ -288,7 +288,7 @@ function initialize_model!(
     nothing
 end
 
-function initialize_model!(gcm::Union{NBCopulaARModel{T, D, Link}, NBCopulaCSModel{T, D, Link}}) where {T <: BlasReal, D, Link}
+function initialize_model!(gcm::NBCopulaCSModel{T, D, Link}) where {T <: BlasReal, D, Link}
 
   # initial guess for r = 1
   fill!(gcm.r, 1)
@@ -301,6 +301,40 @@ function initialize_model!(gcm::Union{NBCopulaARModel{T, D, Link}, NBCopulaCSMod
       gcsPoisson[i] = GLMCopulaCSObs(gc.y, gc.X, Poisson(), LogLink())
   end
   gcmPoisson = GLMCopulaCSModel(gcsPoisson)
+  initialize_model!(gcmPoisson)
+  copyto!(gcm.β, gcmPoisson.β)
+  copyto!(gcm.σ2, gcmPoisson.σ2)
+
+      # update r using maximum likelihood with Newton's method
+      for gc in gcm.data
+          fill!(gcm.τ, 1.0)
+          fill!(gc.∇β, 0)
+          fill!(gc.Hβ, 0)
+          fill!(gc.varμ, 1)
+          fill!(gc.res, 0)
+      end
+      println("initializing r using Newton update")
+      GLMCopula.update_r!(gcm)
+
+  println("initializing variance parameters in CS model using mom")
+  # update_sigma_rho!(gcm)
+  copyto!(gcm.ρ, 0.2)
+  nothing
+end
+
+function initialize_model!(gcm::NBCopulaARModel{T, D, Link}) where {T <: BlasReal, D, Link}
+
+  # initial guess for r = 1
+  fill!(gcm.r, 1)
+
+  # fit a Poisson regression model to estimate μ, η, β, τ
+  println("Initializing NegBin r to Poisson regression values")
+  nsample = length(gcm.data)
+  gcsPoisson = Vector{GLMCopulaARObs{T, Poisson{T}, LogLink}}(undef, nsample)
+  for (i, gc) in enumerate(gcm.data)
+      gcsPoisson[i] = GLMCopulaARObs(gc.y, gc.X, Poisson(), LogLink())
+  end
+  gcmPoisson = GLMCopulaARModel(gcsPoisson)
   initialize_model!(gcmPoisson)
   copyto!(gcm.β, gcmPoisson.β)
   copyto!(gcm.σ2, gcmPoisson.σ2)
