@@ -3,6 +3,9 @@ using Random, Roots, SpecialFunctions
 using DataFrames, DelimitedFiles, Statistics
 import StatsBase: sem
 
+BLAS.set_num_threads(1)
+Threads.nthreads()
+
 p = 3    # number of fixed effects, including intercept
 m = 1    # number of variance components
 # true parameter values
@@ -58,8 +61,12 @@ for i in 1:samplesize
 end
 
 gcm = Poisson_Bernoulli_VCModel(gcs);
+# precompile
+println("precompiling Bivariate Mixed VCM fit")
+gcm2 = deepcopy(gcm);
+GLMCopula.fit!(gcm2, IpoptSolver(print_level = 0, max_iter = 20));
 
-fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, derivative_test = "first-order", limited_memory_max_history = 16, hessian_approximation = "limited-memory"))
+fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 16, hessian_approximation = "limited-memory"))
 @show fittime
 @show gcm.β
 @show gcm.θ

@@ -186,7 +186,7 @@ Forms the AR(1) covariance structure given ρ (correlation parameter), gc
 function get_V!(ρ, gc::Union{GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, GaussianCopulaARObs{T}}) where {T, D, Link}
     gc.vec[1] = one(T)
     @inbounds for i in 2:gc.n
-        gc.vec[i] = gc.vec[i-1] * ρ
+        gc.vec[i] = gc.vec[i - 1] * ρ
     end
     gc.V.vc .= gc.vec
 end
@@ -197,10 +197,14 @@ end
 Forms the first derivative of AR(1) covariance structure wrt to ρ, given ρ (correlation parameter)
 """
 function get_∇V!(ρ, gc::Union{GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, GaussianCopulaARObs{T}}) where {T, D, Link}
-    gc.vec[1] = 0.0
-    gc.vec[2] = 1.0
-    @inbounds for i in 3:gc.n
-        gc.vec[i] = (i-1) * inv(i-2) * gc.vec[i-1] * ρ
+    if gc.n == 1
+        fill!(gc.vec, zero(T))
+    elseif gc.n >= 2
+        gc.vec[1] = zero(T)
+        gc.vec[2] = one(T)
+        @inbounds for i in 3:gc.n
+            gc.vec[i] = (i - 1) * inv(i - 2) * gc.vec[i - 1] * ρ
+        end
     end
     gc.∇ARV.vc .= gc.vec
     nothing
@@ -212,13 +216,13 @@ Forms the second derivative of AR(1) covariance structure wrt to ρ, given ρ (c
 """
 function get_∇2V!(ρ, gc::Union{GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, GaussianCopulaARObs{T}}) where {T, D, Link}
     if gc.n <= 2
-        fill!(gc.∇2ARV.vc, 0.0)
+        fill!(gc.∇2ARV.vc, zero(T))
     else
-        gc.vec[1] = 0.0
-        gc.vec[2] = 0.0
-        gc.vec[3] = 2.0
+        gc.vec[1] = zero(T)
+        gc.vec[2] = zero(T)
+        gc.vec[3] = 2 * one(T)
         @inbounds for i in 4:gc.n
-            gc.vec[i] = (i - 1) * inv(i - 3) * gc.vec[i-1] * ρ
+            gc.vec[i] = (i - 1) * inv(i - 3) * gc.vec[i - 1] * ρ
         end
         gc.∇2ARV.vc .= gc.vec
     end

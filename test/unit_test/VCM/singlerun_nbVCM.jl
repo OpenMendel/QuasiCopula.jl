@@ -3,6 +3,9 @@ using Random, Roots, SpecialFunctions
 using DataFrames, DelimitedFiles, Statistics
 import StatsBase: sem
 
+# BLAS.set_num_threads(1)
+# Threads.nthreads()
+
 p_fixed = 3    # number of fixed effects, including intercept
 m = 1    # number of variance components
 # true parameter values
@@ -19,7 +22,7 @@ Link = typeof(link)
 T = Float64
 
 samplesize = 10000
-ni = 5
+ni = 25
 
 gcs = Vector{NBCopulaVCObs{T, D, Link}}(undef, samplesize)
 
@@ -47,6 +50,10 @@ end
 
 # form VarLmmModel
 gcm = NBCopulaVCModel(gcs);
+# precompile
+println("precompiling NB VCM fit")
+gcm2 = deepcopy(gcm);
+GLMCopula.fit!(gcm2, maxBlockIter = 1);
 
 fittime = @elapsed GLMCopula.fit!(gcm)
 @show fittime

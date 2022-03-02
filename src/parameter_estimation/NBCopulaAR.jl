@@ -229,13 +229,6 @@ function loglikelihood!(
     end
     q = dot(gc.res, gc.storage_n)
 
-    # GLMCopula.storage_n!(gc, ρ, n)
-    # if needgrad
-    #     BLAS.gemv!('T', σ2, gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
-    # end
-    # q = dot(gc.res, gc.storage_n)
-
-    # @show q
     c1 = 1 + 0.5 * gc.n * σ2
     c2 = 1 + 0.5 * σ2 * q
     # loglikelihood
@@ -282,14 +275,11 @@ function loglikelihood!(
             # hessian cross term for beta and sigma2
             gc.Hβσ2 .= inv1pq * gc.∇β - 0.5 * q * inv1pq^2 * σ2 * gc.∇β
 
-            #  hessian cross term for beta and rho
-            # gc.Hβρ .= inv1pq * σ2 * transpose(gc.∇resβ) * gc.∇ARV * gc.res - 0.5 * σ2^2 * inv1pq^2 * q2 * transpose(gc.∇resβ) * gc.V * gc.res
-
             BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 0.0, gc.Hβ) # only lower triangular
             fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
             fill!(gc.added_term2, 0.0) # fill hessian with 0
             # gc.V .= get_AR_cov(n, ρ, σ2, gc.V)
-            mul!(gc.added_term_numerator, Matrix(gc.V), gc.∇resβ) # storage_n = V[k] * res (note: we cannot use SymmetricToeplitz for matrix-matrix multiplication)
+            mul!(gc.added_term_numerator, gc.V, gc.∇resβ, one(T), zero(T))
             BLAS.gemm!('T', 'N', σ2, gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2)
             gc.added_term2 .*= inv1pq
             gc.Hβ .+= gc.added_term2

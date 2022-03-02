@@ -131,6 +131,34 @@ function loglikelihood!(
     logl
 end
 
+# function loglikelihood!(
+#     gcm::Union{GLMCopulaVCModel, Poisson_Bernoulli_VCModel},
+#     needgrad::Bool = false,
+#     needhess::Bool = false
+#     )
+#     logl = 0.0
+#     if needgrad
+#         fill!(gcm.∇β, 0)
+#         fill!(gcm.∇θ, 0)
+#     end
+#     if needhess
+#         fill!(gcm.Hβ, 0)
+#         fill!(gcm.Hθ, 0)
+#     end
+#     @inbounds for i in eachindex(gcm.data)
+#         logl += loglikelihood!(gcm.data[i], gcm.β, gcm.θ, needgrad, needhess)
+#         if needgrad
+#             gcm.∇β .+= gcm.data[i].∇β
+#             gcm.∇θ .+= gcm.data[i].∇θ
+#         end
+#         if needhess
+#             gcm.Hβ .+= gcm.data[i].Hβ
+#             gcm.Hθ .+= gcm.data[i].Hθ
+#         end
+#     end
+#     logl
+# end
+
 function loglikelihood!(
     gcm::Union{GLMCopulaVCModel, Poisson_Bernoulli_VCModel},
     needgrad::Bool = false,
@@ -145,16 +173,32 @@ function loglikelihood!(
         fill!(gcm.Hβ, 0)
         fill!(gcm.Hθ, 0)
     end
-    @inbounds for i in eachindex(gcm.data)
-        logl += loglikelihood!(gcm.data[i], gcm.β, gcm.θ, needgrad, needhess)
-        if needgrad
-            gcm.∇β .+= gcm.data[i].∇β
-            gcm.∇θ .+= gcm.data[i].∇θ
-        end
-        if needhess
-            gcm.Hβ .+= gcm.data[i].Hβ
-            gcm.Hθ .+= gcm.data[i].Hθ
-        end
-    end
-    logl
+    logl = zeros(Threads.nthreads())
+    Threads.@threads for i in eachindex(gcm.data)
+        @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
+         gcm.θ, needgrad, needhess)
+     end
+     @inbounds for i in eachindex(gcm.data)
+         if needgrad
+             gcm.∇β .+= gcm.data[i].∇β
+             gcm.∇θ .+= gcm.data[i].∇θ
+         end
+         if needhess
+             gcm.Hβ .+= gcm.data[i].Hβ
+             gcm.Hθ .+= gcm.data[i].Hθ
+         end
+     end
+    # @inbounds for i in eachindex(gcm.data)
+    #     logl += loglikelihood!(gcm.data[i], gcm.β, gcm.θ, needgrad, needhess)
+        # if needgrad
+        #     gcm.∇β .+= gcm.data[i].∇β
+        #     gcm.∇θ .+= gcm.data[i].∇θ
+        # end
+        # if needhess
+        #     gcm.Hβ .+= gcm.data[i].Hβ
+        #     gcm.Hθ .+= gcm.data[i].Hθ
+        # end
+    # end
+    # logl
+    sum(logl)
 end

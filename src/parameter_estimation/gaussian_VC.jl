@@ -461,21 +461,39 @@ function loglikelihood!(
         gcm.Hβ .= - gcm.XtX
         gcm.Hτ .= - gcm.ntotal / 2abs2(gcm.τ[1])
     end
-    @inbounds for i in eachindex(gcm.data)
-        logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.θ, needgrad, needhess)
-        if needgrad
-            gcm.∇β .+= gcm.data[i].∇β
-            gcm.∇τ .+= gcm.data[i].∇τ
-            gcm.∇θ .+= gcm.data[i].∇θ
-        end
-        if needhess
-            gcm.Hβ .+= gcm.data[i].Hβ
-            gcm.Hτ .+= gcm.data[i].Hτ
-            gcm.Hθ .+= gcm.data[i].Hθ
-        end
-    end
+    logl = zeros(Threads.nthreads())
+    Threads.@threads for i in eachindex(gcm.data)
+        @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
+         gcm.τ[1], gcm.θ, needgrad, needhess)
+     end
+     @inbounds for i in eachindex(gcm.data)
+         if needgrad
+             gcm.∇β .+= gcm.data[i].∇β
+             gcm.∇τ .+= gcm.data[i].∇τ
+             gcm.∇θ .+= gcm.data[i].∇θ
+         end
+         if needhess
+             gcm.Hβ .+= gcm.data[i].Hβ
+             gcm.Hτ .+= gcm.data[i].Hτ
+             gcm.Hθ .+= gcm.data[i].Hθ
+         end
+     end
+    # @inbounds for i in eachindex(gcm.data)
+    #     logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.θ, needgrad, needhess)
+    #     if needgrad
+    #         gcm.∇β .+= gcm.data[i].∇β
+    #         gcm.∇τ .+= gcm.data[i].∇τ
+    #         gcm.∇θ .+= gcm.data[i].∇θ
+    #     end
+    #     if needhess
+    #         gcm.Hβ .+= gcm.data[i].Hβ
+    #         gcm.Hτ .+= gcm.data[i].Hτ
+    #         gcm.Hθ .+= gcm.data[i].Hθ
+    #     end
+    # end
     needhess && (gcm.Hβ .*= gcm.τ[1])
-    logl
+    # logl
+    return sum(logl)
 end
 
 # uncomment this and exclude fit_newton_normal.jl from GLMCopula.jl to fit variance components separately using MM-algorithm instead of Joint Newton.

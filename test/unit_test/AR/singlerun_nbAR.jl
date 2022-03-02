@@ -3,6 +3,9 @@ using Random, Roots, SpecialFunctions
 using DataFrames, DelimitedFiles, Statistics, ToeplitzMatrices
 import StatsBase: sem
 
+BLAS.set_num_threads(1)
+Threads.nthreads()
+
 p_fixed = 3    # number of fixed effects, including intercept
 
 # true parameter values
@@ -68,8 +71,12 @@ end
 
 # form model
 gcm = NBCopulaARModel(gcs);
+# precompile
+println("precompiling NB AR fit")
+gcm2 = deepcopy(gcm);
+GLMCopula.fit!(gcm2, maxBlockIter = 1);
 
-fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter = 20, tol=1e-8)
+fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter = 5, tol=1e-6)
 @show fittime
 @show gcm.β
 @show gcm.σ2

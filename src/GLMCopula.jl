@@ -3,6 +3,7 @@ using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Distributions, StatsFu
 using LoopVectorization, DataFrames
 using LinearAlgebra: BlasReal, copytri!
 using SpecialFunctions, Random
+using FFTW
 @reexport using Ipopt
 @reexport using NLopt
 

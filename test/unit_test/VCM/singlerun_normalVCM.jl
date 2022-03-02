@@ -3,6 +3,9 @@ using Random, Roots, SpecialFunctions
 using DataFrames, Statistics
 import StatsBase: sem
 
+BLAS.set_num_threads(1)
+Threads.nthreads()
+
 p = 3   # number of fixed effects, including intercept
 m = 1    # number of variance components
 # true parameter values
@@ -45,6 +48,10 @@ end
 
 # form VarLmmModel
 gcm = GaussianCopulaVCModel(gcs);
+# precompile
+println("precompiling Gaussian VCM fit")
+gcm2 = deepcopy(gcm);
+GLMCopula.fit!(gcm2, IpoptSolver(print_level = 0, max_iter = 20));
 
 fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, limited_memory_max_history = 50, accept_after_max_steps = 4, tol = 10^-8, hessian_approximation = "limited-memory"))
 @show fittime

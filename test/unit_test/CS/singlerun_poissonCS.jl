@@ -3,6 +3,9 @@ using Random, Roots, SpecialFunctions
 using DataFrames, DelimitedFiles, Statistics, ToeplitzMatrices
 import StatsBase: sem
 
+BLAS.set_num_threads(1)
+Threads.nthreads()
+
 p = 3    # number of fixed effects, including intercept
 
 # true parameter values
@@ -66,10 +69,15 @@ end
 
 # form model
 gcm = GLMCopulaCSModel(gcs);
+# precompile
+println("precompiling Poisson CS fit")
+gcm2 = deepcopy(gcm);
+GLMCopula.fit!(gcm2, IpoptSolver(print_level = 0, max_iter = 20));
 
 fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, accept_after_max_steps = 2, limited_memory_max_history = 50, hessian_approximation = "limited-memory"))
 
 loglikelihood!(gcm, true, true)
+@show fittime
 @show gcm.β
 @show gcm.σ2
 @show gcm.ρ
@@ -90,5 +98,6 @@ mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
 
 using BenchmarkTools
 println("checking memory allocation for Poisson CS")
-logl_gradient_memory = @benchmark loglikelihood!($gcm, true, false)
+# logl_gradient_memory = @benchmark loglikelihood!($gcm, true, false) # this will allocate for threads
+logl_gradient_memory = @benchmark loglikelihood!($gcm.data[1], $gcm.β, $gcm.ρ[1], $gcm.σ2[1], true, false)
 @test logl_gradient_memory.memory == 0.0

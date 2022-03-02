@@ -3,6 +3,9 @@ using Random, Roots, SpecialFunctions
 using DataFrames, DelimitedFiles, Statistics, ToeplitzMatrices
 import StatsBase: sem
 
+BLAS.set_num_threads(1)
+Threads.nthreads()
+
 p_fixed = 3    # number of fixed effects, including intercept
 
 # true parameter values
@@ -35,7 +38,7 @@ T = Float64
 
 gcs = Vector{NBCopulaCSObs{T, D, Link}}(undef, samplesize)
 
-ni = 5 #  number of observations per individual
+ni = 25 #  number of observations per individual
 V = get_V(ρtrue[1], ni)
 
 # true Gamma
@@ -68,9 +71,13 @@ end
 
 # form model
 gcm = NBCopulaCSModel(gcs);
+# precompile
+println("precompiling NB CS fit")
 gcm2 = deepcopy(gcm);
+GLMCopula.fit!(gcm2, maxBlockIter = 1);
 
 fittime = @elapsed GLMCopula.fit!(gcm)
+@show fittime
 @show gcm.β
 @show gcm.σ2
 @show gcm.ρ

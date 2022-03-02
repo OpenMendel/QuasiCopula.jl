@@ -1,7 +1,10 @@
 using GLMCopula, DelimitedFiles, LinearAlgebra, Random, ToeplitzMatrices
 using Random, Roots, SpecialFunctions
-using DataFrames, Statistics
+using DataFrames, Statistics, Test
 import StatsBase: sem
+
+BLAS.set_num_threads(1)
+Threads.nthreads()
 
 p = 3   # number of fixed effects, including intercept
 m = 1    # number of variance components
@@ -57,9 +60,14 @@ end
 
 # form VarLmmModel
 gcm = GaussianCopulaCSModel(gcs);
+# precompile
+println("precompiling Gaussian CS fit")
+gcm2 = deepcopy(gcm);
+GLMCopula.fit!(gcm2, IpoptSolver(print_level = 0, max_iter = 20));
 
 loglikelihood!(gcm, true, true)
 fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 50, accept_after_max_steps = 4, hessian_approximation = "limited-memory"))
+@show fittime
 @show gcm.β
 @show gcm.σ2
 @show gcm.ρ

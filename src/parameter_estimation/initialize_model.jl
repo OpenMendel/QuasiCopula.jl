@@ -22,7 +22,7 @@ function initialize_model!(
     gcm::GLMCopulaCSModel{T, D, Link}) where {T <: BlasReal, D, Link}
     println("initializing β using Newton's Algorithm under Independence Assumption")
     initialize_beta!(gcm)
-    println("initializing σ2 and ρ using method of moments")
+    # println("initializing σ2 and ρ using method of moments")
     # update_sigma_rho!(gcm)
     copyto!(gcm.ρ, 0.2)
     nothing
@@ -298,8 +298,8 @@ function initialize_model!(gcm::NBCopulaCSModel{T, D, Link}) where {T <: BlasRea
       println("initializing r using Newton update")
       GLMCopula.update_r!(gcm)
 
-  println("initializing variance parameters in CS model using mom")
-  # update_sigma_rho!(gcm)
+  # println("initializing variance parameters in CS model using mom")
+  # # update_sigma_rho!(gcm)
   copyto!(gcm.ρ, 0.2)
   nothing
 end
@@ -332,7 +332,7 @@ function initialize_model!(gcm::NBCopulaARModel{T, D, Link}) where {T <: BlasRea
       println("initializing r using Newton update")
       GLMCopula.update_r!(gcm)
 
-  println("initializing variance parameters in AR model using mom")
+  # println("initializing variance parameters in AR model using mom")
   # update_sigma_rho!(gcm)
   copyto!(gcm.ρ, 0.2)
   nothing

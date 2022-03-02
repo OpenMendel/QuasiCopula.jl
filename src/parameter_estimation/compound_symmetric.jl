@@ -250,9 +250,9 @@ function loglikelihood!(
     if needgrad
         inv1pq = inv(c2)
         # gradient with respect to rho
-        mul!(gc.storage_n, gc.∇CSV, gc.res, one(T), zero(T)) # storage_n = ∇ARV * res
+        mul!(gc.storage_n, gc.∇CSV, gc.res, one(T), zero(T)) # storage_n = ∇CSV * res
         q2 = dot(gc.res, gc.storage_n) #
-        # gc.∇ρ .= inv(c2) * 0.5 * σ2 * transpose(gc.res) * gc.∇ARV * gc.res
+        # gc.∇ρ .= inv(c2) * 0.5 * σ2 * transpose(gc.res) * gc.∇CSV * gc.res
         gc.∇ρ .= inv1pq * 0.5 * σ2 * q2
         # gradient with respect to sigma2
         gc.∇σ2 .= 0.5 * ((q * inv1pq) - gc.n * inv(c1))
@@ -318,22 +318,42 @@ function loglikelihood!(
         # @show gcm.Hβσ2
         fill!(gcm.Hβρ, 0)
     end
-    @inbounds for i in eachindex(gcm.data)
-        logl += loglikelihood!(gcm.data[i], gcm.β, gcm.ρ[1], gcm.σ2[1], needgrad, needhess)
-        if needgrad
-            gcm.∇β .+= gcm.data[i].∇β
-            gcm.∇ρ .+= gcm.data[i].∇ρ
-            gcm.∇σ2 .+= gcm.data[i].∇σ2
-        end
-        if needhess
-            gcm.Hβ .+= gcm.data[i].Hβ
-            gcm.Hρ .+= gcm.data[i].Hρ
-            gcm.Hσ2 .+= gcm.data[i].Hσ2
-            gcm.Hρσ2 .+= gcm.data[i].Hρσ2
-            gcm.Hβσ2 .+= gcm.data[i].Hβσ2
-            # gcm.Hβρ .+= gcm.data[i].Hβρ
-        end
-    end
-    # @show gcm.∇ρ
-    logl
+    logl = zeros(Threads.nthreads())
+    Threads.@threads for i in eachindex(gcm.data)
+        @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
+         gcm.ρ[1], gcm.σ2[1], needgrad, needhess)
+     end
+     @inbounds for i in eachindex(gcm.data)
+         if needgrad
+             gcm.∇β .+= gcm.data[i].∇β
+             gcm.∇ρ .+= gcm.data[i].∇ρ
+             gcm.∇σ2 .+= gcm.data[i].∇σ2
+         end
+         if needhess
+             gcm.Hβ .+= gcm.data[i].Hβ
+             gcm.Hρ .+= gcm.data[i].Hρ
+             gcm.Hσ2 .+= gcm.data[i].Hσ2
+             gcm.Hρσ2 .+= gcm.data[i].Hρσ2
+             gcm.Hβσ2 .+= gcm.data[i].Hβσ2
+             # gcm.Hβρ .+= gcm.data[i].Hβρ
+         end
+     end
+    # @inbounds for i in eachindex(gcm.data)
+    #     logl += loglikelihood!(gcm.data[i], gcm.β, gcm.ρ[1], gcm.σ2[1], needgrad, needhess)
+    #     if needgrad
+    #         gcm.∇β .+= gcm.data[i].∇β
+    #         gcm.∇ρ .+= gcm.data[i].∇ρ
+    #         gcm.∇σ2 .+= gcm.data[i].∇σ2
+    #     end
+    #     if needhess
+    #         gcm.Hβ .+= gcm.data[i].Hβ
+    #         gcm.Hρ .+= gcm.data[i].Hρ
+    #         gcm.Hσ2 .+= gcm.data[i].Hσ2
+    #         gcm.Hρσ2 .+= gcm.data[i].Hρσ2
+    #         gcm.Hβσ2 .+= gcm.data[i].Hβσ2
+    #         # gcm.Hβρ .+= gcm.data[i].Hβρ
+    #     end
+    # end
+    # logl
+    return sum(logl)
 end

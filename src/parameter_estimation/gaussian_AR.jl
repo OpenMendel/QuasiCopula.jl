@@ -11,11 +11,11 @@ struct GaussianCopulaARObs{T <: BlasReal}
     p::Int
     y::Vector{T}
     X::Matrix{T}
-    V::Matrix{T}
+    V::SymmetricToeplitz{T}
     vec::Vector{T}
     # working arrays
-    ∇ARV::Matrix{T}
-    ∇2ARV::Matrix{T}
+    ∇ARV::SymmetricToeplitz{T}
+    ∇2ARV::SymmetricToeplitz{T}
     ∇β::Vector{T}   # gradient wrt β
     ∇τ::Vector{T}   # gradient wrt τ
     ∇ρ::Vector{T}
@@ -46,10 +46,10 @@ function GaussianCopulaARObs(
     n, p = size(X, 1), size(X, 2)
     @assert length(y) == n "length(y) should be equal to size(X, 1)"
     # working arrays
-    V = ones(T, n, n)
+    V = SymmetricToeplitz(ones(T, n))
     vec = Vector{T}(undef, n)
-    ∇ARV = Matrix{T}(undef, n, n)
-    ∇2ARV = Matrix{T}(undef, n, n)
+    ∇ARV = SymmetricToeplitz(ones(T, n))
+    ∇2ARV = SymmetricToeplitz(ones(T, n))
     ∇β  = Vector{T}(undef, p)
     ∇τ  = Vector{T}(undef, 1)
     ∇ρ  = Vector{T}(undef, 1)
@@ -338,7 +338,8 @@ function loglikelihood!(
     get_V!(ρ, gc)
 
     #evaluate copula loglikelihood
-    mul!(gc.storage_n, gc.V, gc.res) # storage_n = V[k] * res
+    # mul!(gc.storage_n, gc.V, gc.res) # storage_n = V[k] * res
+    mul!(gc.storage_n, gc.V, gc.res, one(T), zero(T)) # storage_n = V[k] * res
 
     if needgrad
         BLAS.gemv!('T', σ2, gc.X, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
@@ -362,7 +363,8 @@ function loglikelihood!(
     if needgrad
         inv1pq = inv(c2)
         # gradient with respect to rho
-        mul!(gc.storage_n, gc.∇ARV, gc.res) # storage_n = ∇ARV * res
+        # mul!(gc.storage_n, gc.∇ARV, gc.res) # storage_n = ∇ARV * res
+        mul!(gc.storage_n, gc.∇ARV, gc.res, one(T), zero(T)) # storage_n = ∇ARV * res
         q2 = dot(gc.res, gc.storage_n) #
         gc.∇ρ .= inv(c2) * 0.5 * σ2 * q2
         # gradient with respect to sigma2
@@ -373,7 +375,8 @@ function loglikelihood!(
       if needhess
             # gc.∇2ARV .= get_∇2ARV(n, ρ, σ2, gc.∇2ARV)
             get_∇2V!(ρ, gc)
-            mul!(gc.storage_n, gc.∇2ARV, gc.res) # storage_n = ∇ARV * res
+            # mul!(gc.storage_n, gc.∇2ARV, gc.res) # storage_n = ∇ARV * res
+            mul!(gc.storage_n, gc.∇2ARV, gc.res, one(T), zero(T)) # storage_n = ∇ARV * res
             q3 = dot(gc.res, gc.storage_n) #
             # hessian for rho
             gc.Hρ .= 0.5 * σ2 * (inv(c2) * q3 - inv(c2)^2 * 0.5 * σ2 * q2^2)
@@ -386,9 +389,6 @@ function loglikelihood!(
 
             # hessian cross term for beta and sigma2
             gc.Hβσ2 .= inv1pq * gc.∇β - 0.5 * q * inv1pq^2 * σ2 * gc.∇β
-
-            #  hessian cross term for beta and rho
-            # gc.Hβρ .= inv1pq * σ2 * transpose(gc.∇resβ) * gc.∇ARV * gc.res - 0.5 * σ2^2 * inv1pq^2 * q2 * transpose(gc.∇resβ) * gc.V * gc.res
 
             BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 0.0, gc.Hβ) # only lower triangular
             gc.Hτ[1, 1] = - abs2(q * inv1pq / τ)
@@ -419,27 +419,46 @@ function loglikelihood!(
         fill!(gcm.Hσ2, 0.0)
         fill!(gcm.Hρσ2, 0.0)
         fill!(gcm.Hβσ2, 0.0)
-        # @show gcm.Hβσ2
-        # fill!(gcm.Hβρ, 0)
     end
-    @inbounds for i in eachindex(gcm.data)
-        logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.ρ[1], gcm.σ2[1], needgrad, needhess)
-        if needgrad
-            gcm.∇β .+= gcm.data[i].∇β
-            gcm.∇τ .+= gcm.data[i].∇τ
-            gcm.∇ρ .+= gcm.data[i].∇ρ
-            gcm.∇σ2 .+= gcm.data[i].∇σ2
-        end
-        if needhess
-            gcm.Hβ .+= gcm.data[i].Hβ
-            gcm.Hτ .+= gcm.data[i].Hτ
-            gcm.Hρ .+= gcm.data[i].Hρ
-            gcm.Hσ2 .+= gcm.data[i].Hσ2
-            gcm.Hρσ2 .+= gcm.data[i].Hρσ2
-            gcm.Hβσ2 .+= gcm.data[i].Hβσ2
-            # gcm.Hβρ .+= gcm.data[i].Hβρ
-        end
-    end
+    logl = zeros(Threads.nthreads())
+    Threads.@threads for i in eachindex(gcm.data)
+        @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
+         gcm.τ[1], gcm.ρ[1], gcm.σ2[1], needgrad, needhess)
+     end
+     @inbounds for i in eachindex(gcm.data)
+         if needgrad
+             gcm.∇β .+= gcm.data[i].∇β
+             gcm.∇τ .+= gcm.data[i].∇τ
+             gcm.∇ρ .+= gcm.data[i].∇ρ
+             gcm.∇σ2 .+= gcm.data[i].∇σ2
+         end
+         if needhess
+             gcm.Hβ .+= gcm.data[i].Hβ
+             gcm.Hτ .+= gcm.data[i].Hτ
+             gcm.Hρ .+= gcm.data[i].Hρ
+             gcm.Hσ2 .+= gcm.data[i].Hσ2
+             gcm.Hρσ2 .+= gcm.data[i].Hρσ2
+             gcm.Hβσ2 .+= gcm.data[i].Hβσ2
+         end
+     end
+    # @inbounds for i in eachindex(gcm.data)
+    #     logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.ρ[1], gcm.σ2[1], needgrad, needhess)
+    #     if needgrad
+    #         gcm.∇β .+= gcm.data[i].∇β
+    #         gcm.∇τ .+= gcm.data[i].∇τ
+    #         gcm.∇ρ .+= gcm.data[i].∇ρ
+    #         gcm.∇σ2 .+= gcm.data[i].∇σ2
+    #     end
+    #     if needhess
+    #         gcm.Hβ .+= gcm.data[i].Hβ
+    #         gcm.Hτ .+= gcm.data[i].Hτ
+    #         gcm.Hρ .+= gcm.data[i].Hρ
+    #         gcm.Hσ2 .+= gcm.data[i].Hσ2
+    #         gcm.Hρσ2 .+= gcm.data[i].Hρσ2
+    #         gcm.Hβσ2 .+= gcm.data[i].Hβσ2
+    #     end
+    # end
     needhess && (gcm.Hβ .*= gcm.τ[1])
-    logl
+    # logl
+    return sum(logl)
 end

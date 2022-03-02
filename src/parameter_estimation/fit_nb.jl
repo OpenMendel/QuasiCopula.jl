@@ -60,7 +60,7 @@ function fit!(
                             limited_memory_max_history = 20,
                             warm_start_init_point = "yes",  mu_strategy = "adaptive",
                             hessian_approximation = "limited-memory");
-    tol::Float64 = 1e-7,
+    tol::Float64 = 1e-6,
     maxBlockIter::Int=20
     )
     initialize_model!(gcm)
@@ -107,7 +107,7 @@ function fit!(
     solver=Ipopt.IpoptSolver(print_level = 0, max_iter = 15, limited_memory_max_history = 20,
                             warm_start_init_point = "yes", mu_strategy = "adaptive",
                              hessian_approximation = "limited-memory");
-    tol::Float64 = 1e-7,
+    tol::Float64 = 1e-6,
     maxBlockIter::Int=20
     )
     initialize_model!(gcm)
