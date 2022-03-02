@@ -1,6 +1,10 @@
 using DataFrames, Random, GLM, GLMCopula, LinearAlgebra, DelimitedFiles
 using LinearAlgebra: BlasReal, copytri!
 using ToeplitzMatrices
+using LinearAlgebra: BlasReal, copytri!
+
+BLAS.set_num_threads(1)
+Threads.nthreads()
 
 function run_test()
     p_fixed = 3    # number of fixed effects, including intercept
@@ -92,10 +96,14 @@ function run_test()
                 gcm = NBCopulaARModel(gcs);
                 fittime = NaN
                 try
-                    fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter = 20, tol=1e-6)
+                    fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter = 5, tol=1e-6)
                     @show fittime
-                    @show gcm.θ
-                    @show gcm.∇θ
+                    @show gcm.β
+                    @show gcm.σ2
+                    @show gcm.ρ
+                    @show gcm.∇β
+                    @show gcm.∇σ2
+                    @show gcm.∇ρ
                     @show gcm.r
                     @show gcm.∇r
                     loglikelihood!(gcm, true, true)

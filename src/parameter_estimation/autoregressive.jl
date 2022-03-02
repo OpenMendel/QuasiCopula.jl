@@ -212,7 +212,7 @@ Forms the second derivative of AR(1) covariance structure wrt to ρ, given ρ (c
 """
 function get_∇2V!(ρ, gc::Union{GLMCopulaARObs{T, D, Link}, NBCopulaARObs{T, D, Link}, GaussianCopulaARObs{T}}) where {T, D, Link}
     if gc.n <= 2
-        fill!(gc.∇2ARV, 0.0)
+        fill!(gc.∇2ARV.vc, 0.0)
     else
         gc.vec[1] = 0.0
         gc.vec[2] = 0.0
