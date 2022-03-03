@@ -13,7 +13,7 @@ function fit!(
                                 warm_start_init_point = "yes",  mu_strategy = "adaptive",
                                 hessian_approximation = "limited-memory");
         tol::Float64 = 1e-6,
-        maxBlockIter::Int=100
+        maxBlockIter::Int=10
     )
     # initialize model
     initialize_model!(gcm)
@@ -61,7 +61,7 @@ function fit!(
                             warm_start_init_point = "yes",  mu_strategy = "adaptive",
                             hessian_approximation = "limited-memory");
     tol::Float64 = 1e-6,
-    maxBlockIter::Int=20
+    maxBlockIter::Int=10
     )
     initialize_model!(gcm)
     npar = gcm.p + 2 # rho and sigma squared
@@ -108,7 +108,7 @@ function fit!(
                             warm_start_init_point = "yes", mu_strategy = "adaptive",
                              hessian_approximation = "limited-memory");
     tol::Float64 = 1e-6,
-    maxBlockIter::Int=20
+    maxBlockIter::Int=10
     )
     initialize_model!(gcm)
     npar = gcm.p + 2 # rho and sigma squared

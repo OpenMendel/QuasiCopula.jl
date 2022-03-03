@@ -1,16 +1,15 @@
 using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, CategoricalArrays
 using Random, Roots, SpecialFunctions, StatsFuns, Distributions, DataFrames, ToeplitzMatrices
-using DataFrames, Statistics, RCall, Printf
-import StatsBase: sem
 
 BLAS.set_num_threads(1)
 Threads.nthreads()
 
 function run_test()
-    p = 3   # number of fixed effects, including intercept
+    p = 3    # number of fixed effects, including intercept
 
     # true parameter values
     Random.seed!(12345)
+    # try next
     βtrue = rand(Uniform(-2, 2), p)
     σ2true = [0.5]
     ρtrue = [0.5]
@@ -19,11 +18,12 @@ function run_test()
         vec = zeros(n)
         vec[1] = 1.0
         for i in 2:n
-            vec[i] = ρ
+            vec[i] = vec[i - 1] * ρ
         end
         V = ToeplitzMatrices.SymmetricToeplitz(vec)
         V
     end
+
     # generate data
     intervals = zeros(p + 2, 2) #hold intervals
     curcoverage = zeros(p + 2) #hold current coverage resutls
@@ -53,7 +53,7 @@ function run_test()
 
     for t in 1:length(samplesizes)
         m = samplesizes[t]
-        gcs = Vector{GLMCopulaCSObs{T, D, Link}}(undef, m)
+        gcs = Vector{GLMCopulaARObs{T, D, Link}}(undef, m)
         for k in 1:length(ns)
             ni = ns[k] # number of observations per individual
             V = get_V(ρtrue[1], ni)
@@ -63,11 +63,8 @@ function run_test()
 
             for j in 1:nsims
                 println("rep $j obs per person $ni samplesize $m")
-                Ystack = []
-                Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k)
-                X_samplesize = [randn(ni, p - 1) for i in 1:m]
                 for i in 1:m
-                    X = [ones(ni) X_samplesize[i]]
+                    X = [ones(ni) randn(ni, p - 1)]
                     η = X * βtrue
                     μ = exp.(η) ./ (1 .+ exp.(η))
                     vecd = Vector{DiscreteUnivariateDistribution}(undef, ni)
@@ -79,47 +76,50 @@ function run_test()
                     y = Vector{Float64}(undef, ni)
                     res = Vector{Float64}(undef, ni)
                     rand(nonmixed_multivariate_dist, y, res)
-                    push!(Ystack, y)
                     V = [ones(ni, ni)]
-                    gcs[i] = GLMCopulaCSObs(y, X, d, link)
+                    gcs[i] = GLMCopulaARObs(y, X, d, link)
                 end
 
                 # form model
-                gcm = GLMCopulaCSModel(gcs);
-                fittime = NaN
-                try
-                    fittime = @elapsed GLMCopula.fit!(gcm)
+                gcm = GLMCopulaARModel(gcs);
+                 try
+                    #fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, warm_start_init_point="yes", tol = 10^-8, limited_memory_max_history = 20, accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
+                    fittime = @elapsed GLMCopula.fit!(gcm) #, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 20, warm_start_init_point="yes", accept_after_max_steps = 2, hessian_approximation = "limited-memory"))
+                    # fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
                     @show fittime
                     @show gcm.β
-                    @show gcm.ρ
                     @show gcm.σ2
+                    @show gcm.ρ
                     @show gcm.∇β
                     @show gcm.∇σ2
                     @show gcm.∇ρ
                     loglikelihood!(gcm, true, true)
                     vcov!(gcm)
                     @show GLMCopula.confint(gcm)
-                    # mse and time under our model
-                    coverage!(gcm, trueparams, intervals, curcoverage)
-                    mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
-                    @show mseβ
-                    @show mseσ2
-                    @show mseρ
-                    # global currentind
-                    @views copyto!(βρσ2coverage[:, currentind], curcoverage)
-                    βMseResults[currentind] = mseβ
-                    σ2MseResults[currentind] = mseσ2
-                    ρMseResults[currentind] = mseρ
-                    fittimes[currentind] = fittime
-                    currentind += 1
+
+                # mse and time under our model
+                coverage!(gcm, trueparams, intervals, curcoverage)
+                mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
+                @show mseβ
+                @show mseσ2
+                @show mseρ
+                # global currentind
+                @views copyto!(βρσ2coverage[:, currentind], curcoverage)
+                βMseResults[currentind] = mseβ
+                σ2MseResults[currentind] = mseσ2
+                ρMseResults[currentind] = mseρ
+                fittimes[currentind] = fittime
+                currentind += 1
+
                 catch
+                    println("rep $j ni obs = $ni , samplesize = $m had an error")
                     βMseResults[currentind] = NaN
                     σ2MseResults[currentind] = NaN
                     ρMseResults[currentind] = NaN
+                    βρσ2coverage[:, currentind] .= NaN
                     fittimes[currentind] = NaN
                     currentind += 1
-               end
-
+                 end
             end
         end
     end
@@ -127,16 +127,17 @@ function run_test()
 
     @show en - st #seconds
     @info "writing to file..."
-    ftail = "multivariate_bernoulli_CS$(nsims)reps_sim.csv"
-    # make sure bernoulli_cs is a directory
-    isdir("bernoulli_cs") || mkdir("bernoulli_cs")
+    ftail = "multivariate_bernoulli_AR$(nsims)reps_sim.csv"
 
-    writedlm("bernoulli_cs/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("bernoulli_cs/mse_sigma_" * ftail, σ2MseResults, ',')
-    writedlm("bernoulli_cs/mse_rho_" * ftail, ρMseResults, ',')
-    writedlm("bernoulli_cs/fittimes_" * ftail, fittimes, ',')
+    # make sure bernoulli_ar is a directory
+    isdir("bernoulli_ar") || mkdir("bernoulli_ar")
 
-    writedlm("bernoulli_cs/beta_rho_sigma_coverage_" * ftail, βρσ2coverage, ',')
+    writedlm("bernoulli_ar/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("bernoulli_ar/mse_sigma_" * ftail, σ2MseResults, ',')
+    writedlm("bernoulli_ar/mse_rho_" * ftail, ρMseResults, ',')
+    writedlm("bernoulli_ar/fittimes_" * ftail, fittimes, ',')
+
+    writedlm("bernoulli_ar/beta_rho_sigma_coverage_" * ftail, βρσ2coverage, ',')
 end
 
 run_test()

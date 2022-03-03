@@ -7,7 +7,7 @@ should be provided in `gcm.β`, `gcm.τ`, `gcm.ρ`, `gcm.σ2`.
 """
 function fit!(
         gcm::Union{GaussianCopulaARModel, GaussianCopulaCSModel},
-        solver=Ipopt.IpoptSolver(print_level=3,  max_iter = 100, tol = 10^-6, limited_memory_max_history = 20)
+        solver=Ipopt.IpoptSolver(print_level=3, max_iter = 100, tol = 10^-6, limited_memory_max_history = 20, hessian_approximation = "limited-memory")
     )
     initialize_model!(gcm)
     npar = gcm.p + 3 # tau, rho and sigma squared
