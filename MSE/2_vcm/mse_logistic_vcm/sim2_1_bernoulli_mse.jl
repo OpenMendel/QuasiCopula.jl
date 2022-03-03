@@ -98,7 +98,7 @@ function runtest()
                 @show fittime
                 @show gcm.β
                 @show gcm.θ
-                @show gcm.θ
+                @show gcm.∇β
                 @show gcm.∇θ
                 loglikelihood!(gcm, true, true)
                 vcov!(gcm)

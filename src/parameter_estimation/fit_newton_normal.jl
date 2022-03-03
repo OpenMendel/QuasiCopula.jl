@@ -6,7 +6,8 @@ should be provided in `gcm.β`, `gcm.θ`, `gcm.τ` this is for Normal base.
 """
 function fit!(
         gcm::GaussianCopulaVCModel,
-        solver=Ipopt.IpoptSolver(print_level = 3, tol = 10^-6, max_iter = 100, limited_memory_max_history = 20)
+        solver=Ipopt.IpoptSolver(print_level = 3, tol = 10^-6, max_iter = 100,
+        limited_memory_max_history = 20, warm_start_init_point="yes", hessian_approximation = "limited-memory")
     )
     initialize_model!(gcm)
     npar = gcm.p + gcm.m + 1

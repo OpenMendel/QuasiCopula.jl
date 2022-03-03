@@ -3,14 +3,16 @@ using Random, Roots, SpecialFunctions
 using DataFrames, DelimitedFiles, Statistics
 import StatsBase: sem
 
+BLAS.set_num_threads(1)
+Threads.nthreads()
+
 function runtest()
     p = 3    # number of fixed effects, including intercept
     m = 1    # number of variance components
     # true parameter values
     Random.seed!(12345)
     βtrue = rand(Uniform(-2, 2), p)
-    # βtrue = ones(p)
-    Σtrue = [0.01]
+    θtrue = [0.1]
     τtrue = 100.0
     σ2 = inv(τtrue)
     σ = sqrt(σ2)
@@ -18,7 +20,7 @@ function runtest()
     # generate data
     intervals = zeros(p + m + 1, 2) #hold intervals
     curcoverage = zeros(p + m + 1) #hold current coverage resutls
-    trueparams = [βtrue; Σtrue] #hold true parameters
+    trueparams = [βtrue; θtrue] #hold true parameters
 
     #simulation parameters
     samplesizes = [100; 1000; 10000]
@@ -28,14 +30,14 @@ function runtest()
    #storage for our results
    βMseResults = ones(nsims * length(ns) * length(samplesizes))
    τMseResults = ones(nsims * length(ns) * length(samplesizes))
-   ΣMseResults = ones(nsims * length(ns) *  length(samplesizes))
-   βτΣcoverage = Matrix{Float64}(undef, p + m + 1, nsims * length(ns) * length(samplesizes))
+   θMseResults = ones(nsims * length(ns) *  length(samplesizes))
+   βτθcoverage = Matrix{Float64}(undef, p + m + 1, nsims * length(ns) * length(samplesizes))
    fittimes = zeros(nsims * length(ns) * length(samplesizes))
 
    #storage for glmm results
    βMseResults_GLMM = ones(nsims * length(ns) * length(samplesizes))
    τMseResults_GLMM = ones(nsims * length(ns) * length(samplesizes))
-   ΣMseResults_GLMM = ones(nsims * length(ns) *  length(samplesizes))
+   θMseResults_GLMM = ones(nsims * length(ns) *  length(samplesizes))
    fittimes_GLMM = zeros(nsims * length(ns) * length(samplesizes))
 
    # solver = KNITRO.KnitroSolver(outlev=0)
@@ -47,11 +49,9 @@ function runtest()
 
     for t in 1:length(samplesizes)
         m = samplesizes[t]
-        gcs = Vector{GaussianCopulaVCObs{T}}(undef, m)
         for k in 1:length(ns)
             ni = ns[k] # number of observations per individual
-            V = [ones(ni, ni)]
-            Γ = Σtrue[1] * ones(ni, ni) + σ2 * Matrix(I, ni, ni)
+            Γ = θtrue[1] * ones(ni, ni)
             for j in 1:nsims
                 println("rep $j obs per person $ni samplesize $m")
 
@@ -63,26 +63,28 @@ function runtest()
                 Xstack = []
                 Ystack = []
                 # df = DataFrame(Y = Ystack, X1 = Xstack[:, 1], X2 = Xstack[:, 2], X3 = Xstack[:, 3], group = CategoricalArray(groupstack))
-                Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k)
-                X_samplesize = [randn(ni, p - 1) for i in 1:m]
+
+                gcs = Vector{GaussianCopulaVCObs{T}}(undef, m)
                 for i in 1:m
-                    # Random.seed!(1000000000 * t + 10000000 * j + 1000000 * k + i)
-                    X = [ones(ni) X_samplesize[i]]
+                    X = [ones(ni) randn(ni, p - 1)]
                     μ = X * βtrue
-                    # vecd = Vector{ContinuousUnivariateDistribution}(undef, length(μ))
-                    # for i in 1:length(μ)
-                    #     vecd[i] = Normal(μ[i], σ)
-                    # end
-                    # generate mvn response
-                    mvn_d = MvNormal(μ, Γ)
-                    y =  Float64.(rand(mvn_d))
-                    # add to data
+                    vecd = Vector{ContinuousUnivariateDistribution}(undef, length(μ))
+                    for i in 1:length(μ)
+                        vecd[i] = Normal(μ[i], σ)
+                    end
+                    Γ = θtrue[1] * ones(ni, ni)
+                    nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
+                    # simuate single vector y
+                    y = Vector{Float64}(undef, ni)
+                    res = Vector{Float64}(undef, ni)
+                    rand(nonmixed_multivariate_dist, y, res)
+                    V = [ones(ni, ni)]
                     gcs[i] = GaussianCopulaVCObs(y, X, V)
                     push!(Xstack, X)
                     push!(Ystack, y)
                 end
 
-                # form VarLmmModel
+                # form NBCopulaVCModel
                 gcm = GaussianCopulaVCModel(gcs);
                 fittime = NaN
 
@@ -93,31 +95,29 @@ function runtest()
                 df = (Y = Ystack, X2 = Xstack[:, 2], X3 = Xstack[:, 3], group = string.(groupstack))
                 form = @formula(Y ~ 1 + X2 + X3 + (1|group));
                 try
-                    fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, accept_after_max_steps = 3, limited_memory_max_history = 50, hessian_approximation = "limited-memory"))
+                    fittime = @elapsed GLMCopula.fit!(gcm)
                     @show fittime
                     @show gcm.β
-                    @show gcm.Σ
+                    @show gcm.θ
                     @show gcm.τ
                     @show gcm.∇β
-                    @show gcm.∇Σ
+                    @show gcm.∇θ
                     @show gcm.∇τ
                     loglikelihood!(gcm, true, true)
                     vcov!(gcm)
                     @show GLMCopula.confint(gcm)
                     # mse and time under our model
                     coverage!(gcm, trueparams, intervals, curcoverage)
-                    # mseβ, mseτ, mseΣ = MSE(gcm, βtrue, τtrue, Σtrue * inv(τtrue))
-                    mseβ = sum(abs2, gcm.β .- βtrue) / gcm.p
-                    mseτ = sum(abs2, inv(gcm.τ[1]) - σ2)
-                    mseΣ = sum(abs2, gcm.Σ[1] * inv(gcm.τ[1]) - Σtrue[1])
-                    # gcm.Σ * inv(gcm.τ[1])
+                    mseβ, mseτ, mseθ = MSE(gcm, βtrue, τtrue[1], θtrue)
                     @show mseβ
                     @show mseτ
-                    @show mseΣ
-                    @views copyto!(βτΣcoverage[:, currentind], curcoverage)
+                    @show mseθ
+                    #index = Int(nsims * length(ns) * (t - 1) + nsims * (k - 1) + j)
+                    # global currentind
+                    @views copyto!(βτθcoverage[:, currentind], curcoverage)
                     βMseResults[currentind] = mseβ
                     τMseResults[currentind] = mseτ
-                    ΣMseResults[currentind] = mseΣ
+                    θMseResults[currentind] = mseθ
                     fittimes[currentind] = fittime
                     # glmm
                     # fit glmm
@@ -131,23 +131,25 @@ function runtest()
                     level = 0.95
                     p = 3
                     # @show GLMM_CI_β = hcat(gm1.β + MixedModels.stderror(gm1) * quantile(Normal(), (1. - level) / 2.), gm1.β - MixedModels.stderror(gm1) * quantile(Normal(), (1. - level) / 2.))
-                    @show GLMM_mse = [sum(abs2, gm1.β .- βtrue) / p, sum(abs2, gm1.σ^2 .- σ2), sum(abs2, (gm1.σs[1][1]^2) .- Σtrue[1]) / 1]
+                    @show GLMM_mse = [sum(abs2, gm1.β .- βtrue) / p, sum(abs2, gm1.σ .- σ), sum(abs2, (gm1.σs[1][1]^2 / gm1.σ^2) - θtrue[1])]
                     # glmm
                     βMseResults_GLMM[currentind] = GLMM_mse[1]
                     τMseResults_GLMM[currentind] = GLMM_mse[2]
-                    ΣMseResults_GLMM[currentind] = GLMM_mse[3]
+                    θMseResults_GLMM[currentind] = GLMM_mse[3]
                     fittimes_GLMM[currentind] = fittime_GLMM
                     currentind += 1
                 catch
+                    # println("random seed is $(1000000000 * t + 10000000 * j + 1000000 * k ), rep $j obs per person $ni samplesize $m ")
+                    # ours
                     βMseResults[currentind] = NaN
                     τMseResults[currentind] = NaN
-                    ΣMseResults[currentind] = NaN
+                    θMseResults[currentind] = NaN
                     fittimes[currentind] = NaN
-                    @views copyto!(βτΣcoverage[:, currentind], NaN)
+                    @views copyto!(βτθcoverage[:, currentind], NaN)
                     # glmm
                     βMseResults_GLMM[currentind] = NaN
                     τMseResults[currentind] = NaN
-                    ΣMseResults_GLMM[currentind] = NaN
+                    θMseResults_GLMM[currentind] = NaN
                     fittimes_GLMM[currentind] = NaN
                     currentind += 1
                 end
@@ -159,17 +161,21 @@ function runtest()
     @show en - st #seconds
     @info "writing to file..."
     ftail = "normal$(nsims)reps_sim.csv"
-    writedlm("sim_glmm_vs_ours_random_int/normal_sim_lmm/mse_beta_multivariate_" * ftail, βMseResults, ',')
-    writedlm("sim_glmm_vs_ours_random_int/normal_sim_lmm/mse_Sigma_multivariate_" * ftail, ΣMseResults, ',')
-    writedlm("sim_glmm_vs_ours_random_int/normal_sim_lmm/mse_tau_multivariate_" * ftail, τMseResults, ',')
-    writedlm("sim_glmm_vs_ours_random_int/normal_sim_lmm/fittimes_multivariate_" * ftail, fittimes, ',')
 
-    writedlm("sim_glmm_vs_ours_random_int/normal_sim_lmm/beta_sigma_tau_coverage_" * ftail, βτΣcoverage, ',')
+    # make sure bernoulli_vc1 is a directory
+    isdir("gaussian_vc1") || mkdir("gaussian_vc1")
+
+    writedlm("gaussian_vc1/mse_beta_multivariate_" * ftail, βMseResults, ',')
+    writedlm("gaussian_vc1/mse_theta_multivariate_" * ftail, θMseResults, ',')
+    writedlm("gaussian_vc1/mse_tau_multivariate_" * ftail, τMseResults, ',')
+    writedlm("gaussian_vc1/fittimes_multivariate_" * ftail, fittimes, ',')
+
+    writedlm("gaussian_vc1/beta_theta_tau_coverage_" * ftail, βτθcoverage, ',')
 
     # glmm
-    writedlm("sim_glmm_vs_ours_random_int/normal_sim_lmm/mse_beta_GLMM_" * ftail, βMseResults_GLMM, ',')
-    writedlm("sim_glmm_vs_ours_random_int/normal_sim_lmm/mse_Sigma_GLMM_" * ftail, ΣMseResults_GLMM, ',')
-    writedlm("sim_glmm_vs_ours_random_int/normal_sim_lmm/mse_tau_GLMM_" * ftail, τMseResults_GLMM, ',')
-    writedlm("sim_glmm_vs_ours_random_int/normal_sim_lmm/fittimes_GLMM_" * ftail, fittimes_GLMM, ',')
+    writedlm("gaussian_vc1/mse_beta_GLMM_" * ftail, βMseResults_GLMM, ',')
+    writedlm("gaussian_vc1/mse_theta_GLMM_" * ftail, θMseResults_GLMM, ',')
+    writedlm("gaussian_vc1/mse_tau_GLMM_" * ftail, τMseResults_GLMM, ',')
+    writedlm("gaussian_vc1/fittimes_GLMM_" * ftail, fittimes_GLMM, ',')
 end
 runtest()
