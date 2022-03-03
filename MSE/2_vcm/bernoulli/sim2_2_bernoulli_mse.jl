@@ -150,18 +150,18 @@ function runtest()
     @info "writing to file..."
     ftail = "multivariate_bernoulli_vcm$(nsims)reps_sim.csv"
 
-    # make sure bernoulli_vc1 is a directory
-    isdir("bernoulli_vc2_1") || mkdir("bernoulli_vc2_1")
+    # make sure bernoulli_vc2_2 is a directory
+    isdir("bernoulli_vc2_2") || mkdir("bernoulli_vc2_2")
 
-    writedlm("bernoulli_vc2_1/mse_beta_" * ftail, βMseResults, ',')
-    writedlm("bernoulli_vc2_1/mse_theta_" * ftail, θMseResults, ',')
-    writedlm("bernoulli_vc2_1/fittimes_" * ftail, fittimes, ',')
+    writedlm("bernoulli_vc2_2/mse_beta_" * ftail, βMseResults, ',')
+    writedlm("bernoulli_vc2_2/mse_theta_" * ftail, θMseResults, ',')
+    writedlm("bernoulli_vc2_2/fittimes_" * ftail, fittimes, ',')
 
-    writedlm("bernoulli_vc2_1/beta_theta_coverage_" * ftail, βθcoverage, ',')
+    writedlm("bernoulli_vc2_2/beta_theta_coverage_" * ftail, βθcoverage, ',')
 
 #     # glmm
-    writedlm("bernoulli_vc2_1/mse_beta_GLMM_" * ftail, βMseResults_GLMM, ',')
-    writedlm("bernoulli_vc2_1/mse_theta_GLMM_" * ftail, θMseResults_GLMM, ',')
-    writedlm("bernoulli_vc2_1/fittimes_GLMM_" * ftail, fittimes_GLMM, ',')
+    writedlm("bernoulli_vc2_2/mse_beta_GLMM_" * ftail, βMseResults_GLMM, ',')
+    writedlm("bernoulli_vc2_2/mse_theta_GLMM_" * ftail, θMseResults_GLMM, ',')
+    writedlm("bernoulli_vc2_2/fittimes_GLMM_" * ftail, fittimes_GLMM, ',')
 end
 runtest()

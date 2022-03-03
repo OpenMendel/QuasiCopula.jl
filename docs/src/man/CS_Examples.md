@@ -1,8 +1,10 @@
 # Compound Symmetric (CS) Covariance 
 
-In this notebook we will fit our model with compound symmetric CS structured covariance on two example datasets provided in the gcmr and geepack R packages. For these examples we will use the CS parameterization of the covariance matrix $\mathbf{\Gamma},$ and estimate correlation parameter $\rho$ and dispersion parameter $\sigma^2$. 
+In this notebook we will fit our model with compound symmetric (CS) structured covariance on two example datasets provided in the gcmr and geepack R packages.
 
-For the $i^{th}$ cluster with cluster size $d_i$, $\mathbf{\Gamma_i}$ is given by 
+For these examples, we have $n$ independent clusters indexed by $i$. 
+
+Under the CS parameterization of the covariance matrix, the $i^{th}$ cluster with cluster size $d_i$, has covariance matrix $\mathbf{\Gamma_i}$ that takes the form: 
 
 $$\mathbf{\Gamma_i}(\rho, \sigma^2) =  \sigma^2 * \Big[ \rho * \mathbf{1_{d_i}} \mathbf{1_{d_i}}^t + (1 - \rho) * \mathbf{I_{d_i}} \Big]$$
 

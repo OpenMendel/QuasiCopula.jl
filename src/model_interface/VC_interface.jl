@@ -18,14 +18,14 @@ function VC_model(
     gcs = Vector{GaussianCopulaVCObs{Float64}}(undef, n)
     for (i, grp) in enumerate(groups)
         gidx = df[!, grouping] .== grp
-        ni = count(gidx)
+        di = count(gidx)
         Y = Float64.(df[gidx, y])
-        X = ones(ni, 1)
+        X = ones(di, 1)
         @inbounds for i in 1:length(covariates)
             U = Float64.(df[gidx, covariates[i]])
             X = hcat(X, U)
         end
-        V = [ones(ni, ni)]
+        V = [ones(di, di)]
         gcs[i] = GaussianCopulaVCObs(Y, X, V)
     end
     gcm = GaussianCopulaVCModel(gcs)
@@ -44,14 +44,14 @@ function VC_model(
     gcs = Vector{GLMCopulaVCObs{Float64, D, Link}}(undef, n)
     for (i, grp) in enumerate(groups)
         gidx = df[!, grouping] .== grp
-        ni = count(gidx)
+        di = count(gidx)
         Y = Float64.(df[gidx, y])
-        X = ones(ni, 1)
+        X = ones(di, 1)
         @inbounds for i in 1:length(covariates)
             U = Float64.(df[gidx, covariates[i]])
             X = hcat(X, U)
         end
-        V = [ones(ni, ni)]
+        V = [ones(di, di)]
         gcs[i] = GLMCopulaVCObs(Y, X, V, d, link)
     end
     gcm = GLMCopulaVCModel(gcs)
@@ -70,14 +70,14 @@ function VC_model(
     gcs = Vector{NBCopulaVCObs{Float64, D, Link}}(undef, n)
     for (i, grp) in enumerate(groups)
         gidx = df[!, grouping] .== grp
-        ni = count(gidx)
+        di = count(gidx)
         Y = Float64.(df[gidx, y])
-        X = ones(ni, 1)
+        X = ones(di, 1)
         @inbounds for i in 1:length(covariates)
             U = Float64.(df[gidx, covariates[i]])
             X = hcat(X, U)
         end
-        V = [ones(ni, ni)]
+        V = [ones(di, di)]
         gcs[i] = NBCopulaVCObs(Y, X, V, d, link)
     end
     gcm = NBCopulaVCModel(gcs)
@@ -104,9 +104,9 @@ function VC_model(
     gcs = Vector{GaussianCopulaVCObs{Float64}}(undef, n)
     for (i, grp) in enumerate(groups)
         gidx = df[!, grouping] .== grp
-        ni = count(gidx)
+        di = count(gidx)
         Y = Float64.(df[gidx, y])
-        X = ones(ni, 1)
+        X = ones(di, 1)
         @inbounds for i in 1:length(covariates)
             U = Float64.(df[gidx, covariates[i]])
             X = hcat(X, U)
@@ -130,9 +130,9 @@ function VC_model(
     gcs = Vector{GLMCopulaVCObs{Float64, D, Link}}(undef, n)
     for (i, grp) in enumerate(groups)
         gidx = df[!, grouping] .== grp
-        ni = count(gidx)
+        di = count(gidx)
         Y = Float64.(df[gidx, y])
-        X = ones(ni, 1)
+        X = ones(di, 1)
         @inbounds for i in 1:length(covariates)
             U = Float64.(df[gidx, covariates[i]])
             X = hcat(X, U)
@@ -156,9 +156,9 @@ function VC_model(
     gcs = Vector{NBCopulaVCObs{Float64, D, Link}}(undef, n)
     for (i, grp) in enumerate(groups)
         gidx = df[!, grouping] .== grp
-        ni = count(gidx)
+        di = count(gidx)
         Y = Float64.(df[gidx, y])
-        X = ones(ni, 1)
+        X = ones(di, 1)
         @inbounds for i in 1:length(covariates)
             U = Float64.(df[gidx, covariates[i]])
             X = hcat(X, U)

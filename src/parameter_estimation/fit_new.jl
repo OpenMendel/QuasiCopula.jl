@@ -7,13 +7,12 @@ should be provided in `gcm.β`, `gcm.θ`, this is for Poisson and Bernoulli base
 function fit!(
         gcm::Union{GLMCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}},
         solver=Ipopt.IpoptSolver(print_level=3, tol = 10^-6, max_iter = 100,
-                                    limited_memory_max_history = 50,  hessian_approximation = "limited-memory")
+                                    limited_memory_max_history = 20, hessian_approximation = "limited-memory")
     )  where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link, VD, VL}
     initialize_model!(gcm)
     npar = gcm.p + gcm.m
     optm = MathProgBase.NonlinearModel(solver)
     # set lower bounds and upper bounds of parameters
-    # diagonal entries of Cholesky factor L should be >= 0
     lb   = fill(-Inf, npar)
     ub   = fill(Inf, npar)
     offset = gcm.p + 1

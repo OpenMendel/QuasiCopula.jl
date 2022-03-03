@@ -1,8 +1,16 @@
 # VC Covariance
 
-In this notebook we will demonstrate how to fit a variance component model (VCM) with Poisson base on an example dataset, "Mmmec", from the `mlmRev` R package. We will access the data using the `RDatasets` Julia package. For these examples, the variance components parameterization of the covariance matrix for the $i^{th}$ cluster is given by $$\mathbf{\Gamma_i}(\boldsymbol{\theta}) = \sum_{k = 1}^m \theta_k * \mathbf{V_{ik}}$$ 
+In this notebook we will demonstrate how to fit a variance component model (VCM) with Poisson base on an example dataset, "Mmmec", from the `mlmRev` R package. We will access the data using the `RDatasets` Julia package. 
 
-where $m$ is the number of variance components, which are arranged in a vector $\boldsymbol{\theta} = \{\theta_1, ..., \theta_m \}$ for estimation. 
+For these examples, we have $n$ independent clusters indexed by $i$. 
+
+Under the VC parameterization of the covariance matrix, the $i^{th}$ cluster with cluster size $d_i$, has covariance matrix $\mathbf{\Gamma_i}$ that takes the form: 
+
+$$\mathbf{\Gamma_i}(\boldsymbol{\theta}) = \sum_{k = 1}^m \theta_k * \mathbf{V_{ik}}$$ 
+
+* where $m$ is the number of variance components, which are arranged in a vector $\boldsymbol{\theta} = \{\theta_1, ..., \theta_m \}$ for estimation
+
+* and $\mathbf{V_{ik}}, k \in [1, m]$ are symmetric, positive semi-definite matrices of dimension $d_i \times d_i$ provided by the user.
 
 ### Table of Contents:
 * [Example 1: Single VCM (mlmRev:Mmmec)](#Example-1:-Single-VCM-(Random-Intercept-Model))
@@ -178,7 +186,9 @@ Calculate the loglikelihood at the maximum
 
 Next we demonstrate how to fit the model with Poisson base and two variance components using the "Mmmec" dataset from the "mlmRev" package in R. 
 
-To specify our own positive semi-definite covariance matrices, we need to make sure the dimensions match that of each cluster size $d_i$. To illustrate, we will add an additional variance component proportional to the Identity matrix to the random intercept model above to help capture overdispersion. More explicitly, I will make $\mathbf{V_{i1}} = \mathbf{1_{d_i}} \mathbf{1_{d_i}}^t$ and $\mathbf{V_{i2}} = \mathbf{I_{d_i}}$ to parameterize $\mathbf{\Gamma_i}(\boldsymbol{\theta})$ follows:
+To specify our own positive semi-definite covariance matrices, we need to make sure the dimensions match that of each cluster size $d_i$, for each independent cluster $i \in [1, n]$. 
+
+To illustrate, we will add an additional variance component proportional to the Identity matrix to the random intercept model above to help capture overdispersion. More explicitly, I will make $\mathbf{V_{i1}} = \mathbf{1_{d_i}} \mathbf{1_{d_i}}^t$ and $\mathbf{V_{i2}} = \mathbf{I_{d_i}}$ to parameterize $\mathbf{\Gamma_i}(\boldsymbol{\theta})$ follows:
 
 $$\mathbf{\Gamma_i}(\boldsymbol{\theta}) = \theta_1 * \mathbf{1_{d_i}} \mathbf{1_{d_i}}^t + \theta_2 * \mathbf{I_{d_i}}$$
 
@@ -220,7 +230,7 @@ To form the model, we give it the following arguments:
 - outcome variable name of interest as a symbol
 - grouping variable name of interest as a symbol
 - covariate names of interest as a vector of symbols
-- Vector of Vector of PSD Covariance Matrices
+- Vector of length 'n' of Vectors of length 'm' of 'di x di' PSD Covariance Matrices
 - base distribution
 - link function
 
@@ -296,8 +306,3 @@ Calculate the loglikelihood at the maximum
 
     loglikelihood!(Poisson_2VC_model, false, false) = -5811.083441410488
 
-
-
-```julia
-
-```

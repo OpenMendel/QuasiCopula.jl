@@ -150,7 +150,7 @@ function runtest()
     @info "writing to file..."
     ftail = "multivariate_bernoulli_vcm$(nsims)reps_sim.csv"
 
-    # make sure bernoulli_vc1 is a directory
+    # make sure bernoulli_vc2_1 is a directory
     isdir("bernoulli_vc2_1") || mkdir("bernoulli_vc2_1")
 
     writedlm("bernoulli_vc2_1/mse_beta_" * ftail, βMseResults, ',')
