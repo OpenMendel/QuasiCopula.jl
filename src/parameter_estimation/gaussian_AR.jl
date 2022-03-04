@@ -117,9 +117,10 @@ struct GaussianCopulaARModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     storage_n::Vector{T}
     storage_m::Vector{T}
     storage_θ::Vector{T}
+    penalized::Bool
 end
 
-function GaussianCopulaARModel(gcs::Vector{GaussianCopulaARObs{T}}) where T <: BlasReal
+function GaussianCopulaARModel(gcs::Vector{GaussianCopulaARObs{T}}; penalized::Bool = false) where T <: BlasReal
     n, p = length(gcs), size(gcs[1].X, 2)
     β   = Vector{T}(undef, p)
     τ   = [1.0]
@@ -158,7 +159,7 @@ function GaussianCopulaARModel(gcs::Vector{GaussianCopulaARObs{T}}) where T <: B
     storage_θ = Vector{T}(undef, 1)
     GaussianCopulaARModel{T}(gcs, Ytotal, ntotal, p, β, τ, ρ, σ2, θ,
         ∇β, ∇τ, ∇ρ, ∇σ2, XtX, Hβ, Hτ, Hρ, Hσ2, Hρσ2, Hβσ2, Ainv, Aevec,  M, vcov, ψ,
-        TR, QF, storage_n, storage_m, storage_θ)
+        TR, QF, storage_n, storage_m, storage_θ, penalized)
 end
 
 """
@@ -423,7 +424,7 @@ function loglikelihood!(
     logl = zeros(Threads.nthreads())
     Threads.@threads for i in eachindex(gcm.data)
         @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
-         gcm.τ[1], gcm.ρ[1], gcm.σ2[1], needgrad, needhess)
+         gcm.τ[1], gcm.ρ[1], gcm.σ2[1], needgrad, needhess; penalized = gcm.penalized)
      end
      @inbounds for i in eachindex(gcm.data)
          if needgrad

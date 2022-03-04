@@ -12,7 +12,8 @@ function AR_model(
     grouping::Symbol,
     covariates::Vector{Symbol},
     d::D,
-    link::Link) where {D<:Normal, Link}
+    link::Link;
+    penalized::Bool = false) where {D<:Normal, Link}
     groups = unique(df[!, grouping])
     n = length(groups)
     gcs = Vector{GaussianCopulaARObs{Float64}}(undef, n)
@@ -27,7 +28,7 @@ function AR_model(
         end
         gcs[i] = GaussianCopulaARObs(Y, X)
     end
-    gcm = GaussianCopulaARModel(gcs);
+    gcm = GaussianCopulaARModel(gcs; penalized = penalized);
     return gcm
 end
 
@@ -37,7 +38,8 @@ function AR_model(
     grouping::Symbol,
     covariates::Vector{Symbol},
     d::D,
-    link::Link) where {D<:Union{Poisson, Bernoulli}, Link}
+    link::Link;
+    penalized::Bool = false) where {D<:Union{Poisson, Bernoulli}, Link}
     groups = unique(df[!, grouping])
     n = length(groups)
     gcs = Vector{GLMCopulaARObs{Float64, D, Link}}(undef, n)
@@ -52,7 +54,7 @@ function AR_model(
         end
         gcs[i] = GLMCopulaARObs(Y, X, d, link)
     end
-    gcm = GLMCopulaARModel(gcs);
+    gcm = GLMCopulaARModel(gcs; penalized = penalized);
     return gcm
 end
 
@@ -62,7 +64,8 @@ function AR_model(
     grouping::Symbol,
     covariates::Vector{Symbol},
     d::D,
-    link::Link) where {D<:NegativeBinomial, Link}
+    link::Link;
+    penalized::Bool = false) where {D<:NegativeBinomial, Link}
     groups = unique(df[!, grouping])
     n = length(groups)
     gcs = Vector{NBCopulaARObs{Float64, D, Link}}(undef, n)
@@ -77,6 +80,6 @@ function AR_model(
         end
         gcs[i] = NBCopulaARObs(Y, X, d, link)
     end
-    gcm = NBCopulaARModel(gcs);
+    gcm = NBCopulaARModel(gcs; penalized = penalized);
     return gcm
 end

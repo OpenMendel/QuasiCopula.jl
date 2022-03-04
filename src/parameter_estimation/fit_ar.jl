@@ -7,7 +7,8 @@ should be provided in `gcm.β`, `gcm.ρ`, `gcm.σ2`.
 """
 function fit!(
         gcm::GLMCopulaARModel,
-        solver=Ipopt.IpoptSolver(print_level = 3, max_iter = 100, tol = 10^-6, limited_memory_max_history = 20, hessian_approximation = "limited-memory")
+        solver=Ipopt.IpoptSolver(print_level = 3, max_iter = 100, tol = 10^-6,
+        limited_memory_max_history = 20, hessian_approximation = "limited-memory")
     )
     initialize_model!(gcm)
     npar = gcm.p + 2 # rho and sigma squared
@@ -45,7 +46,8 @@ should be provided in `gcm.β`, `gcm.ρ`, `gcm.σ2`.
 """
 function fit!(
         gcm::GLMCopulaCSModel,
-        solver=Ipopt.IpoptSolver(print_level = 3, max_iter = 100, tol = 10^-6, limited_memory_max_history = 20, hessian_approximation = "limited-memory")
+        solver=Ipopt.IpoptSolver(print_level = 3, max_iter = 100, tol = 10^-6,
+        limited_memory_max_history = 20, hessian_approximation = "limited-memory")
     )
     initialize_model!(gcm)
     npar = gcm.p + 2 # rho and sigma squared
