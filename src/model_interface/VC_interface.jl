@@ -2,9 +2,19 @@ export VC_model
 
 """
     VC_model(df, y, grouping, covariates, d, link)
-Form the variance component model (VCM) with named dataframe (df), outcome variable name of interest(y) as a symbol,
-grouping variable name of interest as a symbol (grouping), covariate names of interest as a vector of symbols (covariates),
-base distribution (d), and link function (link). By default this will form a random intercept model with V_i = ones(d_i, d_i)
+
+Form the variance component model (VCM) for regression with a random intercept covariance matrix and the specified base distribution (d) and link function (link).
+
+# Arguments
+- `df`: A named `DataFrame`
+- `y`: Ouctcome variable name of interest, specified as a `Symbol`.
+    This variable name must be present in `df`.
+- `grouping`: Grouping or Clustering variable name of interest, specified as a `Symbol`.
+    This variable name must be present in `df`.
+- `covariates`: Covariate names of interest as a vector of `Symbol`s.
+    Each variable name must be present in `df`.
+- `d`: Base `Distribution` of outcome from `Distributions.jl`.
+- `link`: Canonical `Link` function of the base distribution specified in `d`, from `GLM.jl`.
 """
 function VC_model(
     df::DataFrame,
@@ -86,10 +96,24 @@ end
 
 """
     VC_model(df, y, grouping, covariates, V, d, link)
-Form the variance component model (VCM) with named dataframe (df), outcome variable name of interest(y) as a symbol,
-grouping variable name of interest as a symbol (grouping), covariate names of interest as a vector of symbols (covariates),
-Vector of Vector of PSD Covariance Matrices (V),
-base distribution (d), and link function (link).
+
+Form the variance component model (VCM) for regression with a random intercept covariance matrix and the specified base distribution (d) and link function (link).
+
+# Arguments
+- `df`: A named `DataFrame`
+- `y`: Ouctcome variable name of interest, specified as a `Symbol`.
+    This variable name must be present in `df`.
+- `grouping`: Grouping or Clustering variable name of interest, specified as a `Symbol`.
+    This variable name must be present in `df`.
+- `covariates`: Covariate names of interest as a vector of `Symbol`s.
+    Each variable name must be present in `df`.
+- `V`: Vector of Vector of Positive Semi-Definite (PSD) Covariance Matrices. `V` is of length n, where n is the number of groups/clusters.
+    Each element of `V` is also a `Vector`, but of length m. Here m is the number of variance components.
+    Each element of `V` is a `Vector` of d_i x d_i PSD covariance matrices under the VCM framework,
+    where d_i is the cluster size of the ith cluster, which may vary for each cluster of observations i in [1, n].
+    Each of these dimensions must match that specified in `df`.
+- `d`: Base `Distribution` of outcome from `Distributions.jl`.
+- `link`: Canonical `Link` function of the base distribution specified in `d`, from `GLM.jl`.
 """
 function VC_model(
     df::DataFrame,

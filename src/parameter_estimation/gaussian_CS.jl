@@ -115,9 +115,10 @@ struct GaussianCopulaCSModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     storage_n::Vector{T}
     storage_m::Vector{T}
     storage_θ::Vector{T}
+    penalized::Bool
 end
 
-function GaussianCopulaCSModel(gcs::Vector{GaussianCopulaCSObs{T}}) where T <: BlasReal
+function GaussianCopulaCSModel(gcs::Vector{GaussianCopulaCSObs{T}}; penalized::Bool = false) where T <: BlasReal
     n, p = length(gcs), size(gcs[1].X, 2)
     β   = Vector{T}(undef, p)
     τ   = [1.0]
@@ -156,7 +157,7 @@ function GaussianCopulaCSModel(gcs::Vector{GaussianCopulaCSObs{T}}) where T <: B
     storage_θ = Vector{T}(undef, 1)
     GaussianCopulaCSModel{T}(gcs, Ytotal, ntotal, p, β, τ, ρ, σ2, θ,
         ∇β, ∇τ, ∇ρ, ∇σ2, XtX, Hβ, Hτ, Hρ, Hσ2, Hρσ2, Hβσ2, Ainv, Aevec,  M, vcov, ψ,
-        TR, QF, storage_n, storage_m, storage_θ)
+        TR, QF, storage_n, storage_m, storage_θ, penalized)
 end
 
 """
@@ -392,7 +393,6 @@ function loglikelihood!(
     needgrad::Bool = false,
     needhess::Bool = false
     ) where {T <: BlasReal}
-    logl = zero(T)
     if needgrad
         fill!(gcm.∇β, 0.0)
         fill!(gcm.∇τ, 0.0)
@@ -412,7 +412,7 @@ function loglikelihood!(
     logl = zeros(Threads.nthreads())
     Threads.@threads for i in eachindex(gcm.data)
         @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
-         gcm.τ[1], gcm.ρ[1], gcm.σ2[1], needgrad, needhess)
+         gcm.τ[1], gcm.ρ[1], gcm.σ2[1], needgrad, needhess; penalized = gcm.penalized)
      end
      @inbounds for i in eachindex(gcm.data)
          if needgrad
@@ -430,25 +430,6 @@ function loglikelihood!(
              gcm.Hβσ2 .+= gcm.data[i].Hβσ2
          end
      end
-    # @inbounds for i in eachindex(gcm.data)
-    #     logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.ρ[1], gcm.σ2[1], needgrad, needhess)
-    #     if needgrad
-    #         gcm.∇β .+= gcm.data[i].∇β
-    #         gcm.∇τ .+= gcm.data[i].∇τ
-    #         gcm.∇ρ .+= gcm.data[i].∇ρ
-    #         gcm.∇σ2 .+= gcm.data[i].∇σ2
-    #     end
-    #     if needhess
-    #         gcm.Hβ .+= gcm.data[i].Hβ
-    #         gcm.Hτ .+= gcm.data[i].Hτ
-    #         gcm.Hρ .+= gcm.data[i].Hρ
-    #         gcm.Hσ2 .+= gcm.data[i].Hσ2
-    #         gcm.Hρσ2 .+= gcm.data[i].Hρσ2
-    #         gcm.Hβσ2 .+= gcm.data[i].Hβσ2
-    #         # gcm.Hβρ .+= gcm.data[i].Hβρ
-    #     end
-    # end
     needhess && (gcm.Hβ .*= gcm.τ[1])
-    # logl
     return sum(logl)
 end

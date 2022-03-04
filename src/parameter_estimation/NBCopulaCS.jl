@@ -140,9 +140,10 @@ struct NBCopulaCSModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalua
     storage_θ::Vector{T}
     d::Vector{D}
     link::Vector{Link}
+    penalized::Bool
 end
 
-function NBCopulaCSModel(gcs::Vector{NBCopulaCSObs{T, D, Link}}) where {T <: BlasReal, D, Link}
+function NBCopulaCSModel(gcs::Vector{NBCopulaCSObs{T, D, Link}}; penalized::Bool = false) where {T <: BlasReal, D, Link}
     n, p = length(gcs), size(gcs[1].X, 2)
     β   = Vector{T}(undef, p)
     τ   = [one(T)]
@@ -186,7 +187,7 @@ function NBCopulaCSModel(gcs::Vector{NBCopulaCSObs{T, D, Link}}) where {T <: Bla
     storage_θ = Vector{T}(undef, 1)
     NBCopulaCSModel{T, D, Link}(gcs, Ytotal, ntotal, p, β, τ, ρ, σ2, θ, r,
         ∇β, ∇ρ, ∇σ2, ∇r, XtX, Hβ, Hρ, Hσ2, Hr, Hρσ2, Hβσ2, Ainv, Aevec,  M, vcov, ψ,
-        TR, QF, storage_n, storage_m, storage_θ, d, link)
+        TR, QF, storage_n, storage_m, storage_θ, d, link, penalized)
 end
 
 function loglikelihood!(
@@ -309,8 +310,8 @@ function loglikelihood!(
     end
     logl = zeros(Threads.nthreads())
     Threads.@threads for i in eachindex(gcm.data)
-        @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i],
-            gcm.β, gcm.ρ[1], gcm.σ2[1], gcm.r[1], needgrad, needhess)
+        @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
+        gcm.ρ[1], gcm.σ2[1], gcm.r[1], needgrad, needhess; penalized = gcm.penalized)
     end
     @inbounds for i in eachindex(gcm.data)
         if needgrad
@@ -325,7 +326,6 @@ function loglikelihood!(
             gcm.Hσ2 .+= gcm.data[i].Hσ2
             gcm.Hρσ2 .+= gcm.data[i].Hρσ2
             gcm.Hβσ2 .+= gcm.data[i].Hβσ2
-            # gcm.Hβρ .+= gcm.data[i].Hβρ
             gcm.Hr .+= gcm.data[i].Hr
         end
     end

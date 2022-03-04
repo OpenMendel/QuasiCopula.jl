@@ -129,9 +129,10 @@ struct GLMCopulaCSModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalu
     storage_θ::Vector{T}
     d::Vector{D}
     link::Vector{Link}
+    penalized::Bool
 end
 
-function GLMCopulaCSModel(gcs::Vector{GLMCopulaCSObs{T, D, Link}}) where {T <: BlasReal, D, Link}
+function GLMCopulaCSModel(gcs::Vector{GLMCopulaCSObs{T, D, Link}}; penalized::Bool = false) where {T <: BlasReal, D, Link}
     n, p = length(gcs), size(gcs[1].X, 2)
     β   = Vector{T}(undef, p)
     τ   = [1.0]
@@ -172,7 +173,7 @@ function GLMCopulaCSModel(gcs::Vector{GLMCopulaCSObs{T, D, Link}}) where {T <: B
     storage_θ = Vector{T}(undef, 1)
     GLMCopulaCSModel{T, D, Link}(gcs, Ytotal, ntotal, p, β, τ, ρ, σ2, θ,
         ∇β, ∇ρ, ∇σ2, XtX, Hβ, Hρ, Hσ2, Hρσ2, Hβσ2, Hβρ, Ainv, Aevec,  M, vcov, ψ,
-        TR, QF, storage_n, storage_m, storage_θ, d, link)
+        TR, QF, storage_n, storage_m, storage_θ, d, link, penalized)
 end
 
 # use ToeplitzMatrices
@@ -303,7 +304,6 @@ function loglikelihood!(
     needgrad::Bool = false,
     needhess::Bool = false
     )
-    logl = 0.0
     if needgrad
         fill!(gcm.∇β, 0.0)
         fill!(gcm.∇ρ, 0.0)
@@ -321,7 +321,7 @@ function loglikelihood!(
     logl = zeros(Threads.nthreads())
     Threads.@threads for i in eachindex(gcm.data)
         @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
-         gcm.ρ[1], gcm.σ2[1], needgrad, needhess)
+         gcm.ρ[1], gcm.σ2[1], needgrad, needhess; penalized = gcm.penalized)
      end
      @inbounds for i in eachindex(gcm.data)
          if needgrad
@@ -335,25 +335,7 @@ function loglikelihood!(
              gcm.Hσ2 .+= gcm.data[i].Hσ2
              gcm.Hρσ2 .+= gcm.data[i].Hρσ2
              gcm.Hβσ2 .+= gcm.data[i].Hβσ2
-             # gcm.Hβρ .+= gcm.data[i].Hβρ
          end
      end
-    # @inbounds for i in eachindex(gcm.data)
-    #     logl += loglikelihood!(gcm.data[i], gcm.β, gcm.ρ[1], gcm.σ2[1], needgrad, needhess)
-    #     if needgrad
-    #         gcm.∇β .+= gcm.data[i].∇β
-    #         gcm.∇ρ .+= gcm.data[i].∇ρ
-    #         gcm.∇σ2 .+= gcm.data[i].∇σ2
-    #     end
-    #     if needhess
-    #         gcm.Hβ .+= gcm.data[i].Hβ
-    #         gcm.Hρ .+= gcm.data[i].Hρ
-    #         gcm.Hσ2 .+= gcm.data[i].Hσ2
-    #         gcm.Hρσ2 .+= gcm.data[i].Hρσ2
-    #         gcm.Hβσ2 .+= gcm.data[i].Hβσ2
-    #         # gcm.Hβρ .+= gcm.data[i].Hβρ
-    #     end
-    # end
-    # logl
     return sum(logl)
 end

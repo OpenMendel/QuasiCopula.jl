@@ -1,4 +1,3 @@
-
 # API
 
 Documentation for `GLMCopua.jl`'s functions.
@@ -13,11 +12,12 @@ Pages = ["api.md"]
 
 ```@docs
 fit!
-init_β!
 ```
 
 ## Models
 
 ```@docs
-GLMCopulaVCModel
+AR_model
+CS_model
+VC_model
 ```
