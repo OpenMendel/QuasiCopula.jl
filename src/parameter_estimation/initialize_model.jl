@@ -238,36 +238,36 @@ end
 
 # # code inspired from https://github.com/JuliaStats/GLM.jl/blob/master/src/negbinfit.jl
 function initialize_model!(gcm::NBCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
+    
+    # initial guess for r = 1
+    fill!(gcm.r, 1)
 
-  # initial guess for r = 1
-  fill!(gcm.r, 1)
+    # fit a Poisson regression model to estimate μ, η, β, τ
+    println("Initializing NegBin r to Poisson regression values")
+    nsample = length(gcm.data)
+    gcsPoisson = Vector{GLMCopulaVCObs{T, Poisson{T}, LogLink}}(undef, nsample)
+    for (i, gc) in enumerate(gcm.data)
+        gcsPoisson[i] = GLMCopulaVCObs(gc.y, gc.X, gc.V, Poisson(), LogLink())
+    end
+    gcmPoisson = GLMCopulaVCModel(gcsPoisson)
+    initialize_model!(gcmPoisson)
+    copyto!(gcm.β, gcmPoisson.β)
 
-  # fit a Poisson regression model to estimate μ, η, β, τ
-  println("Initializing NegBin r to Poisson regression values")
-  nsample = length(gcm.data)
-  gcsPoisson = Vector{GLMCopulaVCObs{T, Poisson{T}, LogLink}}(undef, nsample)
-  for (i, gc) in enumerate(gcm.data)
-      gcsPoisson[i] = GLMCopulaVCObs(gc.y, gc.X, gc.V, Poisson(), LogLink())
-  end
-  gcmPoisson = GLMCopulaVCModel(gcsPoisson)
-  initialize_model!(gcmPoisson)
-  copyto!(gcm.β, gcmPoisson.β)
+    # update r using maximum likelihood with Newton's method
+    for gc in gcm.data
+        fill!(gcm.τ, 1.0)
+        fill!(gc.∇β, 0)
+        fill!(gc.Hβ, 0)
+        fill!(gc.varμ, 1)
+        fill!(gc.res, 0)
+    end
+    fill!(gcm.θ, 1) # initial guess for θ = variance component parameters
+    println("initializing r using Newton update")
+    GLMCopula.update_r!(gcm)
 
-      # update r using maximum likelihood with Newton's method
-      for gc in gcm.data
-          fill!(gcm.τ, 1.0)
-          fill!(gc.∇β, 0)
-          fill!(gc.Hβ, 0)
-          fill!(gc.varμ, 1)
-          fill!(gc.res, 0)
-      end
-      println("initializing r using Newton update")
-      GLMCopula.update_r!(gcm)
-
-  println("initializing variance parameters in VC model using MM-algorithm")
-  fill!(gcm.θ, 1)
-  update_θ!(gcm)
-  nothing
+    println("initializing variance parameters in VC model using MM-algorithm")
+    update_θ!(gcm)
+    nothing
 end
 
 function initialize_model!(gcm::NBCopulaCSModel{T, D, Link}) where {T <: BlasReal, D, Link}
