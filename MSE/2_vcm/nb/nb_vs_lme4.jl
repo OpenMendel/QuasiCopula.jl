@@ -3,6 +3,20 @@ using Random, Roots, SpecialFunctions
 using DataFrames, DelimitedFiles, Statistics
 using LinearAlgebra: BlasReal, copytri!
 
+# multi-threading results with this machine
+versioninfo()
+# Julia Version 1.6.2
+# Commit 1b93d53fc4 (2021-07-14 15:36 UTC)
+# Platform Info:
+#   OS: macOS (x86_64-apple-darwin18.7.0)
+#   CPU: Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+#   WORD_SIZE: 64
+#   LIBM: libopenlibm
+#   LLVM: libLLVM-11.0.1 (ORCJIT, skylake)
+
+BLAS.set_num_threads(1)
+Threads.nthreads()
+
 function __get_distribution(dist::Type{D}, μ, r) where D <: UnivariateDistribution
     return dist(r, μ)
 end
@@ -54,11 +68,16 @@ end
 
 # form NBCopulaVCModel
 gcm = NBCopulaVCModel(gcs);
-fittime = @elapsed GLMCopula.fit!(gcm, maxBlockIter=100, tol = 1e-6)
-@show fittime
+fittime = @elapsed GLMCopula.fit!(gcm)
+@show fittime # 2.102779285 seconds
 @show gcm.β
+#  0.0327383459879573
+ # 0.10609650659359642
+ # 0.02615804876903993
 @show gcm.θ
+#  0.007030476494226778
 @show gcm.r
+# 10.001819555075514
 @show gcm.∇β
 @show gcm.∇θ
 @show gcm.∇r
@@ -69,6 +88,9 @@ function get_CI(gcm)
     GLMCopula.confint(gcm)
 end
 get_CI(gcm)
+
+@time get_CI(gcm)
+# 0.04 seconds
 
 # form glmm
 Xstack = [vcat(Xstack...)][1]
@@ -86,16 +108,26 @@ R"""
     # Stop the clock
     proc.time() - ptm
 """
+#    user  system elapsed
+# 70.575   1.744  72.415
 
 ### Show estimates
 R"""
     m.nb
 """
+# Random effects:
+#  Groups Name        Std.Dev.
+#  group  (Intercept) 0.09233
+# Number of obs: 50000, groups:  group, 10000
+# Fixed Effects:
+# (Intercept)           X2           X3
+#     0.03214      0.10575      0.02603
 
 # Show estimated r from lme4: glmer.nb
 R"""
     getME(m.nb, "glmer.nb.theta")
 """
+# 10.14696
 
 ### Show confidence intervals from lme4: glmer.nb
 R"""
@@ -104,6 +136,8 @@ R"""
     # Stop the clock
     proc.time() - ptm
 """
+# user  system elapsed
+# 149.092   4.184 153.412
 
 # using glmmTMB
 R"""
@@ -113,16 +147,32 @@ R"""
     # Stop the clock
     proc.time() - ptm
 """
+# user  system elapsed
+# 101.985   0.997 103.195
 
 ### Show estimates
 R"""
     m.glmmtmb_nb
 """
+# Conditional model:
+#  Groups Name        Std.Dev.
+#  group  (Intercept) 0.08967
+#
+# Number of obs: 50000 / Conditional model: group, 10000
+#
+# Dispersion parameter for nbinom2 family (): 10.1
+#
+# Fixed Effects:
+#
+# Conditional model:
+# (Intercept)           X2           X3
+#     0.03276      0.10579      0.02604
 
 # Show estimated r from glmmTMB
 R"""
     sigma(m.glmmtmb_nb)
 """
+# 10.10115
 
 ### Show confidence intervals from glmmTMB
 R"""
@@ -131,3 +181,5 @@ R"""
     # Stop the clock
     proc.time() - ptm
 """
+# user  system elapsed
+# 0.512   0.032   0.547

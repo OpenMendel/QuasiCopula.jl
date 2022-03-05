@@ -255,43 +255,7 @@ function loglikelihood!(
   logl
 end
 
-function loglikelihood!(
-  gcm::NBCopulaVCModel{T, D, Link},
-  needgrad::Bool = false,
-  needhess::Bool = false
-  ) where {T <: BlasReal, D, Link}
-  logl = zero(T)
-  if needgrad
-      fill!(gcm.∇β, 0.0)
-      fill!(gcm.∇θ, 0.0)
-      fill!(gcm.∇r, 0.0)
-  end
-  if needhess
-      fill!(gcm.Hβ, 0.0)
-      fill!(gcm.Hθ, 0.0)
-      fill!(gcm.Hr, 0.0)
-  end
-  @inbounds for i in eachindex(gcm.data)
-      logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.θ, gcm.r[1], needgrad, needhess)
-      if needgrad
-          gcm.∇β .+= gcm.data[i].∇β
-          gcm.∇r .+= gcm.data[i].∇r
-      end
-      if needhess
-          gcm.Hβ .+= gcm.data[i].Hβ
-          gcm.Hr .+= gcm.data[i].Hr
-      end
-  end
-    if needgrad
-        gcm.∇θ .= update_∇θ!(gcm)
-    end
-    if needhess
-        gcm.Hθ .= update_Hθ!(gcm)
-    end
-  logl
-end
-
-# trying with Threads, but for some reason doesn't work for BLAS.set_num_threads(1)
+# unthreaded code
 # function loglikelihood!(
 #   gcm::NBCopulaVCModel{T, D, Link},
 #   needgrad::Bool = false,
@@ -308,12 +272,8 @@ end
 #       fill!(gcm.Hθ, 0.0)
 #       fill!(gcm.Hr, 0.0)
 #   end
-#   logl = zeros(Threads.nthreads())
-#   Threads.@threads for i in eachindex(gcm.data)
-#       @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
-#        gcm.τ[1], gcm.θ, gcm.r[1], needgrad, needhess)
-#    end
-#    @inbounds for i in eachindex(gcm.data)
+#   @inbounds for i in eachindex(gcm.data)
+#       logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.θ, gcm.r[1], needgrad, needhess)
 #       if needgrad
 #           gcm.∇β .+= gcm.data[i].∇β
 #           gcm.∇r .+= gcm.data[i].∇r
@@ -329,9 +289,50 @@ end
 #     if needhess
 #         gcm.Hθ .= update_Hθ!(gcm)
 #     end
-#   # logl
-#   return sum(logl)
+#   logl
 # end
+
+# trying with Threads
+function loglikelihood!(
+  gcm::NBCopulaVCModel{T, D, Link},
+  needgrad::Bool = false,
+  needhess::Bool = false
+  ) where {T <: BlasReal, D, Link}
+  logl = zero(T)
+  if needgrad
+      fill!(gcm.∇β, 0.0)
+      fill!(gcm.∇θ, 0.0)
+      fill!(gcm.∇r, 0.0)
+  end
+  if needhess
+      fill!(gcm.Hβ, 0.0)
+      fill!(gcm.Hθ, 0.0)
+      fill!(gcm.Hr, 0.0)
+  end
+  logl = zeros(Threads.nthreads())
+  Threads.@threads for i in eachindex(gcm.data)
+      @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
+       gcm.τ[1], gcm.θ, gcm.r[1], needgrad, needhess)
+   end
+   @inbounds for i in eachindex(gcm.data)
+      if needgrad
+          gcm.∇β .+= gcm.data[i].∇β
+          gcm.∇r .+= gcm.data[i].∇r
+      end
+      if needhess
+          gcm.Hβ .+= gcm.data[i].Hβ
+          gcm.Hr .+= gcm.data[i].Hr
+      end
+  end
+    if needgrad
+        gcm.∇θ .= update_∇θ!(gcm)
+    end
+    if needhess
+        gcm.Hθ .= update_Hθ!(gcm)
+    end
+  # logl
+  return sum(logl)
+end
 
 """
 1st derivative of loglikelihood of a sample with θ being the variance components
