@@ -95,7 +95,7 @@ function runtest()
                 df = (Y = Ystack, X2 = Xstack[:, 2], X3 = Xstack[:, 3], group = string.(groupstack))
                 form = @formula(Y ~ 1 + X2 + X3 + (1|group));
                 try
-                    fittime = @elapsed GLMCopula.fit!(gcm, tol = 1e-5, maxBlockIter = 50)
+                    fittime = @elapsed GLMCopula.fit!(gcm)
                     @show fittime
                     @show gcm.β
                     @show gcm.θ
