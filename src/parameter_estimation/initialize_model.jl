@@ -274,19 +274,19 @@ end
 function initialize_model!(
     gcm::NBCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
     println("initializing β using GLM.jl")
-    initialize_beta!(gcm)
+    initialize_beta!(gcm) # initialize beta using negative binomial glm from GLM.jl
     @show gcm.β
-    println("initializing r using Newton update")
-    fill!(gcm.r, 1)
-    GLMCopula.update_r!(gcm)
+    fill!(gcm.θ, 1.0)
     fill!(gcm.τ, 1.0)
     println("initializing variance components using MM-Algorithm")
-    fill!(gcm.θ, 1.0)
     update_θ!(gcm)
     if sum(gcm.θ) >= 20
       fill!(gcm.θ, 1.0)
     end
     @show gcm.θ
+    println("initializing r using Newton update")
+    fill!(gcm.r, 1)
+    GLMCopula.update_r!(gcm)
     nothing
 end
 
@@ -303,7 +303,7 @@ function initialize_model!(gcm::NBCopulaCSModel{T, D, Link}) where {T <: BlasRea
       gcsPoisson[i] = GLMCopulaCSObs(gc.y, gc.X, Poisson(), LogLink())
   end
   gcmPoisson = GLMCopulaCSModel(gcsPoisson)
-  initialize_model!(gcmPoisson)
+  initialize_model!(gcmPoisson) # initialize beta using poisson glm from GLM.jl
   copyto!(gcm.β, gcmPoisson.β)
   copyto!(gcm.σ2, gcmPoisson.σ2)
 
@@ -337,7 +337,7 @@ function initialize_model!(gcm::NBCopulaARModel{T, D, Link}) where {T <: BlasRea
       gcsPoisson[i] = GLMCopulaARObs(gc.y, gc.X, Poisson(), LogLink())
   end
   gcmPoisson = GLMCopulaARModel(gcsPoisson)
-  initialize_model!(gcmPoisson)
+  initialize_model!(gcmPoisson) # initialize beta using poisson glm from GLM.jl
   copyto!(gcm.β, gcmPoisson.β)
   copyto!(gcm.σ2, gcmPoisson.σ2)
 
