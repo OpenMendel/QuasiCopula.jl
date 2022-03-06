@@ -26,7 +26,7 @@ m = 1    # number of variance components
 # true parameter values
 Random.seed!(1234)
 βtrue = rand(Uniform(-0.2, 0.2), p_fixed)
-Σtrue = [0.01]
+θtrue = [0.01]
 rtrue = 10.0
 
 # #simulation parameters
@@ -41,7 +41,7 @@ T = Float64
 
 gcs = Vector{NBCopulaVCObs{T, D, Link}}(undef, samplesize)
 
-Γ = Σtrue[1] * ones(ni, ni) + 0.00000000000001 * Matrix(I, ni, ni)
+Γ = θtrue[1] * ones(ni, ni) + 0.00000000000001 * Matrix(I, ni, ni)
 a = collect(1:samplesize)
 group = [repeat([a[i]], ni) for i in 1:samplesize]
 groupstack = vcat(group...)
@@ -69,15 +69,15 @@ end
 # form NBCopulaVCModel
 gcm = NBCopulaVCModel(gcs);
 fittime = @elapsed GLMCopula.fit!(gcm)
-@show fittime # 2.102779285 seconds
+@show fittime # 1.768249684 seconds
 @show gcm.β
-#  0.0327383459879573
- # 0.10609650659359642
- # 0.02615804876903993
+# 0.032738347307332966
+# 0.10609650651774433
+# 0.026158048751589738
 @show gcm.θ
-#  0.007030476494226778
+#  0.00703047401415037
 @show gcm.r
-# 10.001819555075514
+# 10.001819287469104
 @show gcm.∇β
 @show gcm.∇θ
 @show gcm.∇r
@@ -90,7 +90,12 @@ end
 get_CI(gcm)
 
 @time get_CI(gcm)
-# 0.04 seconds
+# 0.045099 seconds
+# 0.0233753    0.0421014
+# 0.100997     0.111196
+# 0.0172389    0.0350772
+# 9.09354     10.9101
+# 0.00332143   0.0107395
 
 # form glmm
 Xstack = [vcat(Xstack...)][1]
