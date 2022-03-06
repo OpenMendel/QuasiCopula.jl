@@ -255,126 +255,46 @@ function loglikelihood!(
   logl
 end
 
-# unthreaded code
-# function loglikelihood!(
-#   gcm::NBCopulaVCModel{T, D, Link},
-#   needgrad::Bool = false,
-#   needhess::Bool = false
-#   ) where {T <: BlasReal, D, Link}
-#   logl = zero(T)
-#   if needgrad
-#       fill!(gcm.∇β, 0.0)
-#       fill!(gcm.∇θ, 0.0)
-#       fill!(gcm.∇r, 0.0)
-#   end
-#   if needhess
-#       fill!(gcm.Hβ, 0.0)
-#       fill!(gcm.Hθ, 0.0)
-#       fill!(gcm.Hr, 0.0)
-#   end
-#   @inbounds for i in eachindex(gcm.data)
-#       logl += loglikelihood!(gcm.data[i], gcm.β, gcm.τ[1], gcm.θ, gcm.r[1], needgrad, needhess)
-#       if needgrad
-#           gcm.∇β .+= gcm.data[i].∇β
-#           gcm.∇r .+= gcm.data[i].∇r
-#       end
-#       if needhess
-#           gcm.Hβ .+= gcm.data[i].Hβ
-#           gcm.Hr .+= gcm.data[i].Hr
-#       end
-#   end
-#     if needgrad
-#         gcm.∇θ .= update_∇θ!(gcm)
-#     end
-#     if needhess
-#         gcm.Hθ .= update_Hθ!(gcm)
-#     end
-#   logl
-# end
-
-# trying with Threads
 function loglikelihood!(
-  gcm::NBCopulaVCModel{T, D, Link},
-  needgrad::Bool = false,
-  needhess::Bool = false
-  ) where {T <: BlasReal, D, Link}
-  logl = zero(T)
-  if needgrad
-      fill!(gcm.∇β, 0.0)
-      fill!(gcm.∇θ, 0.0)
-      fill!(gcm.∇r, 0.0)
-  end
-  if needhess
-      fill!(gcm.Hβ, 0.0)
-      fill!(gcm.Hθ, 0.0)
-      fill!(gcm.Hr, 0.0)
-  end
-  logl = zeros(Threads.nthreads())
-  Threads.@threads for i in eachindex(gcm.data)
-      @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
-       gcm.τ[1], gcm.θ, gcm.r[1], needgrad, needhess)
-   end
-   @inbounds for i in eachindex(gcm.data)
-      if needgrad
-          gcm.∇β .+= gcm.data[i].∇β
-          gcm.∇r .+= gcm.data[i].∇r
-      end
-      if needhess
-          gcm.Hβ .+= gcm.data[i].Hβ
-          gcm.Hr .+= gcm.data[i].Hr
-      end
-  end
+    gcm::NBCopulaVCModel{T, D, Link},
+    needgrad::Bool = false,
+    needhess::Bool = false
+    ) where {T <: BlasReal, D, Link}
+    logl = zero(T)
+    if needgrad
+        fill!(gcm.∇β, 0.0)
+        fill!(gcm.∇θ, 0.0)
+        fill!(gcm.∇r, 0.0)
+    end
+    if needhess
+        fill!(gcm.Hβ, 0.0)
+        fill!(gcm.Hθ, 0.0)
+        fill!(gcm.Hr, 0.0)
+    end
+    logl = zeros(Threads.nthreads())
+    Threads.@threads for i in eachindex(gcm.data)
+        @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
+            gcm.τ[1], gcm.θ, gcm.r[1], needgrad, needhess)
+    end
+    @inbounds for i in eachindex(gcm.data)
+        if needgrad
+            gcm.∇β .+= gcm.data[i].∇β
+            gcm.∇r .+= gcm.data[i].∇r
+        end
+        if needhess
+            gcm.Hβ .+= gcm.data[i].Hβ
+            gcm.Hr .+= gcm.data[i].Hr
+        end
+    end
     if needgrad
         gcm.∇θ .= update_∇θ!(gcm)
     end
     if needhess
         gcm.Hθ .= update_Hθ!(gcm)
     end
-  # logl
-  return sum(logl)
+    # logl
+    return sum(logl)
 end
-
-# trying with Threads, but for some reason doesn't work for BLAS.set_num_threads(1)
-# function loglikelihood!(
-#   gcm::NBCopulaVCModel{T, D, Link},
-#   needgrad::Bool = false,
-#   needhess::Bool = false
-#   ) where {T <: BlasReal, D, Link}
-#   logl = zero(T)
-#   if needgrad
-#       fill!(gcm.∇β, 0.0)
-#       fill!(gcm.∇θ, 0.0)
-#       fill!(gcm.∇r, 0.0)
-#   end
-#   if needhess
-#       fill!(gcm.Hβ, 0.0)
-#       fill!(gcm.Hθ, 0.0)
-#       fill!(gcm.Hr, 0.0)
-#   end
-#   logl = zeros(Threads.nthreads())
-#   Threads.@threads for i in eachindex(gcm.data)
-#       @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
-#        gcm.τ[1], gcm.θ, gcm.r[1], needgrad, needhess)
-#    end
-#    @inbounds for i in eachindex(gcm.data)
-#       if needgrad
-#           gcm.∇β .+= gcm.data[i].∇β
-#           gcm.∇r .+= gcm.data[i].∇r
-#       end
-#       if needhess
-#           gcm.Hβ .+= gcm.data[i].Hβ
-#           gcm.Hr .+= gcm.data[i].Hr
-#       end
-#   end
-#     if needgrad
-#         gcm.∇θ .= update_∇θ!(gcm)
-#     end
-#     if needhess
-#         gcm.Hθ .= update_Hθ!(gcm)
-#     end
-#   # logl
-#   return sum(logl)
-# end
 
 """
 1st derivative of loglikelihood of a sample with θ being the variance components
@@ -387,13 +307,42 @@ function nb_first_derivative(gc::NBCopulaVCObs, θ::Vector{T}, r::Number) where 
         s += -(yi+r)/(μi+r) - log(μi+r) + 1 + log(r) + digamma(r+yi) - digamma(r)
     end
     # 3rd term of logl
+    # Γ = θ' * gc.V # Γ = a1*V1 + ... + am*Vm
+    # η = gc.η
+    # D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
+    # dD = Diagonal([-exp(2η[i]) / (2r^1.5 * sqrt(exp(η[i])*(exp(η[i])+r))) for i in 1:length(η)])
+    # dresid = -inv(D)*dD*resid
+    # s += resid'*Γ*dresid / (1 + 0.5resid'*Γ*resid)
     resid = gc.res # res = inv(D)(y - μ)
-    Γ = θ' * gc.V # Γ = a1*V1 + ... + am*Vm
+    Γ = gc.storage_nn # Γ = a1*V1 + ... + am*Vm
     η = gc.η
-    D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
-    dD = Diagonal([-exp(2η[i]) / (2r^1.5 * sqrt(exp(η[i])*(exp(η[i])+r))) for i in 1:length(η)])
-    dresid = -inv(D)*dD*resid
-    s += resid'*Γ*dresid / (1 + 0.5resid'*Γ*resid)
+    for j in 1:length(η)
+        gc.storage_n[j] = inv(sqrt(exp(η[j])*(exp(η[j])+r) / r)) # storage_n = inv(Di) = 1 / sqrt(var(yi))
+    end
+    for j in 1:length(η)
+        # storage_n2 = -inv(D) * d2D
+        gc.storage_n2[j] = -gc.storage_n[j] *
+            ((exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) +
+            (3exp(2η[j]) / (4r^(2.5)*sqrt(exp(η[j])*(exp(η[j])+r)))))
+    end
+    for j in 1:length(η)
+        # storage_n = inv(D) * dD
+        gc.storage_n[j] *= -exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r)))
+    end
+    for j in 1:length(η)
+        # storage_n2 = 2inv(D)*dD*inv(D)*dD -inv(D)*d2D
+        gc.storage_n2[j] += 2 * abs2(gc.storage_n[j])
+    end
+    gc.storage_n .*= -1.0 .* resid # storage_n = dr(β) = derivative of residuals
+    gc.storage_n2 .*= resid # storage_n2 = dr²(β) = 2nd derivative of residuals
+    mul!(gc.storage_n3, Γ, resid) # storage_n3 = Γ * resid
+    denom = 1 + 0.5 * dot(resid, gc.storage_n3)
+    mul!(gc.storage_n3, Γ, gc.storage_n) # storage_n3 = Γ * dresid
+    term1 = (dot(resid, gc.storage_n3) / denom)^2 # (resid'*Γ*dresid / denom)^2
+    term2 = dot(gc.storage_n, gc.storage_n3) / denom # term2 = dresid'*Γ*dresid / denom
+    mul!(gc.storage_n3, Γ, gc.storage_n2) # storage_n3 = Γ * d2resid
+    term3 = dot(resid, gc.storage_n3) / denom # term3 = resid'*Γ*d2resid / denom
+    s += -term1 + term2 + term3
     return s
 end
 
@@ -408,19 +357,49 @@ function nb_second_derivative(gc::NBCopulaVCObs, θ::Vector{T}, r::Number) where
         s += (yi+r)/(μi+r)^2 - 2/(μi+r) + 1/r + trigamma(r+yi) - trigamma(r)
     end
     # 3rd term of logl
-    Γ = θ' * gc.V # Γ = a1*V1 + ... + am*Vm
+    # Γ = θ' * gc.V # Γ = a1*V1 + ... + am*Vm
+    # η = gc.η
+    # D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
+    # dD = Diagonal([-exp(2η[i]) / (2r^1.5 * sqrt(exp(η[i])*(exp(η[i])+r))) for i in 1:length(η)])
+    # d2D = Diagonal([(exp(3η[i]) / (4r^1.5 * (exp(η[i])*(exp(η[i])+r))^(1.5))) +
+    #     (3exp(2η[i]) / (4r^(2.5)*sqrt(exp(η[i])*(exp(η[i])+r)))) for i in 1:length(η)])
+    # resid = gc.res
+    # dresid = -inv(D)*dD*resid
+    # d2resid = (2inv(D)*dD*inv(D)*dD - inv(D)*d2D)*resid
+    # denom = 1 + 0.5resid'*Γ*resid
+    # term1 = (resid'*Γ*dresid / denom)^2
+    # term2 = dresid'*Γ*dresid / denom
+    # term3 = resid'*Γ*d2resid / denom
+    # s += -term1 + term2 + term3
+    resid = gc.res # res = inv(D)(y - μ)
+    Γ = gc.storage_nn # Γ = a1*V1 + ... + am*Vm
     η = gc.η
-    D = Diagonal([sqrt(exp(η[j])*(exp(η[j])+r) / r) for j in 1:length(η)])
-    dD = Diagonal([-exp(2η[i]) / (2r^1.5 * sqrt(exp(η[i])*(exp(η[i])+r))) for i in 1:length(η)])
-    d2D = Diagonal([(exp(3η[i]) / (4r^1.5 * (exp(η[i])*(exp(η[i])+r))^(1.5))) +
-        (3exp(2η[i]) / (4r^(2.5)*sqrt(exp(η[i])*(exp(η[i])+r)))) for i in 1:length(η)])
-    resid = gc.res
-    dresid = -inv(D)*dD*resid
-    d2resid = (2inv(D)*dD*inv(D)*dD - inv(D)*d2D)*resid
-    denom = 1 + 0.5resid'*Γ*resid
-    term1 = (resid'*Γ*dresid / denom)^2
-    term2 = dresid'*Γ*dresid / denom
-    term3 = resid'*Γ*d2resid / denom
+    for j in 1:length(η)
+        gc.storage_n[j] = inv(sqrt(exp(η[j])*(exp(η[j])+r) / r)) # storage_n = inv(Di) = 1 / sqrt(var(yi))
+    end
+    for j in 1:length(η)
+        # storage_n2 = -inv(D) * d2D
+        gc.storage_n2[j] = -gc.storage_n[j] *
+            ((exp(3η[j]) / (4r^1.5 * (exp(η[j])*(exp(η[j])+r))^(1.5))) +
+            (3exp(2η[j]) / (4r^(2.5)*sqrt(exp(η[j])*(exp(η[j])+r)))))
+    end
+    for j in 1:length(η)
+        # storage_n = inv(D) * dD
+        gc.storage_n[j] *= -exp(2η[j]) / (2r^1.5 * sqrt(exp(η[j])*(exp(η[j])+r)))
+    end
+    for j in 1:length(η)
+        # storage_n2 = 2inv(D)*dD*inv(D)*dD -inv(D)*d2D
+        gc.storage_n2[j] += 2 * abs2(gc.storage_n[j])
+    end
+    gc.storage_n .*= -1.0 .* resid # storage_n = dr(β) = derivative of residuals
+    gc.storage_n2 .*= resid # storage_n2 = dr²(β) = 2nd derivative of residuals
+    mul!(gc.storage_n3, Γ, resid) # storage_n3 = Γ * resid
+    denom = 1 + 0.5 * dot(resid, gc.storage_n3)
+    mul!(gc.storage_n3, Γ, gc.storage_n) # storage_n3 = Γ * dresid
+    term1 = (dot(resid, gc.storage_n3) / denom)^2 # (resid'*Γ*dresid / denom)^2
+    term2 = dot(gc.storage_n, gc.storage_n3) / denom # term2 = dresid'*Γ*dresid / denom
+    mul!(gc.storage_n3, Γ, gc.storage_n2) # storage_n3 = Γ * d2resid
+    term3 = dot(resid, gc.storage_n3) / denom # term3 = resid'*Γ*d2resid / denom
     s += -term1 + term2 + term3
 
     return s
