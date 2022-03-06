@@ -88,9 +88,9 @@ function vcov!(gcm::NBCopulaVCModel{T, D, Link}) where {T <: BlasReal, D, Link}
     gcm.Ainv[    (p + 2):(p + 1 + m),     (p + 2):(p + 1 + m)] = gcm.Hθ
     fill!(gcm.M, 0.0)
     for obs in gcm.data
-        copyto!(gcm.ψ, 1, gcm.∇β)
-        copyto!(gcm.ψ, p + 1, gcm.∇r)
-        copyto!(gcm.ψ, p + 2, gcm.∇θ)
+        copyto!(gcm.ψ, 1, obs.∇β)
+        copyto!(gcm.ψ, p + 1, obs.∇r)
+        copyto!(gcm.ψ, p + 2, obs.∇θ)
         BLAS.syr!('U', T(1), gcm.ψ, gcm.M)
     end
     copytri!(gcm.M, 'U')
