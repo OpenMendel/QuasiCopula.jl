@@ -3,8 +3,8 @@ using Random, Roots, SpecialFunctions
 using DataFrames, DelimitedFiles, Statistics
 import StatsBase: sem
 
-# BLAS.set_num_threads(1)
-# Threads.nthreads()
+BLAS.set_num_threads(1)
+Threads.nthreads()
 
 p_fixed = 3    # number of fixed effects, including intercept
 m = 1    # number of variance components

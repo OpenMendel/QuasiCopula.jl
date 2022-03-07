@@ -69,7 +69,7 @@ end
 # form NBCopulaVCModel
 gcm = NBCopulaVCModel(gcs);
 fittime = @elapsed GLMCopula.fit!(gcm)
-@show fittime # 1.289347306 seconds
+@show fittime # 1.305019126 seconds
 @show gcm.β
 # 0.0327
 # 0.1061
@@ -90,7 +90,7 @@ end
 get_CI(gcm)
 
 @time get_CI(gcm)
-# 0.041964 seconds
+# 0.042579 seconds
 # 0.0281207   0.037356
 # 0.100997    0.111196
 # 0.0172389   0.0350772
@@ -221,4 +221,4 @@ R"""
     proc.time() - ptm
 """
 # user  system elapsed
-# 0.518   0.012   0.530 
+# 0.518   0.012   0.530
