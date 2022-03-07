@@ -69,15 +69,15 @@ end
 # form NBCopulaVCModel
 gcm = NBCopulaVCModel(gcs);
 fittime = @elapsed GLMCopula.fit!(gcm)
-@show fittime # 1.282725411 seconds
+@show fittime # 1.289347306 seconds
 @show gcm.β
-# 0.032738347307332966
-# 0.10609650651774433
-# 0.026158048751589738
+# 0.0327
+# 0.1061
+# 0.0262
 @show gcm.θ
-#  0.00703047401415037
+#  0.007
 @show gcm.r
-# 10.001819287469104
+# 10.002
 @show gcm.∇β
 @show gcm.∇θ
 @show gcm.∇r
@@ -90,12 +90,12 @@ end
 get_CI(gcm)
 
 @time get_CI(gcm)
-# 0.045099 seconds
-# 0.0233753    0.0421014
-# 0.100997     0.111196
-# 0.0172389    0.0350772
-# 9.09354     10.9101
-# 0.00332143   0.0107395
+# 0.041964 seconds
+# 0.0281207   0.037356
+# 0.100997    0.111196
+# 0.0172389   0.0350772
+# 9.09354    10.9101
+# 0.0033213   0.0107397
 
 # form glmm
 Xstack = [vcat(Xstack...)][1]
@@ -106,6 +106,12 @@ df = DataFrame(Y = Ystack, X2 = Xstack[:, 2], X3 = Xstack[:, 3], group = string.
 using RCall
 
 @rput df
+# precompile
+R"""
+    library("lme4")
+    m.nb <- glmer.nb(Y ~ 1 + X2 + X3 + (1|group), data = df, verbose = TRUE)
+"""
+# time the fit
 R"""
     library("lme4")
     ptm <- proc.time()
@@ -113,8 +119,8 @@ R"""
     # Stop the clock
     proc.time() - ptm
 """
-#    user  system elapsed
-# 70.575   1.744  72.415
+# user  system elapsed
+# 74.617   1.788  76.535
 
 ### Show estimates
 R"""
@@ -136,15 +142,32 @@ R"""
 
 ### Show confidence intervals from lme4: glmer.nb
 R"""
+    confint(m.nb)
+"""
+#                2.5 %     97.5 %
+# .sig01      0.04865489 0.12192888
+# (Intercept) 0.02226002 0.04192188
+# X2          0.09662966 0.11486875
+# X3          0.01700341 0.03505898
+
+# time confidence intervals
+R"""
     ptm <- proc.time()
     confint(m.nb)
     # Stop the clock
     proc.time() - ptm
 """
 # user  system elapsed
-# 149.092   4.184 153.412
+# 163.643   4.491 168.345
 
 # using glmmTMB
+# precompile
+R"""
+    library("glmmTMB")
+    m.glmmtmb_nb <- glmmTMB(Y ~ 1 + X2 + X3 + (1|group), data = df, family=nbinom2)
+"""
+
+# time the fit
 R"""
     library("glmmTMB")
     ptm <- proc.time()
@@ -153,7 +176,7 @@ R"""
     proc.time() - ptm
 """
 # user  system elapsed
-# 101.985   0.997 103.195
+# 102.792   0.839 103.765
 
 ### Show estimates
 R"""
@@ -181,10 +204,21 @@ R"""
 
 ### Show confidence intervals from glmmTMB
 R"""
+    confint(m.glmmtmb_nb, full = TRUE)
+"""
+#                                     2.5 %      97.5 %    Estimate
+# cond.(Intercept)               0.02290637  0.04261165  0.03275901
+# cond.X2                        0.09666585  0.11491162  0.10578874
+# cond.X3                        0.01701310  0.03507562  0.02604436
+# sigma                          8.64035445 11.80892546 10.10115348
+# group.cond.Std.Dev.(Intercept) 0.05832825  0.13786618  0.08967437
+
+# time confidence intervals
+R"""
     ptm <- proc.time()
     confint(m.glmmtmb_nb, full = TRUE)
     # Stop the clock
     proc.time() - ptm
 """
 # user  system elapsed
-# 0.512   0.032   0.547
+# 0.518   0.012   0.530 
