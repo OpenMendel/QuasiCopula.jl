@@ -98,7 +98,7 @@ We can form the AR(1) models for regression with following arguments:
 - `penalized`: Boolean to specify whether or not to add an L2 Ridge penalty on the variance parameter for the AR(1) structured covariance.
     One can put true (e.g. `penalized = true`) to add this penalty for numerical stability (default `penalized = false`).
 
-### Example 1: Intercept Only CS Model
+### Example 1: Intercept Only AR(1) Model
 
 We can form the AR(1) model with intercept only by excluding the `covariates` argument.
 
