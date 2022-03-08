@@ -1,4 +1,80 @@
 export VC_model
+"""
+    VC_model(df, y, grouping, d, link)
+
+Form the variance component model (VCM) for intercept only regression with a random intercept covariance matrix and the specified base distribution (d) and link function (link).
+
+# Arguments
+- `df`: A named `DataFrame`
+- `y`: Ouctcome variable name of interest, specified as a `Symbol`.
+    This variable name must be present in `df`.
+- `grouping`: Grouping or Clustering variable name of interest, specified as a `Symbol`.
+    This variable name must be present in `df`.
+- `d`: Base `Distribution` of outcome from `Distributions.jl`.
+- `link`: Canonical `Link` function of the base distribution specified in `d`, from `GLM.jl`.
+"""
+function VC_model(
+    df::DataFrame,
+    y::Symbol,
+    grouping::Symbol,
+    d::D,
+    link::Link) where {D<:Normal, Link}
+    groups = unique(df[!, grouping])
+    n = length(groups)
+    gcs = Vector{GaussianCopulaVCObs{Float64}}(undef, n)
+    for (i, grp) in enumerate(groups)
+        gidx = df[!, grouping] .== grp
+        di = count(gidx)
+        Y = Float64.(df[gidx, y])
+        X = ones(di, 1)
+        V = [ones(di, di)]
+        gcs[i] = GaussianCopulaVCObs(Y, X, V)
+    end
+    gcm = GaussianCopulaVCModel(gcs)
+    return gcm
+end
+
+function VC_model(
+    df::DataFrame,
+    y::Symbol,
+    grouping::Symbol,
+    d::D,
+    link::Link) where {D<:Union{Poisson, Bernoulli}, Link}
+    groups = unique(df[!, grouping])
+    n = length(groups)
+    gcs = Vector{GLMCopulaVCObs{Float64, D, Link}}(undef, n)
+    for (i, grp) in enumerate(groups)
+        gidx = df[!, grouping] .== grp
+        di = count(gidx)
+        Y = Float64.(df[gidx, y])
+        X = ones(di, 1)
+        V = [ones(di, di)]
+        gcs[i] = GLMCopulaVCObs(Y, X, V, d, link)
+    end
+    gcm = GLMCopulaVCModel(gcs)
+    return gcm
+end
+
+function VC_model(
+    df::DataFrame,
+    y::Symbol,
+    grouping::Symbol,
+    d::D,
+    link::Link) where {D<:NegativeBinomial, Link}
+    groups = unique(df[!, grouping])
+    n = length(groups)
+    gcs = Vector{NBCopulaVCObs{Float64, D, Link}}(undef, n)
+    for (i, grp) in enumerate(groups)
+        gidx = df[!, grouping] .== grp
+        di = count(gidx)
+        Y = Float64.(df[gidx, y])
+        X = ones(di, 1)
+        V = [ones(di, di)]
+        gcs[i] = NBCopulaVCObs(Y, X, V, d, link)
+    end
+    gcm = NBCopulaVCModel(gcs)
+    return gcm
+end
 
 """
     VC_model(df, y, grouping, covariates, d, link)

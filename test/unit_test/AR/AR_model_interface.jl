@@ -27,6 +27,11 @@ Poisson_AR_model_penalized = AR_model(df, y, grouping, covariates, d, link; pena
 @test typeof(Poisson_AR_model_penalized) == GLMCopulaARModel{Float64, Poisson{Float64}, LogLink}
 @test Poisson_AR_model_penalized.penalized == true
 
+# intercept only model
+Poisson_AR_model_intercept_only = CS_model(df, y, grouping, d, link);
+# check if default to intercept only
+@test sum(Poisson_AR_model_intercept_only.data[1].X) == Poisson_AR_model_intercept_only.data[1].n
+
 #### nb ####
 d = NegativeBinomial()
 link = LogLink()
@@ -41,6 +46,11 @@ nb_AR_model_penalized = AR_model(df, y, grouping, covariates, d, link; penalized
 @test typeof(nb_AR_model_penalized) == NBCopulaARModel{Float64, NegativeBinomial{Float64}, LogLink}
 @test nb_AR_model_penalized.penalized == true
 
+# intercept only model
+nb_AR_model_intercept_only = CS_model(df, y, grouping, d, link);
+# check if default to intercept only
+@test sum(nb_AR_model_intercept_only.data[1].X) == nb_AR_model_intercept_only.data[1].n
+
 #### gaussian ####
 d = Normal()
 link = IdentityLink()
@@ -54,3 +64,8 @@ gaussian_AR_model_penalized = AR_model(df, y, grouping, covariates, d, link; pen
 
 @test typeof(gaussian_AR_model_penalized) == GaussianCopulaARModel{Float64}
 @test gaussian_AR_model_penalized.penalized == true
+
+# intercept only model
+gaussian_AR_model_intercept_only = CS_model(df, y, grouping, d, link);
+# check if default to intercept only
+@test sum(gaussian_AR_model_intercept_only.data[1].X) == gaussian_AR_model_intercept_only.data[1].n

@@ -39,6 +39,11 @@ Poisson_2VC_model = VC_model(df, y, grouping, covariates, V, d, link);
 @test typeof(Poisson_2VC_model) == GLMCopulaVCModel{Float64, Poisson{Float64}, LogLink}
 @test length(Poisson_2VC_model.data[1].V) == 2
 
+# intercept only model
+Poisson_VC_model_intercept_only = VC_model(df, y, grouping, d, link);
+# check if default to intercept only
+@test sum(Poisson_VC_model_intercept_only.data[1].X) == Poisson_VC_model_intercept_only.data[1].n
+
 #### nb ####
 d = NegativeBinomial()
 link = LogLink()
@@ -53,6 +58,11 @@ nb_2VC_model = VC_model(df, y, grouping, covariates, V, d, link);
 @test typeof(nb_2VC_model) == NBCopulaVCModel{Float64, NegativeBinomial{Float64}, LogLink}
 @test length(nb_2VC_model.data[1].V) == 2
 
+# intercept only model
+nb_VC_model_intercept_only = VC_model(df, y, grouping, d, link);
+# check if default to intercept only
+@test sum(nb_VC_model_intercept_only.data[1].X) == nb_VC_model_intercept_only.data[1].n
+
 #### gaussian ####
 d = Normal()
 link = IdentityLink()
@@ -66,3 +76,8 @@ gaussian_VC_model = VC_model(df, y, grouping, covariates, d, link);
 gaussian_2VC_model = VC_model(df, y, grouping, covariates, V, d, link);
 @test typeof(gaussian_2VC_model) == GaussianCopulaVCModel{Float64}
 @test length(gaussian_2VC_model.data[1].V) == 2
+
+# intercept only model
+gaussian_VC_model_intercept_only = VC_model(df, y, grouping, d, link);
+# check if default to intercept only
+@test sum(gaussian_VC_model_intercept_only.data[1].X) == gaussian_VC_model_intercept_only.data[1].n

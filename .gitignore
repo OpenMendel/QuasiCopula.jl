@@ -7,3 +7,4 @@ deps/deps.jl
 *-checkpoint.ipynb
 
 docs/build
+test/real_example_datasets
