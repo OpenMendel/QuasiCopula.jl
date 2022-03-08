@@ -1,9 +1,15 @@
 export ◺
 """
-    fit!(gcm::GLMCopulaARModel)
+    fit!(gcm::GLMCopulaARModel, solver=Ipopt.IpoptSolver)
 
-Fit an `GLMCopulaVCModel` object by MLE using a nonlinear programming solver. Start point
-should be provided in `gcm.β`, `gcm.ρ`, `gcm.σ2`.
+Fit an `GLMCopulaARModel` object by MLE using a nonlinear programming solver.
+This is for Poisson and Bernoulli base distributions with no additional base distribution parameters than the mean.
+Start point should be provided in `gcm.β`, `gcm.ρ`, `gcm.σ2`.
+
+# Arguments
+- `gcm`: A `GLMCopulaARModel` model object.
+- `solver`: Specified solver to use. By default we use IPOPT with 100 quas-newton iterations with convergence tolerance 10^-6.
+    (default `solver = Ipopt.IpoptSolver(print_level=3, max_iter = 100, tol = 10^-6, limited_memory_max_history = 20, hessian_approximation = "limited-memory")`)
 """
 function fit!(
         gcm::GLMCopulaARModel,
@@ -34,15 +40,19 @@ function fit!(
     # update parameters and refresh gradient
     optimpar_to_modelpar!(gcm, MathProgBase.getsolution(optm))
     loglikelihood!(gcm, true, false)
-    # gcm
-    return optm
 end
 
 """
-    fit!(gcm::GLMCopulaCSModel)
+    fit!(gcm::GLMCopulaCSModel, solver=Ipopt.IpoptSolver)
 
-Fit an `GLMCopulaCSModel` object by MLE using a nonlinear programming solver. Start point
-should be provided in `gcm.β`, `gcm.ρ`, `gcm.σ2`.
+Fit an `GLMCopulaCSModel` object by MLE using a nonlinear programming solver.
+This is for Poisson and Bernoulli base distributions with no additional base distribution parameters than the mean.
+Start point should be provided in `gcm.β`, `gcm.ρ`, `gcm.σ2`.
+
+# Arguments
+- `gcm`: A `GLMCopulaCSModel` model object.
+- `solver`: Specified solver to use. By default we use IPOPT with 100 quas-newton iterations with convergence tolerance 10^-6.
+    (default `solver = Ipopt.IpoptSolver(print_level=3, max_iter = 100, tol = 10^-6, limited_memory_max_history = 20, hessian_approximation = "limited-memory")`)
 """
 function fit!(
         gcm::GLMCopulaCSModel,
@@ -76,8 +86,6 @@ function fit!(
     # update parameters and refresh gradient
     optimpar_to_modelpar!(gcm, MathProgBase.getsolution(optm))
     loglikelihood!(gcm, true, false)
-    # gcm
-    return optm
 end
 
 """

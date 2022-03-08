@@ -70,7 +70,7 @@ for i in 1:samplesize
 end
 
 # form model
-gcm = NBCopulaCSModel(gcs);
+gcm = NBCopulaCSModel(gcs)
 # precompile
 println("precompiling NB CS fit")
 gcm2 = deepcopy(gcm);

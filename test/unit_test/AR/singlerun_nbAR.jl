@@ -50,9 +50,6 @@ X_samplesize = [randn(ni, p_fixed - 1) for i in 1:samplesize]
 
 for i in 1:samplesize
     X = [ones(ni) X_samplesize[i]]
-    # X = [ones(ni) randn(ni, p - 1)]
-    # X = ones(ni, 1)
-    # y = Float64.(Y_nsample[i])
     η = X * βtrue
     μ = exp.(η)
     p = rtrue ./ (μ .+ rtrue)
@@ -70,7 +67,7 @@ for i in 1:samplesize
 end
 
 # form model
-gcm = NBCopulaARModel(gcs);
+gcm = NBCopulaARModel(gcs)
 # precompile
 println("precompiling NB AR fit")
 gcm2 = deepcopy(gcm);

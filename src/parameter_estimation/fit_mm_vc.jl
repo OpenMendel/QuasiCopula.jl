@@ -1,4 +1,4 @@
-function fit2!(
+function fitmm!(
     gcm::GLMCopulaVCModel,
     solver=Ipopt.IpoptSolver(print_level=0)
     )

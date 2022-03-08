@@ -68,7 +68,7 @@ for i in 1:samplesize
 end
 
 # form model
-gcm = GLMCopulaCSModel(gcs);
+gcm = GLMCopulaCSModel(gcs)
 # precompile
 println("precompiling Poisson CS fit")
 gcm2 = deepcopy(gcm);

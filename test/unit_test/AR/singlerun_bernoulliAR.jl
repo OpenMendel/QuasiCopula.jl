@@ -67,14 +67,13 @@ for i in 1:samplesize
 end
 
 # form model
-gcm = GLMCopulaARModel(gcs);
+gcm = GLMCopulaARModel(gcs)
 # precompile
 println("precompiling Bernoulli AR fit")
 gcm2 = deepcopy(gcm);
 GLMCopula.fit!(gcm2, IpoptSolver(print_level = 0, max_iter = 20));
 
-fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, limited_memory_max_history = 50, warm_start_init_point="yes", accept_after_max_steps = 4, hessian_approximation = "limited-memory"))
-# fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-5, hessian_approximation = "limited-memory"))
+fittime = @elapsed GLMCopula.fit!(gcm)
 @show fittime
 @show gcm.β
 @show gcm.σ2
@@ -83,9 +82,8 @@ fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 1
 @show gcm.∇σ2
 @show gcm.∇ρ
 
-loglikelihood!(gcm, true, true)
-vcov!(gcm)
-@show GLMCopula.confint(gcm)
+@test logl(gcm) == loglikelihood!(gcm, false, false)
+@show get_CI(gcm)
 
 # mse and time under our model
 mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)

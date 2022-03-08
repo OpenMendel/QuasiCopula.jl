@@ -1,8 +1,14 @@
 """
-    fit!(gcm::GLMCopulaVCModel, solver=Ipopt.IpoptSolver(print_level=5))
+    fit!(gcm::Union{GLMCopulaVCModel, Poisson_Bernoulli_VCModel}, solver=Ipopt.IpoptSolver(print_level=5))
 
-Fit an `GLMCopulaVCModel` object by MLE using a nonlinear programming solver. Start point
-should be provided in `gcm.β`, `gcm.θ`, this is for Poisson and Bernoulli base with no additional parameters than the mean.
+Fit a `GLMCopulaVCModel` or `Poisson_Bernoulli_VCModel` model object by MLE using a nonlinear programming solver.
+This is for Poisson and Bernoulli base distributions or a mixture of the two with no additional base distribution parameters than the mean.
+Start point should be provided in `gcm.β`, `gcm.θ`.
+
+# Arguments
+- `gcm`: A `GLMCopulaVCModel` model object.
+- `solver`: Specified solver to use. By default we use IPOPT with 100 quas-newton iterations with convergence tolerance 10^-6.
+    (default `solver = Ipopt.IpoptSolver(print_level=3, max_iter = 100, tol = 10^-6, limited_memory_max_history = 20, hessian_approximation = "limited-memory")`)
 """
 function fit!(
         gcm::Union{GLMCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}},
@@ -32,8 +38,6 @@ function fit!(
     # update parameters and refresh gradient
     optimpar_to_modelpar!(gcm, MathProgBase.getsolution(optm))
     loglikelihood!(gcm, true, false)
-    # gcm
-    return optm
 end
 
 """

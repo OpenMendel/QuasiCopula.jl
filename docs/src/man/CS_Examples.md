@@ -1,18 +1,17 @@
-# Compound Symmetric (CS) Covariance 
+# Compound Symmetric (CS) Covariance
 
-In this notebook we will fit our model with compound symmetric (CS) structured covariance on two example datasets provided in the gcmr and geepack R packages.
+In this notebook we will show how to form the quasi-copula model with Bernoulli base distribution, Logit Link function and compound symmetric (CS) structured covariance on the `respiratory` dataset provided in the `geepack` R package. 
+
+### Table of Contents:
+* [Example 1: Intercept Only CS Model](#Example-1:-Intercept-Only-CS-Model)
+* [Example 2: CS Model with Covariates](#Example-2:-CS-Model-with-Covariates)
+* [Example 3: CS Model with Covariates + L2 Penalty (optional)](#Example-3:-CS-Model-with-Covariates-L2-penalty-(optional))
 
 For these examples, we have $n$ independent clusters indexed by $i$. 
 
 Under the CS parameterization of the covariance matrix, the $i^{th}$ cluster with cluster size $d_i$, has covariance matrix $\mathbf{\Gamma_i}$ that takes the form: 
 
 $$\mathbf{\Gamma_i}(\rho, \sigma^2) =  \sigma^2 * \Big[ \rho * \mathbf{1_{d_i}} \mathbf{1_{d_i}}^t + (1 - \rho) * \mathbf{I_{d_i}} \Big]$$
-
-### Table of Contents:
-* [Example 1: Poisson CS (gcmr:Epilepsy)](#Example-1:-Poisson-CS)
-* [Example 2: Bernoulli CS (geepack:Respiratory)](#Example-2:-Bernoulli-CS)
-
-    note: For the dispersion parameter, we can an L2 penalty to the loglikelihood to keep the estimates from going off to infinity. This notebook presents results with the unpenalized fit.
 
 
 ```julia
@@ -31,148 +30,8 @@ versioninfo()
 
 
 ```julia
-using CSV, DataFrames, GLMCopula, LinearAlgebra, GLM, RCall, RData, RDatasets
+using CSV, DataFrames, GLMCopula, LinearAlgebra, GLM, RCall
 ```
-
-## Example 1: Poisson CS
-
-We first demonstrate how to fit the model with Poisson base and CS covariance on the "epilepsy" dataset from the "gcmr" package in R.
-
-
-```julia
-R"""
-    library("gcmr")
-    data("epilepsy", package = "gcmr")
-"""
-@rget epilepsy;
-```
-
-    ┌ Warning: RCall.jl: Warning: package ‘gcmr’ was built under R version 4.0.2
-    └ @ RCall /Users/sarahji/.julia/packages/RCall/6kphM/src/io.jl:172
-
-
-Let's take a preview of the first 10 lines of the epilepsy dataset.
-
-
-```julia
-@show epilepsy[1:10, :];
-```
-
-    epilepsy[1:10, :] = 10×6 DataFrame
-     Row │ id     age    trt    counts  time     visit
-         │ Int64  Int64  Int64  Int64   Float64  Float64
-    ─────┼───────────────────────────────────────────────
-       1 │     1     31      0      11      8.0      0.0
-       2 │     1     31      0       5      2.0      1.0
-       3 │     1     31      0       3      2.0      1.0
-       4 │     1     31      0       3      2.0      1.0
-       5 │     1     31      0       3      2.0      1.0
-       6 │     2     30      0      11      8.0      0.0
-       7 │     2     30      0       3      2.0      1.0
-       8 │     2     30      0       5      2.0      1.0
-       9 │     2     30      0       3      2.0      1.0
-      10 │     2     30      0       3      2.0      1.0
-
-
-To form the model, we give it the following arguments:
-
-- named dataframe
-- outcome variable name of interest as a symbol
-- grouping variable name of interest as a symbol
-- covariate names of interest as a vector of symbols
-- base distribution
-- link function
-
-
-
-```julia
-df = epilepsy
-y = :counts
-grouping = :id
-covariates = [:visit, :trt]
-d = Poisson()
-link = LogLink()
-
-Poisson_CS_model = CS_model(df, y, grouping, covariates, d, link);
-```
-
-Fit the model. By default, we limit the maximum number of Quasi-Newton iterations to 100, and set the convergence tolerance to $10^{-6}.$ 
-
-
-```julia
-GLMCopula.fit!(Poisson_CS_model);
-```
-
-    initializing β using Newton's Algorithm under Independence Assumption
-    initializing σ2 and ρ using method of moments
-    
-    ******************************************************************************
-    This program contains Ipopt, a library for large-scale nonlinear optimization.
-     Ipopt is released as open source code under the Eclipse Public License (EPL).
-             For more information visit https://github.com/coin-or/Ipopt
-    ******************************************************************************
-    
-    Total number of variables............................:        5
-                         variables with only lower bounds:        1
-                    variables with lower and upper bounds:        1
-                         variables with only upper bounds:        0
-    Total number of equality constraints.................:        0
-    Total number of inequality constraints...............:        0
-            inequality constraints with only lower bounds:        0
-       inequality constraints with lower and upper bounds:        0
-            inequality constraints with only upper bounds:        0
-    
-    
-    Number of Iterations....: 92
-    
-                                       (scaled)                 (unscaled)
-    Objective...............:   2.1695813266189330e+03    2.1695813266189330e+03
-    Dual infeasibility......:   9.1969454274476448e-09    9.1969454274476448e-09
-    Constraint violation....:   0.0000000000000000e+00    0.0000000000000000e+00
-    Complementarity.........:   9.9999999999999994e-12    9.9999999999999994e-12
-    Overall NLP error.......:   9.1969454274476448e-09    9.1969454274476448e-09
-    
-    
-    Number of objective function evaluations             = 379
-    Number of objective gradient evaluations             = 93
-    Number of equality constraint evaluations            = 0
-    Number of inequality constraint evaluations          = 0
-    Number of equality constraint Jacobian evaluations   = 0
-    Number of inequality constraint Jacobian evaluations = 0
-    Number of Lagrangian Hessian evaluations             = 0
-    Total CPU secs in IPOPT (w/o function evaluations)   =      0.591
-    Total CPU secs in NLP function evaluations           =      0.022
-    
-    EXIT: Optimal Solution Found.
-
-
-We can take a look at the MLE's
-
-
-```julia
-@show Poisson_CS_model.β
-@show Poisson_CS_model.σ2
-@show Poisson_CS_model.ρ;
-```
-
-    Poisson_CS_model.β = [3.479229893235856, -1.3137359424301136, -0.05223916238672295]
-    Poisson_CS_model.σ2 = [133560.55732336888]
-    Poisson_CS_model.ρ = [0.9101785804195232]
-
-
-Calculate the loglikelihood at the maximum
-
-
-```julia
-@show loglikelihood!(Poisson_CS_model, false, false);
-```
-
-    loglikelihood!(Poisson_CS_model, false, false) = -2169.581326618933
-
-
-## Example 2: Bernoulli CS
-
-We will next demo how to fit the model with Bernoulli base and CS covariance on the "respiratory" dataset from the "geepack" package. 
 
 
 ```julia
@@ -207,28 +66,102 @@ Let's take a preview of the first 10 lines of the respiratory dataset in long fo
       10 │      1      2  P      M        28         0      2        0
 
 
-To form the model, we give it the following arguments:
+## Forming the Models
 
-- named dataframe
-- outcome variable name of interest as a symbol
-- grouping variable name of interest as a symbol
-- covariate names of interest as a vector of symbols
-- base distribution
-- link function
+We can form the CS model for regression with following arguments:
+
+##### Arguments
+- `df`: A named `DataFrame`
+- `y`: Ouctcome variable name of interest, specified as a `Symbol`.
+    This variable name must be present in `df`.
+- `grouping`: Grouping or Clustering variable name of interest, specified as a `Symbol`.
+    This variable name must be present in `df`.
+- `covariates`: Covariate names of interest as a vector of `Symbol`s.
+    Each variable name must be present in `df`.
+- `d`: Base `Distribution` of outcome from `Distributions.jl`.
+- `link`: Canonical `Link` function of the base distribution specified in `d`, from `GLM.jl`.
+
+##### Optional Arguments
+- `penalized`: Boolean to specify whether or not to add an L2 Ridge penalty on the variance parameter for the AR(1) structured covariance.
+    One can put true (e.g. `penalized = true`) to add this penalty for numerical stability (default `penalized = false`).
+
+### Example 1: Intercept Only CS Model
+
+We can form the CS model with intercept only by excluding the `covariates` argument.
 
 
 ```julia
 df = respiratory_df
 y = :outcome
 grouping = :id
-covariates = [:center, :age, :baseline]
 d = Bernoulli()
 link = LogitLink()
 
-Bernoulli_CS_model = CS_model(df, y, grouping, covariates, d, link);
+Bernoulli_CS_model = CS_model(df, y, grouping, d, link)
 ```
 
-Fit the model. By default, we limit the maximum number of Quasi-Newton iterations to 100, and set the convergence tolerance to $10^{-6}.$ 
+
+
+
+    Quasi-Copula Compound Symmetric CS Model
+      * base distribution: Bernoulli
+      * link function: LogitLink
+      * number of clusters: 56
+      * cluster size min, max: 4, 8
+      * number of fixed effects: 1
+
+
+
+
+### Example 2: CS Model with Covariates
+
+We can form the CS model with covariates by including the `covariates` argument.
+
+
+```julia
+covariates = [:center, :age, :baseline]
+
+Bernoulli_CS_model = CS_model(df, y, grouping, covariates, d, link)
+```
+
+
+
+
+    Quasi-Copula Compound Symmetric CS Model
+      * base distribution: Bernoulli
+      * link function: LogitLink
+      * number of clusters: 56
+      * cluster size min, max: 4, 8
+      * number of fixed effects: 4
+
+
+
+
+### Example 3: CS Model with Covariates + L2 penalty (optional)
+
+We can form the same CS model from Example 2 with the optional argument for adding the L2 penalty on the variance parameter in the CS parameterization of Gamma.
+
+
+```julia
+Bernoulli_CS_model = CS_model(df, y, grouping, covariates, d, link; penalized = true)
+```
+
+
+
+
+    Quasi-Copula Compound Symmetric CS Model
+      * base distribution: Bernoulli
+      * link function: LogitLink
+      * number of clusters: 56
+      * cluster size min, max: 4, 8
+      * number of fixed effects: 4
+      * L2 ridge penalty on CS variance parameter: true
+
+
+
+## Fitting the model
+
+Let's show how to fit the model on the model from example 3. By default, we limit the maximum number of Quasi-Newton iterations to 100, and set the convergence tolerance to $10^{-6}.$ 
 
 
 ```julia
@@ -236,7 +169,13 @@ GLMCopula.fit!(Bernoulli_CS_model);
 ```
 
     initializing β using Newton's Algorithm under Independence Assumption
-    initializing σ2 and ρ using method of moments
+    
+    ******************************************************************************
+    This program contains Ipopt, a library for large-scale nonlinear optimization.
+     Ipopt is released as open source code under the Eclipse Public License (EPL).
+             For more information visit https://github.com/coin-or/Ipopt
+    ******************************************************************************
+    
     Total number of variables............................:        6
                          variables with only lower bounds:        1
                     variables with lower and upper bounds:        1
@@ -251,22 +190,22 @@ GLMCopula.fit!(Bernoulli_CS_model);
     Number of Iterations....: 23
     
                                        (scaled)                 (unscaled)
-    Objective...............:   2.4900152024121172e+02    2.4900152024121172e+02
-    Dual infeasibility......:   8.6271114696501172e-08    8.6271114696501172e-08
+    Objective...............:   2.5027875108223640e+02    2.5027875108223640e+02
+    Dual infeasibility......:   4.5418531868790524e-07    4.5418531868790524e-07
     Constraint violation....:   0.0000000000000000e+00    0.0000000000000000e+00
-    Complementarity.........:   9.9999999999999962e-12    9.9999999999999962e-12
-    Overall NLP error.......:   8.6271114696501172e-08    8.6271114696501172e-08
+    Complementarity.........:   1.0000038536138807e-11    1.0000038536138807e-11
+    Overall NLP error.......:   4.5418531868790524e-07    4.5418531868790524e-07
     
     
-    Number of objective function evaluations             = 42
+    Number of objective function evaluations             = 39
     Number of objective gradient evaluations             = 24
     Number of equality constraint evaluations            = 0
     Number of inequality constraint evaluations          = 0
     Number of equality constraint Jacobian evaluations   = 0
     Number of inequality constraint Jacobian evaluations = 0
     Number of Lagrangian Hessian evaluations             = 0
-    Total CPU secs in IPOPT (w/o function evaluations)   =      0.110
-    Total CPU secs in NLP function evaluations           =      0.008
+    Total CPU secs in IPOPT (w/o function evaluations)   =     11.928
+    Total CPU secs in NLP function evaluations           =      0.009
     
     EXIT: Optimal Solution Found.
 
@@ -280,17 +219,41 @@ We can take a look at the MLE's
 @show Bernoulli_CS_model.ρ;
 ```
 
-    Bernoulli_CS_model.β = [-0.8073560276241856, 0.855351387584879, -0.02782175669676549, 2.070277949288066]
-    Bernoulli_CS_model.σ2 = [0.3524227966855694]
-    Bernoulli_CS_model.ρ = [0.8734724574644481]
+    Bernoulli_CS_model.β = [-0.834645421736292, 0.8091668556560436, -0.024759691500116324, 1.9286662077720407]
+    Bernoulli_CS_model.σ2 = [0.1703805055662562]
+    Bernoulli_CS_model.ρ = [1.0]
 
 
 Calculate the loglikelihood at the maximum
 
 
 ```julia
-@show loglikelihood!(Bernoulli_CS_model, false, false);
+logl(Bernoulli_CS_model)
 ```
 
-    loglikelihood!(Bernoulli_CS_model, false, false) = -249.00152024121172
+
+
+
+    -250.2787511004698
+
+
+
+Get asymptotic confidence intervals at the MLE's
+
+
+```julia
+get_CI(Bernoulli_CS_model)
+```
+
+
+
+
+    6×2 Matrix{Float64}:
+     -1.07019    -0.599097
+      0.771294    0.847039
+     -0.0339459  -0.0155735
+      1.81842     2.03892
+      0.46641     1.53359
+     -0.743613    1.08437
+
 

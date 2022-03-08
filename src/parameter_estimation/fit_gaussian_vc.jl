@@ -1,8 +1,13 @@
 """
-    fit_quasi!(gcm::GaussianCopulaVCModel, solver=Ipopt.IpoptSolver(print_level=5))
+    fit_quasi!(gcm::GaussianCopulaVCModel, solver=Ipopt.IpoptSolver)
 
 Fit an `GaussianCopulaVCModel` object by MLE using a nonlinear programming solver. Start point
 should be provided in `gcm.β`, `gcm.θ`, `gcm.τ` this is for Normal base.
+
+# Arguments
+- `gcm`: A `GaussianCopulaVCModel` model object.
+- `solver`: Specified solver to use. By default we use IPOPT with 100 quas-newton iterations with convergence tolerance 10^-6.
+    (default `solver = Ipopt.IpoptSolver(print_level=3, max_iter = 100, tol = 10^-6, limited_memory_max_history = 20, warm_start_init_point="yes", hessian_approximation = "limited-memory")`)
 """
 function fit!(
         gcm::GaussianCopulaVCModel,

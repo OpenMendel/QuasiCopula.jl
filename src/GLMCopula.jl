@@ -6,7 +6,7 @@ using SpecialFunctions, Random
 using FFTW
 @reexport using Ipopt
 @reexport using NLopt
-
+import Base: show
 export fit!, update_θ_jensen!, init_β!, initialize_model!, loglikelihood!, standardize_res!, std_res_differential!
 export update_res!, update_θ!
 export update_∇θ!, update_Hθ! # update gradient and hessian of variance components
@@ -28,10 +28,10 @@ include("parameter_estimation/GLM_AR.jl")
 include("generate_random_deviates/discrete_rand.jl")
 include("generate_random_deviates/continuous_rand.jl")
 include("generate_random_deviates/multivariate_rand.jl")
+include("parameter_estimation/update_sigma_and_residuals.jl")
 include("parameter_estimation/initialize_model.jl")
 include("parameter_estimation/component_loglikelihood.jl")
 include("parameter_estimation/gradient_hessian.jl")
-include("parameter_estimation/update_sigma_and_residuals.jl")
 include("parameter_estimation/fit_glm_ar_cs.jl")
 include("parameter_estimation/fit_gaussian_ar_cs.jl")
 include("parameter_estimation/fit_glm_vc.jl")
@@ -41,4 +41,5 @@ include("parameter_estimation/fit_gaussian_vc.jl")
 include("model_interface/AR_interface.jl")
 include("model_interface/CS_interface.jl")
 include("model_interface/VC_interface.jl")
+include("model_interface/show_io.jl")
 end # module

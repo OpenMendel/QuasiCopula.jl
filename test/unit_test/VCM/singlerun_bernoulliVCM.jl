@@ -49,7 +49,7 @@ for i in 1:samplesize
     gcs[i] = GLMCopulaVCObs(y, X, V, d, link)
 end
 
-gcm = GLMCopulaVCModel(gcs);
+gcm = GLMCopulaVCModel(gcs)
 # precompile
 println("precompiling Bernoulli VCM fit")
 gcm2 = deepcopy(gcm);
@@ -62,9 +62,9 @@ fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 1
 @show gcm.∇β
 @show gcm.∇θ
 
-loglikelihood!(gcm, true, true)
-vcov!(gcm)
-@show GLMCopula.confint(gcm)
+@test logl(gcm) == loglikelihood!(gcm, false, false)
+@show get_CI(gcm)
+
 # mse and time under our model
 mseβ, mseθ = MSE(gcm, βtrue, θtrue)
 @show mseβ

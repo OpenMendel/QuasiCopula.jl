@@ -1,4 +1,47 @@
 """
+    initialize_beta!(gcm{Poisson_Bernoulli_VCModel})
+
+Initialize the linear regression parameters `β` using GLM.jl
+"""
+function initialize_beta!(gcm::Poisson_Bernoulli_VCModel{T, VD, VL}) where {T <: BlasReal, VD, VL}
+    # form df
+    Xstack = []
+    Y1stack = zeros(length(gcm.data))
+    Y2stack = zeros(length(gcm.data))
+    @inbounds for i in 1:length(gcm.data)
+        push!(Xstack, gcm.data[i].X[1, 1:Integer((gcm.p)/2)])
+        Y1stack[i] = gcm.data[i].y[1]
+        Y2stack[i] = gcm.data[i].y[2]
+    end
+    X = vcat(transpose(Xstack)...)
+
+    poisson_glm = GLM.glm(X, Y1stack, gcm.vecd[1][1], gcm.veclink[1][1])
+    bernoulli_glm = GLM.glm(X, Y2stack, gcm.vecd[1][2], gcm.veclink[1][2])
+    copyto!(gcm.β, [poisson_glm.pp.beta0; bernoulli_glm.pp.beta0])
+    nothing
+end
+
+"""
+    initialize_beta!(gcm{GLMCopulaVCModel})
+
+Initialize the linear regression parameters `β` using GLM.jl
+"""
+function initialize_beta!(gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, GLMCopulaCSModel{T, D, Link}, NBCopulaVCModel{T, D, Link}}) where {T <: BlasReal, D, Link}
+    # form df
+    Xstack = []
+    Ystack = []
+    @inbounds for i in 1:length(gcm.data)
+        push!(Xstack, gcm.data[i].X)
+        push!(Ystack, gcm.data[i].y)
+    end
+    Xstack = [vcat(Xstack...)][1]
+    Ystack = [vcat(Ystack...)][1]
+    fit_glm = GLM.glm(Xstack, Ystack, gcm.d[1], gcm.link[1])
+    copyto!(gcm.β, fit_glm.pp.beta0)
+    nothing
+end
+
+"""
     initialize_model!(gcm)
 
 Initialize the linear regression parameters `β` using Newton's Algorithm under Independence Assumption, update variance components using MM-Algorithm.
@@ -46,45 +89,34 @@ function initialize_model!(
 end
 
 """
-    initialize_beta!(gcm{Poisson_Bernoulli_VCModel})
-
-Initialize the linear regression parameters `β` using GLM.jl
+    initialize_model!(gcm)
+Initialize the linear regression parameters `β` and `τ=σ0^{-2}` by the least
+squares solution.
 """
-function initialize_beta!(gcm::Poisson_Bernoulli_VCModel{T, VD, VL}) where {T <: BlasReal, VD, VL}
-    # form df
-    Xstack = []
-    Y1stack = zeros(length(gcm.data))
-    Y2stack = zeros(length(gcm.data))
-    @inbounds for i in 1:length(gcm.data)
-        push!(Xstack, gcm.data[i].X[1, 1:Integer((gcm.p)/2)])
-        Y1stack[i] = gcm.data[i].y[1]
-        Y2stack[i] = gcm.data[i].y[2]
+function initialize_model!(
+    gcm::GaussianCopulaVCModel{T}
+    ) where T <: BlasReal
+    # accumulate sufficient statistics X'y
+    xty = zeros(T, gcm.p)
+    for i in eachindex(gcm.data)
+        BLAS.gemv!('T', one(T), gcm.data[i].X, gcm.data[i].y, one(T), xty)
     end
-    X = vcat(transpose(Xstack)...)
-
-    poisson_glm = GLM.glm(X, Y1stack, gcm.vecd[1][1], gcm.veclink[1][1])
-    bernoulli_glm = GLM.glm(X, Y2stack, gcm.vecd[1][2], gcm.veclink[1][2])
-    copyto!(gcm.β, [poisson_glm.pp.beta0; bernoulli_glm.pp.beta0])
-    nothing
-end
-
-"""
-    initialize_beta!(gcm{GLMCopulaVCModel})
-
-Initialize the linear regression parameters `β` using GLM.jl
-"""
-function initialize_beta!(gcm::Union{GLMCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, GLMCopulaCSModel{T, D, Link}, NBCopulaVCModel{T, D, Link}}) where {T <: BlasReal, D, Link}
-    # form df
-    Xstack = []
-    Ystack = []
-    @inbounds for i in 1:length(gcm.data)
-        push!(Xstack, gcm.data[i].X)
-        push!(Ystack, gcm.data[i].y)
+    # least square solution for β
+    ldiv!(gcm.β, cholesky(Symmetric(gcm.XtX)), xty)
+    @show gcm.β
+    # accumulate residual sum of squares
+    rss = zero(T)
+    for i in eachindex(gcm.data)
+        update_res!(gcm.data[i], gcm.β)
+        rss += abs2(norm(gcm.data[i].res))
     end
-    Xstack = [vcat(Xstack...)][1]
-    Ystack = [vcat(Ystack...)][1]
-    fit_glm = GLM.glm(Xstack, Ystack, gcm.d[1], gcm.link[1])
-    copyto!(gcm.β, fit_glm.pp.beta0)
+    println("initializing dispersion using residual sum of squares")
+    gcm.τ[1] = gcm.ntotal / rss
+    @show gcm.τ
+    println("initializing variance components using MM-Algorithm")
+    fill!(gcm.θ, 1.0)
+    update_θ!(gcm)
+    @show gcm.θ
     nothing
 end
 

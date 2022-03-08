@@ -69,7 +69,7 @@ for i in 1:samplesize
 end
 
 # form model
-gcm = GLMCopulaARModel(gcs);
+gcm = GLMCopulaARModel(gcs)
 # precompile
 println("precompiling Poisson AR fit")
 gcm2 = deepcopy(gcm);

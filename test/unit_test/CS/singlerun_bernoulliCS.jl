@@ -69,7 +69,7 @@ for i in 1:samplesize
 end
 
 # form model
-gcm = GLMCopulaCSModel(gcs);
+gcm = GLMCopulaCSModel(gcs)
 # precompile
 println("precompiling Bernoulli CS fit")
 gcm2 = deepcopy(gcm);
@@ -84,13 +84,13 @@ fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 1
 @show gcm.∇σ2
 @show gcm.∇ρ
 
-loglikelihood!(gcm, true, true)
-vcov!(gcm)
+@test logl(gcm) == loglikelihood!(gcm, false, false)
+@show get_CI(gcm)
+
 mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
 @show mseβ
 @show mseσ2
 @show mseρ
-@show GLMCopula.confint(gcm)
 
 using Test
 @test mseβ < 0.01

@@ -1,4 +1,4 @@
-export vcov!, coef, stderror, confint, MSE, coverage!
+export vcov!, coef, stderror, confint, MSE, coverage!, logl, get_CI
 """
     vcov!(gcm::GLMCopulaVCModel)
 Calculate the asymptotic covariance of the parameters,
@@ -411,4 +411,26 @@ function coverage!(gcm::Union{GLMCopulaVCModel, GaussianCopulaVCModel, GLMCopula
     map!((val, lb, ub) -> val >= lb &&
         val <= ub, curcoverage, trueparams, lbs, ubs)
     return curcoverage
+end
+
+"""
+    logl(gcm)
+Get the loglikelihood at the given parameters in gcm, at the optimal solution.
+
+# Arguments
+- `gcm`: One of `GaussianCopulaVCModel`, `GaussianCopulaARModel`, `GaussianCopulaCSModel`, `GLMCopulaVCModel`, `GLMCopulaARModel`, `GLMCopulaCSModel`, `NBCopulaVCModel`, `NBCopulaARModel`, `NBCopulaCSModel` or `Poisson_Bernoulli_VCModel` model objects.
+"""
+logl(gcm) = loglikelihood!(gcm, false, false)
+
+"""
+    get_CI(gcm)
+Get the confidence interval of all parameters, at the optimal solution.
+
+# Arguments
+- `gcm`: One of `GaussianCopulaVCModel`, `GaussianCopulaARModel`, `GaussianCopulaCSModel`, `GLMCopulaVCModel`, `GLMCopulaARModel`, `GLMCopulaCSModel`, `NBCopulaVCModel`, `NBCopulaARModel`, `NBCopulaCSModel` or `Poisson_Bernoulli_VCModel` model objects.
+"""
+function get_CI(gcm)
+    loglikelihood!(gcm, true, true)
+    vcov!(gcm)
+    GLMCopula.confint(gcm)
 end

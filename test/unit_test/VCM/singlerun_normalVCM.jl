@@ -47,7 +47,7 @@ for i in 1:samplesize
 end
 
 # form VarLmmModel
-gcm = GaussianCopulaVCModel(gcs);
+gcm = GaussianCopulaVCModel(gcs)
 # precompile
 println("precompiling Gaussian VCM fit")
 gcm2 = deepcopy(gcm);

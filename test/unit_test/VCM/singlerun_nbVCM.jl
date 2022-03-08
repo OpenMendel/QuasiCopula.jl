@@ -49,7 +49,7 @@ for i in 1:samplesize
 end
 
 # form VarLmmModel
-gcm = NBCopulaVCModel(gcs);
+gcm = NBCopulaVCModel(gcs)
 # precompile
 println("precompiling NB VCM fit")
 gcm2 = deepcopy(gcm);

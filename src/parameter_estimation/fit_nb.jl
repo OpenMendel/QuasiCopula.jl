@@ -1,11 +1,22 @@
 """
-    fit!(gcm::NBCopulaVCModel, solver=Ipopt.IpoptSolver(print_level=5))
+    fit!(gcm::NBCopulaVCModel, solver=Ipopt.IpoptSolver)
 
 Fit an `NBCopulaVCModel` object by block MLE using a nonlinear programming solver.
-Start point should be provided in `gcm.β`, `gcm.θ`, `gcm.r`. In our block updates,
-we fit 10 iterations of `gcm.β`, `gcm.θ` using IPOPT, followed by 10 iterations of
+Start point should be provided in `gcm.β`, `gcm.θ`, `gcm.r`.
+In our block updates, we fit 15 iterations of `gcm.β`, `gcm.θ` using IPOPT, followed by 10 iterations of
 Newton on nuisance parameter `gcm.r`. Convergence is declared when difference of
 successive loglikelihood is less than `tol`.
+
+# Arguments
+- `gcm`: A `NBCopulaVCModel` model object.
+- `solver`: Specified solver to use. By default we use IPOPT with 100 quas-newton iterations with convergence tolerance 10^-6.
+    (default `solver = Ipopt.IpoptSolver(print_level = 0, max_iter = 15, limited_memory_max_history = 20,
+                            warm_start_init_point = "yes",  mu_strategy = "adaptive",
+                            hessian_approximation = "limited-memory")`)
+
+# Optional Arguments
+- `tol`: Convergence tolerance for the max block iter updates (default `tol = 1e-6`).
+- `maxBlockIter`: Number of maximum block iterations to update `gcm.β`, `gcm.θ` and  `gcm.r` (default `maxBlockIter = 10`).
 """
 function fit!(
         gcm::NBCopulaVCModel,
@@ -54,6 +65,26 @@ function fit!(
     # gcm
 end
 
+"""
+    fit!(gcm::NBCopulaARModel, solver=Ipopt.IpoptSolver)
+
+Fit an `NBCopulaARModel` object by block MLE using a nonlinear programming solver.
+Start point should be provided in `gcm.β`, `gcm.ρ`, `gcm.σ2`, `gcm.r`.
+In our block updates, we fit 15 iterations of `gcm.β`, `gcm.ρ`, `gcm.σ2` using IPOPT, followed by 10 iterations of
+Newton on nuisance parameter `gcm.r`. Convergence is declared when difference of
+successive loglikelihood is less than `tol`.
+
+# Arguments
+- `gcm`: A `NBCopulaARModel` model object.
+- `solver`: Specified solver to use. By default we use IPOPT with 100 quas-newton iterations with convergence tolerance 10^-6.
+    (default `solver = Ipopt.IpoptSolver(print_level = 0, max_iter = 15, limited_memory_max_history = 20,
+                            warm_start_init_point = "yes",  mu_strategy = "adaptive",
+                            hessian_approximation = "limited-memory")`)
+
+# Optional Arguments
+- `tol`: Convergence tolerance for the max block iter updates (default `tol = 1e-6`).
+- `maxBlockIter`: Number of maximum block iterations to update `gcm.β`, `gcm.θ` and  `gcm.r` (default `maxBlockIter = 10`).
+"""
 function fit!(
     gcm::NBCopulaARModel,
     solver=Ipopt.Ipopt.IpoptSolver(print_level = 0, max_iter = 15,
@@ -102,6 +133,26 @@ function fit!(
     # gcm
 end
 
+"""
+    fit!(gcm::NBCopulaCSModel, solver=Ipopt.IpoptSolver)
+
+Fit an `NBCopulaCSModel` object by block MLE using a nonlinear programming solver.
+Start point should be provided in `gcm.β`, `gcm.ρ`, `gcm.σ2`, `gcm.r`.
+In our block updates, we fit 15 iterations of `gcm.β`, `gcm.ρ`, `gcm.σ2` using IPOPT, followed by 10 iterations of
+Newton on nuisance parameter `gcm.r`. Convergence is declared when difference of
+successive loglikelihood is less than `tol`.
+
+# Arguments
+- `gcm`: A `NBCopulaCSModel` model object.
+- `solver`: Specified solver to use. By default we use IPOPT with 100 quas-newton iterations with convergence tolerance 10^-6.
+    (default `solver = Ipopt.IpoptSolver(print_level = 0, max_iter = 15, limited_memory_max_history = 20,
+                            warm_start_init_point = "yes",  mu_strategy = "adaptive",
+                            hessian_approximation = "limited-memory")`)
+
+# Optional Arguments
+- `tol`: Convergence tolerance for the max block iter updates (default `tol = 1e-6`).
+- `maxBlockIter`: Number of maximum block iterations to update `gcm.β`, `gcm.θ` and  `gcm.r` (default `maxBlockIter = 10`).
+"""
 function fit!(
     gcm::NBCopulaCSModel,
     solver=Ipopt.IpoptSolver(print_level = 0, max_iter = 15, limited_memory_max_history = 20,

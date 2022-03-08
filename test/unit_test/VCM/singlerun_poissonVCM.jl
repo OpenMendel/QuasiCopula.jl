@@ -49,8 +49,7 @@ for i in 1:samplesize
     gcs[i] = GLMCopulaVCObs(y, X, V, d, link)
 end
 
-# form VarLmmModel
-gcm = GLMCopulaVCModel(gcs);
+gcm = GLMCopulaVCModel(gcs)
 # precompile
 println("precompiling Poisson VCM fit")
 gcm2 = deepcopy(gcm);

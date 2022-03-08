@@ -59,8 +59,7 @@ for i in 1:samplesize
     gcs[i] = GaussianCopulaARObs(y, X)
 end
 
-# form VarLmmModel
-gcm = GaussianCopulaARModel(gcs);
+gcm = GaussianCopulaARModel(gcs)
 # precompile
 println("precompiling Gaussian AR fit")
 gcm2 = deepcopy(gcm);

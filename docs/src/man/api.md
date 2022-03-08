@@ -12,6 +12,8 @@ Pages = ["api.md"]
 
 ```@docs
 fit!
+logl
+get_CI
 ```
 
 ## Models

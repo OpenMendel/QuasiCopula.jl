@@ -1,9 +1,14 @@
 export ◺
 """
-    fit!(gcm)
+    fit!(gcm::Union{GaussianCopulaARModel, GaussianCopulaCSModel}, solver=Ipopt.IpoptSolver)
 
 Fit a `GaussianCopulaARModel` or `GaussianCopulaCSModel` object by MLE using a nonlinear programming solver. Start point
 should be provided in `gcm.β`, `gcm.τ`, `gcm.ρ`, `gcm.σ2`.
+
+# Arguments
+- `gcm`: A `GaussianCopulaARModel` or `GaussianCopulaCSModel` model object.
+- `solver`: Specified solver to use. By default we use IPOPT with 100 quas-newton iterations with convergence tolerance 10^-6.
+    (default `solver = Ipopt.IpoptSolver(print_level=3, max_iter = 100, tol = 10^-6, limited_memory_max_history = 20, hessian_approximation = "limited-memory")`)
 """
 function fit!(
         gcm::Union{GaussianCopulaARModel, GaussianCopulaCSModel},

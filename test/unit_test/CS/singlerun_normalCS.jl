@@ -58,8 +58,7 @@ for i in 1:samplesize
     gcs[i] = GaussianCopulaCSObs(y, X)
 end
 
-# form VarLmmModel
-gcm = GaussianCopulaCSModel(gcs);
+gcm = GaussianCopulaCSModel(gcs)
 # precompile
 println("precompiling Gaussian CS fit")
 gcm2 = deepcopy(gcm);

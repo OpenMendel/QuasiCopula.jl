@@ -60,7 +60,7 @@ for i in 1:samplesize
     gcs[i] = Poisson_Bernoulli_VCObs(y, xi, V, vecdist, veclink)
 end
 
-gcm = Poisson_Bernoulli_VCModel(gcs);
+gcm = Poisson_Bernoulli_VCModel(gcs)
 # precompile
 println("precompiling Bivariate Mixed VCM fit")
 gcm2 = deepcopy(gcm);

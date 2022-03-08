@@ -173,7 +173,7 @@ end
 """
     VC_model(df, y, grouping, covariates, V, d, link)
 
-Form the variance component model (VCM) for regression with a random intercept covariance matrix and the specified base distribution (d) and link function (link).
+Form the variance component model (VCM) for regression with the specified base distribution (d) and link function (link).
 
 # Arguments
 - `df`: A named `DataFrame`
