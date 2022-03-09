@@ -1,7 +1,6 @@
-using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, CategoricalArrays
-using Random, Roots, SpecialFunctions
-using DataFrames, DelimitedFiles, Statistics
-import StatsBase: sem
+using GLMCopula, LinearAlgebra, Random, GLM
+using DataFrames, Statistics
+using BenchmarkTools, Test
 
 BLAS.set_num_threads(1)
 Threads.nthreads()
@@ -70,11 +69,9 @@ mseβ, mseθ = MSE(gcm, βtrue, θtrue)
 @show mseβ
 @show mseθ
 
-using Test
 @test mseβ < 0.01
 @test mseθ < 0.01
 
-using BenchmarkTools
 println("checking memory allocation for Poisson VCM")
 logl_gradient_memory = @benchmark loglikelihood!($gcm.data[1], $gcm.β, $gcm.θ, true, false)
 # logl_gradient_memory = @benchmark loglikelihood!($gcm, true, false)

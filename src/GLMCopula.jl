@@ -1,11 +1,10 @@
 module GLMCopula
-using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Distributions, StatsFuns, Statistics, StatsBase, ToeplitzMatrices
+using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Distributions, StatsFuns, ToeplitzMatrices
 using LoopVectorization, DataFrames
 using LinearAlgebra: BlasReal, copytri!
-using SpecialFunctions, Random
+using SpecialFunctions
 using FFTW
 @reexport using Ipopt
-@reexport using NLopt
 import Base: show
 export fit!, update_θ_jensen!, init_β!, initialize_model!, loglikelihood!, standardize_res!, std_res_differential!
 export update_res!, update_θ!

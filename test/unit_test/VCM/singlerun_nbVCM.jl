@@ -1,7 +1,6 @@
-using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, CategoricalArrays
-using Random, Roots, SpecialFunctions
-using DataFrames, DelimitedFiles, Statistics
-import StatsBase: sem
+using GLMCopula, LinearAlgebra, Random, GLM
+using DataFrames, Statistics
+using BenchmarkTools, Test
 
 BLAS.set_num_threads(1)
 Threads.nthreads()
@@ -73,13 +72,6 @@ mseβ, mser, mseθ = MSE(gcm, βtrue, rtrue, θtrue)
 @show mser
 @show mseθ
 
-using Test
 @test mseβ < 0.01
 @test mseθ < 0.01
 @test mser < 0.1
-
-# need to optimize memory allocation 13.73 MIB
-# using BenchmarkTools
-# println("checking memory allocation for Nb VCM")
-# logl_gradient_memory = @benchmark loglikelihood!($gcm, true, false)
-# @test logl_gradient_memory.memory == 0.0

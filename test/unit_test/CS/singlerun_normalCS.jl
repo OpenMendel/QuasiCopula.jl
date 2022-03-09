@@ -1,7 +1,6 @@
-using GLMCopula, DelimitedFiles, LinearAlgebra, Random, ToeplitzMatrices
-using Random, Roots, SpecialFunctions
-using DataFrames, Statistics, Test
-import StatsBase: sem
+using GLMCopula, LinearAlgebra, GLM
+using Random, Distributions, DataFrames, ToeplitzMatrices
+using Test, BenchmarkTools
 
 BLAS.set_num_threads(1)
 Threads.nthreads()
@@ -91,8 +90,3 @@ mseβ, mseρ, mseσ2, mseτ = MSE(gcm, βtrue, τtrue[1], ρtrue, σ2true)
 @test mseσ2 < 1
 @test mseρ < 0.01
 @test mseτ < 0.01
-
-# needs to be optimized for memory  4.43 MiB
-# using BenchmarkTools
-# logl_gradient_memory = @benchmark loglikelihood!($gcm, true, false)
-# @test logl_gradient_memory.memory == 0.0

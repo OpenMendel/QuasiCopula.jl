@@ -1,5 +1,6 @@
-using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, CategoricalArrays
-using Random, Roots, SpecialFunctions, StatsFuns, Distributions, DataFrames, ToeplitzMatrices
+using GLMCopula, LinearAlgebra, GLM
+using Random, Distributions, DataFrames, ToeplitzMatrices
+using Test, BenchmarkTools
 BLAS.set_num_threads(1)
 Threads.nthreads()
 
@@ -91,12 +92,10 @@ mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
 @show mseσ2
 @show mseρ
 
-using Test
 @test mseβ < 0.01
 @test mseσ2 < 1
 @test mseρ < 0.01
 
-using BenchmarkTools
 println("checking memory allocation for Bernoulli AR")
 logl_gradient_memory = @benchmark loglikelihood!($gcm.data[1], $gcm.β, $gcm.ρ[1], $gcm.σ2[1], true, false)
 @test logl_gradient_memory.memory == 0.0

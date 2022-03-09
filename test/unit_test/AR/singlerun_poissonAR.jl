@@ -1,7 +1,6 @@
-using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, CategoricalArrays
-using Random, Roots, SpecialFunctions
-using DataFrames, DelimitedFiles, Statistics, ToeplitzMatrices
-import StatsBase: sem
+using GLMCopula, LinearAlgebra, GLM
+using Random, Distributions, DataFrames, ToeplitzMatrices
+using Test, BenchmarkTools
 
 BLAS.set_num_threads(1)
 Threads.nthreads()
@@ -93,17 +92,10 @@ mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
 @show mseσ2
 @show mseρ
 
-using Test
 @test mseβ < 0.01
 @test mseσ2 < 1
 @test mseρ < 0.01
 
-# using Test
-# @test mseβ ≈ 8.367620875773262e-6
-# @test mseσ2 ≈ 0.00046196040554647555
-# @test mseρ ≈ 7.783816222260004e-7
-
-using BenchmarkTools
 println("checking memory allocation for Poisson AR")
 # logl_gradient_memory = @benchmark loglikelihood!($gcm, true, false) # this will allocate from threads
 logl_gradient_memory = @benchmark loglikelihood!($gcm.data[1], $gcm.β, $gcm.ρ[1], $gcm.σ2[1], true, false)

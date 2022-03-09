@@ -1,7 +1,6 @@
-using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, CategoricalArrays
-using Random, Roots, SpecialFunctions
-using DataFrames, DelimitedFiles, Statistics, ToeplitzMatrices
-import StatsBase: sem
+using GLMCopula, LinearAlgebra, GLM
+using Random, Distributions, DataFrames, ToeplitzMatrices
+using Test, BenchmarkTools
 
 BLAS.set_num_threads(1)
 Threads.nthreads()
@@ -96,13 +95,7 @@ mseβ, mseρ, mseσ2, mser = MSE(gcm, βtrue, ρtrue, σ2true, rtrue)
 @show mseσ2
 @show mseρ
 
-using Test
 @test mseβ < 0.01
 @test mseσ2 < 1
 @test mseρ < 0.01
 @test mser < 0.1
-
-# need to optimize wrt to memory 13.73 MIB
-# using BenchmarkTools
-# println("checking memory allocation for nb AR")
-# logl_gradient_memory = @benchmark loglikelihood!($gcm, true, false)

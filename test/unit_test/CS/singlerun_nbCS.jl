@@ -1,7 +1,6 @@
-using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, CategoricalArrays
-using Random, Roots, SpecialFunctions
-using DataFrames, DelimitedFiles, Statistics, ToeplitzMatrices
-import StatsBase: sem
+using GLMCopula, LinearAlgebra, GLM
+using Random, Distributions, DataFrames, ToeplitzMatrices
+using Test, BenchmarkTools
 
 BLAS.set_num_threads(1)
 Threads.nthreads()
@@ -91,21 +90,13 @@ loglikelihood!(gcm, true, true)
 vcov!(gcm)
 @show GLMCopula.confint(gcm)
 
-# mse and time under our model
-# coverage!(gcm, trueparams, intervals, curcoverage)
 mseβ, mseρ, mseσ2, mser = MSE(gcm, βtrue, ρtrue, σ2true, rtrue)
 @show mseβ
 @show mser
 @show mseσ2
 @show mseρ
 
-using Test
 @test mseβ < 0.01
 @test mseσ2 < 1
 @test mseρ < 0.01
 @test mser < 1
-
-# needs to be optimized for memory 13.73 MiB
-# using BenchmarkTools
-# logl_gradient_memory = @benchmark loglikelihood!($gcm, true, false)
-# @test logl_gradient_memory.memory == 0.0

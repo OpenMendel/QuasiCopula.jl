@@ -1,4 +1,4 @@
-using CSV, DataFrames, GLMCopula, LinearAlgebra, GLM, RCall, RData, RDatasets
+using DataFrames, GLMCopula, LinearAlgebra, GLM, RDatasets
 using Test
 
 Mmmec = dataset("mlmRev", "Mmmec");

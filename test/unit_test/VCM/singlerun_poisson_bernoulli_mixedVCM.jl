@@ -1,7 +1,6 @@
-using GLMCopula, DelimitedFiles, LinearAlgebra, Random, GLM, MixedModels, CategoricalArrays
-using Random, Roots, SpecialFunctions
-using DataFrames, DelimitedFiles, Statistics
-import StatsBase: sem
+using GLMCopula, LinearAlgebra, Random, GLM
+using DataFrames, Statistics
+using BenchmarkTools, Test
 
 BLAS.set_num_threads(1)
 Threads.nthreads()
