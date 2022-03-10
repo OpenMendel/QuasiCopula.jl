@@ -1,10 +1,10 @@
 using Documenter
-using GLMCopula
+using QuasiCopula
 
 makedocs(
-    sitename = "GLMCopula",
+    sitename = "QuasiCopula",
     format = Documenter.HTML(),
-    modules = [GLMCopula],
+    modules = [QuasiCopula],
     pages = [
         "Home" => "index.md",
         "API" => "man/api.md",
@@ -18,6 +18,6 @@ makedocs(
 # See "Hosting Documentation" and deploydocs() in the Documenter manual
 # for more information.
 deploydocs(
-    repo   = "github.com/sarah-ji/GLMCopula.jl.git",
+    repo   = "github.com/sarah-ji/QuasiCopula.jl.git",
     target = "build"
 )

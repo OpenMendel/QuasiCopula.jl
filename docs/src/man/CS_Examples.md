@@ -18,19 +18,19 @@ $$\mathbf{\Gamma_i}(\rho, \sigma^2) =  \sigma^2 * \Big[ \rho * \mathbf{1_{d_i}} 
 versioninfo()
 ```
 
-    Julia Version 1.6.2
-    Commit 1b93d53fc4 (2021-07-14 15:36 UTC)
+    Julia Version 1.7.2
+    Commit bf53498635 (2022-02-06 15:21 UTC)
     Platform Info:
-      OS: macOS (x86_64-apple-darwin18.7.0)
+      OS: macOS (x86_64-apple-darwin19.5.0)
       CPU: Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
       WORD_SIZE: 64
       LIBM: libopenlibm
-      LLVM: libLLVM-11.0.1 (ORCJIT, skylake)
+      LLVM: libLLVM-12.0.1 (ORCJIT, skylake)
 
 
 
 ```julia
-using CSV, DataFrames, GLMCopula, LinearAlgebra, GLM, RCall
+using DataFrames, QuasiCopula, LinearAlgebra, GLM, RCall
 ```
 
 
@@ -165,7 +165,7 @@ Let's show how to fit the model on the model from example 3. By default, we limi
 
 
 ```julia
-GLMCopula.fit!(Bernoulli_CS_model);
+QuasiCopula.fit!(Bernoulli_CS_model);
 ```
 
     initializing β using Newton's Algorithm under Independence Assumption
@@ -204,8 +204,8 @@ GLMCopula.fit!(Bernoulli_CS_model);
     Number of equality constraint Jacobian evaluations   = 0
     Number of inequality constraint Jacobian evaluations = 0
     Number of Lagrangian Hessian evaluations             = 0
-    Total CPU secs in IPOPT (w/o function evaluations)   =     11.928
-    Total CPU secs in NLP function evaluations           =      0.009
+    Total CPU secs in IPOPT (w/o function evaluations)   =     11.813
+    Total CPU secs in NLP function evaluations           =      0.008
     
     EXIT: Optimal Solution Found.
 

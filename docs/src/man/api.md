@@ -1,6 +1,6 @@
 # API
 
-Documentation for `GLMCopua.jl`'s functions.
+Documentation for `QuasiCopua.jl`'s functions.
 
 ## Index
 

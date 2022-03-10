@@ -1,6 +1,6 @@
-# GLMCopula.jl 
+# QuasiCopula.jl 
 
-*A flexible copula-like distribution for GLM*
+A Flexible Quasi-Copula Distribution for Statistical Modeling
 
 ## Package Features
 
@@ -9,7 +9,7 @@
 Download and install [Julia](https://julialang.org/downloads/). Within Julia, copy and paste the following: 
 ```julia
 using Pkg
-pkg"add https://github.com/sarah-ji/GLMCopula.jl"
+pkg"add https://github.com/OpenMendel/QuasiCopula.jl.git"
 ```
 This package supports Julia `v1.6`+.
 
