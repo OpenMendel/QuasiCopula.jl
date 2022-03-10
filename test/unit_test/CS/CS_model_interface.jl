@@ -1,16 +1,12 @@
-using QuasiCopula, LinearAlgebra, GLM, RCall
+using DataFrames, QuasiCopula, LinearAlgebra, GLM, RDatasets
 using Test
-# we will use this example dataset to make sure the model interface is working with CS structure
-R"""
-    library("gcmr")
-    data("epilepsy", package = "gcmr")
-"""
-@rget epilepsy;
 
-df = epilepsy
-y = :counts
-grouping = :id
-covariates = [:visit, :trt]
+Mmmec = dataset("mlmRev", "Mmmec");
+df = Mmmec
+y = :Deaths
+grouping = :Region
+covariates = [:UVB]
+
 d = Poisson()
 link = LogLink()
 
