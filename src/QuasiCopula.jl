@@ -1,4 +1,4 @@
-module GLMCopula
+module QuasiCopula
 using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Distributions, StatsFuns, ToeplitzMatrices
 using LoopVectorization, DataFrames
 using LinearAlgebra: BlasReal, copytri!
