@@ -1,4 +1,4 @@
-using GLMCopula, LinearAlgebra, GLM
+using QuasiCopula, LinearAlgebra, GLM
 using Random, Distributions, DataFrames, ToeplitzMatrices
 using Test, BenchmarkTools
 
@@ -73,9 +73,9 @@ gcm = GLMCopulaCSModel(gcs)
 # precompile
 println("precompiling Bernoulli CS fit")
 gcm2 = deepcopy(gcm);
-GLMCopula.fit!(gcm2, IpoptSolver(print_level = 0, max_iter = 20));
+QuasiCopula.fit!(gcm2, IpoptSolver(print_level = 0, max_iter = 20));
 
-fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, derivative_test = "first-order", accept_after_max_steps = 2, limited_memory_max_history = 50, warm_start_init_point="yes",  mu_strategy = "adaptive", mu_oracle = "probing", hessian_approximation = "limited-memory"))
+fittime = @elapsed QuasiCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, derivative_test = "first-order", accept_after_max_steps = 2, limited_memory_max_history = 50, warm_start_init_point="yes",  mu_strategy = "adaptive", mu_oracle = "probing", hessian_approximation = "limited-memory"))
 @show fittime
 @show gcm.β
 @show gcm.σ2

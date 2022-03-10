@@ -1,4 +1,4 @@
-using GLMCopula, LinearAlgebra, Random, GLM
+using QuasiCopula, LinearAlgebra, Random, GLM
 using DataFrames, Statistics
 using BenchmarkTools, Test
 
@@ -52,9 +52,9 @@ gcm = NBCopulaVCModel(gcs)
 # precompile
 println("precompiling NB VCM fit")
 gcm2 = deepcopy(gcm);
-GLMCopula.fit!(gcm2, maxBlockIter = 1);
+QuasiCopula.fit!(gcm2, maxBlockIter = 1);
 
-fittime = @elapsed GLMCopula.fit!(gcm)
+fittime = @elapsed QuasiCopula.fit!(gcm)
 @show fittime
 @show gcm.β
 @show gcm.θ
@@ -65,7 +65,7 @@ fittime = @elapsed GLMCopula.fit!(gcm)
 
 loglikelihood!(gcm, true, true)
 vcov!(gcm)
-@show GLMCopula.confint(gcm)
+@show QuasiCopula.confint(gcm)
 # mse and time under our model
 mseβ, mser, mseθ = MSE(gcm, βtrue, rtrue, θtrue)
 @show mseβ

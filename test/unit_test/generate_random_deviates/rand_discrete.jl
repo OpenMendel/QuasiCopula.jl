@@ -1,6 +1,6 @@
-using GLMCopula, Random, Statistics, Test, LinearAlgebra, StatsFuns
+using QuasiCopula, Random, Statistics, Test, LinearAlgebra, StatsFuns
 
-### Poisson ### 
+### Poisson ###
 @testset "Poisson(θ) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(1234)
 dist = Poisson(5)
@@ -21,7 +21,7 @@ Random.seed!(1234)
 nsample = 10_000
 @info "sample $nsample points for the $dist distribution"
 s = Vector{Int64}(undef, nsample)
-rand!(d_pois, s) # compile 
+rand!(d_pois, s) # compile
 @time rand!(d_pois, s) # get time
 println("sample mean = $(Statistics.mean(s)); theoretical mean = $(mean(d_pois))")
 println("sample var = $(Statistics.var(s)); theoretical var = $(var(d_pois))")
@@ -30,14 +30,14 @@ end
 # sample mean = 5.315; theoretical mean = 5.333333333333333
 # sample var = 8.48922392239224; theoretical var = 8.555555555555557
 
-# ### Binomial ### 
+# ### Binomial ###
 @testset "Binomial(n, p) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(123)
 n = 30
 p = 0.1
 dist = Binomial(n, p)
 
-# test if the proper c0, c1, c2 constants are stored. 
+# test if the proper c0, c1, c2 constants are stored.
 γ = 1.0
 d_binomial = pdf_constants(γ, dist)
 
@@ -55,17 +55,17 @@ Random.seed!(1234)
 nsample = 10_000 #
 @info "sample $nsample points for the $dist distribution using the Bisection method."
 s = Vector{Int64}(undef, nsample)
-rand!(d_binomial, s) # compile 
+rand!(d_binomial, s) # compile
 @time rand!(d_binomial, s) # get time
-println("sample mean = $(Statistics.mean(s)); theoretical mean = $(GLMCopula.mean(d_binomial))")
-println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_binomial))")
+println("sample mean = $(Statistics.mean(s)); theoretical mean = $(QuasiCopula.mean(d_binomial))")
+println("sample var = $(Statistics.var(s)); theoretical var = $(QuasiCopula.var(d_binomial))")
 end
 
 # n = 10,0000 ::: time = 0.038302 seconds (40.00 k allocations: 12.817 MiB, 23.83% gc time)
 # sample mean = 3.129; theoretical mean = 3.122671204329908
 # sample var = 3.561715171517152; theoretical var = 3.583518347344844
 
-# ### Geometric p = 0.2 ### 
+# ### Geometric p = 0.2 ###
 @testset "Geometric(p = 0.2) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(123)
 p = 0.2
@@ -89,15 +89,15 @@ Random.seed!(1234)
 nsample = 10_000 #
 @info "sample $nsample points for the $dist distribution."
 s = Vector{Int64}(undef, nsample)
-rand!(d_geometric, s) # compile 
+rand!(d_geometric, s) # compile
 @time rand!(d_geometric, s) # get time
-println("sample mean = $(Statistics.mean(s)); theoretical mean = $(GLMCopula.mean(d_geometric))")
-println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_geometric))")
+println("sample mean = $(Statistics.mean(s)); theoretical mean = $(QuasiCopula.mean(d_geometric))")
+println("sample var = $(Statistics.var(s)); theoretical var = $(QuasiCopula.var(d_geometric))")
 end
 
 # n = 10,0000 ::: time = 0.032615 seconds (40.00 k allocations: 34.180 MiB, 21.35% gc time)
 
-# ### Geometric p = 0.5### 
+# ### Geometric p = 0.5###
 @testset "Geometric(p = 0.5) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(123)
 
@@ -122,15 +122,15 @@ Random.seed!(1234)
 nsample = 10_000 #
 @info "sample $nsample points for the $dist distribution."
 s = Vector{Int64}(undef, nsample)
-rand!(d_geometric, s) # compile 
+rand!(d_geometric, s) # compile
 @time rand!(d_geometric, s) # get time
-println("sample mean = $(Statistics.mean(s)); theoretical mean = $(GLMCopula.mean(d_geometric))")
-println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_geometric))")
+println("sample mean = $(Statistics.mean(s)); theoretical mean = $(QuasiCopula.mean(d_geometric))")
+println("sample var = $(Statistics.var(s)); theoretical var = $(QuasiCopula.var(d_geometric))")
 end
 
 # n = 10,0000 ::: time = 0.025624 seconds (40.00 k allocations: 34.180 MiB, 33.37% gc time)
 
-# ### Negative Binomial r = 5, p = 0.5 ### 
+# ### Negative Binomial r = 5, p = 0.5 ###
 @testset "NegativeBinomial(r = 5, p = 0.5) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(123)
 r, p = 5, 0.5
@@ -154,14 +154,14 @@ Random.seed!(1234)
 nsample = 10_000 #
 @info "sample $nsample points for the $dist distribution."
 s = Vector{Int64}(undef, nsample)
-rand!(d_nb, s) # compile 
+rand!(d_nb, s) # compile
 @time rand!(d_nb, s) # get time
-println("sample mean = $(Statistics.mean(s)); theoretical mean = $(GLMCopula.mean(d_nb))")
-println("sample var = $(Statistics.var(s)); theoretical var = $(GLMCopula.var(d_nb))")
+println("sample mean = $(Statistics.mean(s)); theoretical mean = $(QuasiCopula.mean(d_nb))")
+println("sample var = $(Statistics.var(s)); theoretical var = $(QuasiCopula.var(d_nb))")
 end
 
 # n = 10,0000 ::: time = 0.142361 seconds (40.00 k allocations: 18.921 MiB, 57.42% gc time)
-### Bernoulli ### 
+### Bernoulli ###
 @testset "Bernoulli(θ) * (c0 + c1 * x + c2 * x^2);" begin
 Random.seed!(1234)
 dist = Bernoulli(0.8)
@@ -182,7 +182,7 @@ Random.seed!(1234)
 nsample = 10_000
 @info "sample $nsample points for the $dist distribution"
 s = Vector{Int64}(undef, nsample)
-rand!(d_bernoulli, s) # compile 
+rand!(d_bernoulli, s) # compile
 @time rand!(d_bernoulli, s) # get time
 println("sample mean = $(Statistics.mean(s)); theoretical mean = $(mean(d_bernoulli))")
 println("sample var = $(Statistics.var(s)); theoretical var = $(var(d_bernoulli))")

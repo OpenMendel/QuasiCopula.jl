@@ -1,4 +1,4 @@
-using DataFrames, GLMCopula, LinearAlgebra, GLM, RCall
+using DataFrames, QuasiCopula, LinearAlgebra, GLM, RCall
 using Test
 # we will use this example dataset to make sure the model interface is working with autoregressive structure
 R"""

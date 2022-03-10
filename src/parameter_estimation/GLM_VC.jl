@@ -193,7 +193,7 @@ function loglikelihood!(
         gc.q[k] = dot(gc.res, gc.storage_n) / 2
     end
     # loglikelihood
-    logl = GLMCopula.component_loglikelihood(gc)
+    logl = QuasiCopula.component_loglikelihood(gc)
     tsum = dot(θ, gc.t)
     logl += -log(1 + tsum)
     qsum  = dot(θ, gc.q)
@@ -220,7 +220,7 @@ function loglikelihood!(
             end
             gc.added_term2 .*= inv1pq
             gc.Hβ .+= gc.added_term2
-            gc.Hβ .+= GLMCopula.glm_hessian(gc)
+            gc.Hβ .+= QuasiCopula.glm_hessian(gc)
 
             # hessian for vc
             fill!(gc.Hθ, 0.0)
@@ -232,7 +232,7 @@ function loglikelihood!(
         gc.storage_p2 .= gc.∇β .* inv1pq
         # @show gc.res
         gc.res .= gc.y .- gc.μ
-        gc.∇β .= GLMCopula.glm_gradient(gc)
+        gc.∇β .= QuasiCopula.glm_gradient(gc)
         # @show gc.res
         gc.∇β .+= gc.storage_p2
     end

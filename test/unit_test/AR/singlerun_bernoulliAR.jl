@@ -1,4 +1,4 @@
-using GLMCopula, LinearAlgebra, GLM
+using QuasiCopula, LinearAlgebra, GLM
 using Random, Distributions, DataFrames, ToeplitzMatrices
 using Test, BenchmarkTools
 BLAS.set_num_threads(1)
@@ -72,9 +72,9 @@ gcm = GLMCopulaARModel(gcs)
 # precompile
 println("precompiling Bernoulli AR fit")
 gcm2 = deepcopy(gcm);
-GLMCopula.fit!(gcm2, IpoptSolver(print_level = 0, max_iter = 20));
+QuasiCopula.fit!(gcm2, IpoptSolver(print_level = 0, max_iter = 20));
 
-fittime = @elapsed GLMCopula.fit!(gcm)
+fittime = @elapsed QuasiCopula.fit!(gcm)
 @show fittime
 @show gcm.β
 @show gcm.σ2

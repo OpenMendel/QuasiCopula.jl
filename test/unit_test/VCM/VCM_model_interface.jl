@@ -1,4 +1,4 @@
-using DataFrames, GLMCopula, LinearAlgebra, GLM, RDatasets
+using DataFrames, QuasiCopula, LinearAlgebra, GLM, RDatasets
 using Test
 
 Mmmec = dataset("mlmRev", "Mmmec");

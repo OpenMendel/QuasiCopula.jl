@@ -1,4 +1,4 @@
-using GLMCopula, LinearAlgebra, GLM
+using QuasiCopula, LinearAlgebra, GLM
 using Random, Distributions, DataFrames, ToeplitzMatrices
 using Test, BenchmarkTools
 
@@ -71,9 +71,9 @@ gcm = GLMCopulaCSModel(gcs)
 # precompile
 println("precompiling Poisson CS fit")
 gcm2 = deepcopy(gcm);
-GLMCopula.fit!(gcm2, IpoptSolver(print_level = 0, max_iter = 20));
+QuasiCopula.fit!(gcm2, IpoptSolver(print_level = 0, max_iter = 20));
 
-fittime = @elapsed GLMCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, accept_after_max_steps = 2, limited_memory_max_history = 50, hessian_approximation = "limited-memory"))
+fittime = @elapsed QuasiCopula.fit!(gcm, IpoptSolver(print_level = 5, max_iter = 100, tol = 10^-8, accept_after_max_steps = 2, limited_memory_max_history = 50, hessian_approximation = "limited-memory"))
 
 loglikelihood!(gcm, true, true)
 @show fittime
@@ -85,7 +85,7 @@ loglikelihood!(gcm, true, true)
 @show gcm.∇ρ
 
 vcov!(gcm)
-@show GLMCopula.confint(gcm)
+@show QuasiCopula.confint(gcm)
 mseβ, mseρ, mseσ2 = MSE(gcm, βtrue, ρtrue, σ2true)
 @show mseβ
 @show mseσ2

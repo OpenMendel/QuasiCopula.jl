@@ -1,4 +1,4 @@
-using GLMCopula, Random, Statistics, Test, LinearAlgebra, StatsFuns
+using QuasiCopula, Random, Statistics, Test, LinearAlgebra, StatsFuns
 using LinearAlgebra: BlasReal, copytri!
 ### MVN only
 @testset "Generate a 3 element random vector each with Y1, Y2, Y3 ~ Normal(5, 0.2). First we check the conditional mean and variance of Y2 | Y1 and then for Y3 | Y1, Y2. " begin
@@ -255,7 +255,7 @@ println("sample var = $(Statistics.var(s)); theoretical var = $(var(mixed_multiv
 #####
 
 
-### bivariate Poisson correlation and covariance 
+### bivariate Poisson correlation and covariance
 mean1 = 5
 mean2 = 5
 d1 = Poisson(mean1)
@@ -287,12 +287,12 @@ Statistics.cov(Y_21, Y_22)
 
 @show Statistics.cor(Y_21, Y_22)
 
-@test GLMCopula.cov(gc_vec1, 1, 2) == -GLMCopula.cov(gc_vec2, 1, 2)
-@test GLMCopula.cor(gc_vec1, 1, 2) == -GLMCopula.cor(gc_vec2, 1, 2)
+@test QuasiCopula.cov(gc_vec1, 1, 2) == -QuasiCopula.cov(gc_vec2, 1, 2)
+@test QuasiCopula.cor(gc_vec1, 1, 2) == -QuasiCopula.cor(gc_vec2, 1, 2)
 
-### 
-# bivariate mixed normal and poisson with theoretical correlation ~ 
-## 
+###
+# bivariate mixed normal and poisson with theoretical correlation ~
+##
 mean_normal = 5
 var_normal = 0.2
 
@@ -320,10 +320,10 @@ Y_12 = [Y_nsample1[i, 1][2] for i in 1:nsample]
 Statistics.cov(Y_11, Y_12)
 
 @show Statistics.cor(Y_11, Y_12)
-GLMCopula.cov(gc_vec1, 1, 2)
-GLMCopula.cor(gc_vec1, 1, 2)
-println("sample cor = $(Statistics.cor(Y_11, Y_12)); theoretical cor = $(GLMCopula.cor(gc_vec1, 1, 2))")
-println("sample cov = $(Statistics.cov(Y_11, Y_12)); theoretical var = $(GLMCopula.cov(gc_vec1, 1, 2))")
+QuasiCopula.cov(gc_vec1, 1, 2)
+QuasiCopula.cor(gc_vec1, 1, 2)
+println("sample cor = $(Statistics.cor(Y_11, Y_12)); theoretical cor = $(QuasiCopula.cor(gc_vec1, 1, 2))")
+println("sample cov = $(Statistics.cov(Y_11, Y_12)); theoretical var = $(QuasiCopula.cov(gc_vec1, 1, 2))")
 
 
 Y_21 = [Y_nsample2[i, 1][1] for i in 1:nsample]
@@ -332,16 +332,16 @@ Statistics.cov(Y_21, Y_22)
 
 @show Statistics.cor(Y_21, Y_22)
 
-GLMCopula.cov(gc_vec2, 1, 2)
-GLMCopula.cor(gc_vec2, 1, 2)
-println("sample cor = $(Statistics.cor(Y_21, Y_22)); theoretical cor = $(GLMCopula.cor(gc_vec2, 1, 2))")
-println("sample cov = $(Statistics.cov(Y_21, Y_22)); theoretical var = $(GLMCopula.cov(gc_vec2, 1, 2))")
+QuasiCopula.cov(gc_vec2, 1, 2)
+QuasiCopula.cor(gc_vec2, 1, 2)
+println("sample cor = $(Statistics.cor(Y_21, Y_22)); theoretical cor = $(QuasiCopula.cor(gc_vec2, 1, 2))")
+println("sample cov = $(Statistics.cov(Y_21, Y_22)); theoretical var = $(QuasiCopula.cov(gc_vec2, 1, 2))")
 
 
-@test GLMCopula.cov(gc_vec1, 1, 2) == -GLMCopula.cov(gc_vec2, 1, 2)
-@test GLMCopula.cor(gc_vec1, 1, 2) == -GLMCopula.cor(gc_vec2, 1, 2)
+@test QuasiCopula.cov(gc_vec1, 1, 2) == -QuasiCopula.cov(gc_vec2, 1, 2)
+@test QuasiCopula.cor(gc_vec1, 1, 2) == -QuasiCopula.cor(gc_vec2, 1, 2)
 ####
-# mixed with normal and 0, 1 
+# mixed with normal and 0, 1
 mean_normal = 5
 var_normal = 0.2
 
@@ -369,10 +369,10 @@ Y_12 = [Y_nsample1[i, 1][2] for i in 1:nsample]
 # @show Statistics.cov(Y_11, Y_12)
 
 # @show Statistics.cor(Y_11, Y_12)
-# @show GLMCopula.cov(gc_vec1, 1, 2)
-# @show GLMCopula.cor(gc_vec1, 1, 2)
-println("sample cor = $(Statistics.cor(Y_11, Y_12)); theoretical cor = $(GLMCopula.cor(gc_vec1, 1, 2))")
-println("sample cov = $(Statistics.cov(Y_11, Y_12)); theoretical var = $(GLMCopula.cov(gc_vec1, 1, 2))")
+# @show QuasiCopula.cov(gc_vec1, 1, 2)
+# @show QuasiCopula.cor(gc_vec1, 1, 2)
+println("sample cor = $(Statistics.cor(Y_11, Y_12)); theoretical cor = $(QuasiCopula.cor(gc_vec1, 1, 2))")
+println("sample cov = $(Statistics.cov(Y_11, Y_12)); theoretical var = $(QuasiCopula.cov(gc_vec1, 1, 2))")
 
 
 Y_21 = [Y_nsample2[i, 1][1] for i in 1:nsample]
@@ -381,17 +381,17 @@ Y_22 = [Y_nsample2[i, 1][2] for i in 1:nsample]
 
 # @show Statistics.cor(Y_21, Y_22)
 
-# @show GLMCopula.cov(gc_vec2, 1, 2)
-# @show GLMCopula.cor(gc_vec2, 1, 2)
-println("sample cor = $(Statistics.cor(Y_21, Y_22)); theoretical cor = $(GLMCopula.cor(gc_vec2, 1, 2))")
-println("sample cov = $(Statistics.cov(Y_21, Y_22)); theoretical var = $(GLMCopula.cov(gc_vec2, 1, 2))")
+# @show QuasiCopula.cov(gc_vec2, 1, 2)
+# @show QuasiCopula.cor(gc_vec2, 1, 2)
+println("sample cor = $(Statistics.cor(Y_21, Y_22)); theoretical cor = $(QuasiCopula.cor(gc_vec2, 1, 2))")
+println("sample cov = $(Statistics.cov(Y_21, Y_22)); theoretical var = $(QuasiCopula.cov(gc_vec2, 1, 2))")
 #
 
-@test GLMCopula.cov(gc_vec1, 1, 2) == -GLMCopula.cov(gc_vec2, 1, 2)
-@test GLMCopula.cor(gc_vec1, 1, 2) == -GLMCopula.cor(gc_vec2, 1, 2)
+@test QuasiCopula.cov(gc_vec1, 1, 2) == -QuasiCopula.cov(gc_vec2, 1, 2)
+@test QuasiCopula.cor(gc_vec1, 1, 2) == -QuasiCopula.cor(gc_vec2, 1, 2)
 
 
-# mixed with normal and 0, 1 with more noise in normal 
+# mixed with normal and 0, 1 with more noise in normal
 mean_normal = 5
 sd_normal = 0.2
 
@@ -419,10 +419,10 @@ Y_12 = [Y_nsample1[i, 1][2] for i in 1:nsample]
 # @show Statistics.cov(Y_11, Y_12)
 
 # @show Statistics.cor(Y_11, Y_12)
-# @show GLMCopula.cov(gc_vec1, 1, 2)
-# @show GLMCopula.cor(gc_vec1, 1, 2)
-println("sample cor = $(Statistics.cor(Y_11, Y_12)); theoretical cor = $(GLMCopula.cor(gc_vec1, 1, 2))")
-println("sample cov = $(Statistics.cov(Y_11, Y_12)); theoretical cov = $(GLMCopula.cov(gc_vec1, 1, 2))")
+# @show QuasiCopula.cov(gc_vec1, 1, 2)
+# @show QuasiCopula.cor(gc_vec1, 1, 2)
+println("sample cor = $(Statistics.cor(Y_11, Y_12)); theoretical cor = $(QuasiCopula.cor(gc_vec1, 1, 2))")
+println("sample cov = $(Statistics.cov(Y_11, Y_12)); theoretical cov = $(QuasiCopula.cov(gc_vec1, 1, 2))")
 
 
 Y_21 = [Y_nsample2[i, 1][1] for i in 1:nsample]
@@ -431,13 +431,13 @@ Y_22 = [Y_nsample2[i, 1][2] for i in 1:nsample]
 
 # @show Statistics.cor(Y_21, Y_22)
 
-# @show GLMCopula.cov(gc_vec2, 1, 2)
-# @show GLMCopula.cor(gc_vec2, 1, 2)
-println("sample cor = $(Statistics.cor(Y_21, Y_22)); theoretical cor = $(GLMCopula.cor(gc_vec2, 1, 2))")
-println("sample cov = $(Statistics.cov(Y_21, Y_22)); theoretical cov = $(GLMCopula.cov(gc_vec2, 1, 2))")
+# @show QuasiCopula.cov(gc_vec2, 1, 2)
+# @show QuasiCopula.cor(gc_vec2, 1, 2)
+println("sample cor = $(Statistics.cor(Y_21, Y_22)); theoretical cor = $(QuasiCopula.cor(gc_vec2, 1, 2))")
+println("sample cov = $(Statistics.cov(Y_21, Y_22)); theoretical cov = $(QuasiCopula.cov(gc_vec2, 1, 2))")
 #
 
-@test GLMCopula.cov(gc_vec1, 1, 2) == -GLMCopula.cov(gc_vec2, 1, 2)
-@test GLMCopula.cor(gc_vec1, 1, 2) == -GLMCopula.cor(gc_vec2, 1, 2)
+@test QuasiCopula.cov(gc_vec1, 1, 2) == -QuasiCopula.cov(gc_vec2, 1, 2)
+@test QuasiCopula.cor(gc_vec1, 1, 2) == -QuasiCopula.cor(gc_vec2, 1, 2)
 
 end
