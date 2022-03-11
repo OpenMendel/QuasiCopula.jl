@@ -24,14 +24,14 @@ $$\mathbf{\Gamma_i}(\rho, \sigma^2) = \sigma^2 \times \left[\begin{array}{cccccc
 versioninfo()
 ```
 
-    Julia Version 1.7.2
-    Commit bf53498635 (2022-02-06 15:21 UTC)
+    Julia Version 1.6.2
+    Commit 1b93d53fc4 (2021-07-14 15:36 UTC)
     Platform Info:
-      OS: macOS (x86_64-apple-darwin19.5.0)
+      OS: macOS (x86_64-apple-darwin18.7.0)
       CPU: Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
       WORD_SIZE: 64
       LIBM: libopenlibm
-      LLVM: libLLVM-12.0.1 (ORCJIT, skylake)
+      LLVM: libLLVM-11.0.1 (ORCJIT, skylake)
 
 
 
@@ -214,8 +214,8 @@ QuasiCopula.fit!(Poisson_AR_model);
     Number of equality constraint Jacobian evaluations   = 0
     Number of inequality constraint Jacobian evaluations = 0
     Number of Lagrangian Hessian evaluations             = 0
-    Total CPU secs in IPOPT (w/o function evaluations)   =      4.014
-    Total CPU secs in NLP function evaluations           =      0.010
+    Total CPU secs in IPOPT (w/o function evaluations)   =      3.177
+    Total CPU secs in NLP function evaluations           =      0.009
     
     EXIT: Optimal Solution Found.
 
