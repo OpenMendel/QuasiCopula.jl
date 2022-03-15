@@ -121,10 +121,11 @@ struct Poisson_Bernoulli_VCModel{T <: BlasReal, VD, VL} <: MathProgBase.Abstract
     storage_θ::Vector{T}
     vecd::Vector{VD}
     veclink::Vector{VL}
+    penalized::Bool
 end
 
 
-function Poisson_Bernoulli_VCModel(gcs::Vector{Poisson_Bernoulli_VCObs{T, VD, VL}}) where {T <: BlasReal, VD, VL}
+function Poisson_Bernoulli_VCModel(gcs::Vector{Poisson_Bernoulli_VCObs{T, VD, VL}}; penalized::Bool = false) where {T <: BlasReal, VD, VL}
     n, p, m = length(gcs), size(gcs[1].X, 2), length(gcs[1].V)
     β       = Vector{T}(undef, p)
     τ       = [1.0]
@@ -162,5 +163,5 @@ function Poisson_Bernoulli_VCModel(gcs::Vector{Poisson_Bernoulli_VCObs{T, VD, VL
     storage_θ = Vector{T}(undef, m)
     Poisson_Bernoulli_VCModel{T, VD, VL}(gcs, Y1total, Y2total, ntotal, p, m, β, τ, θ,
         ∇β, ∇τ, ∇θ, XtX, Hβ, Hθ, Hτ, Ainv, Aevec, M, vcov, ψ, TR, QF,
-        storage_n, storage_m, storage_θ, vecd, veclink)
+        storage_n, storage_m, storage_θ, vecd, veclink, penalized)
 end

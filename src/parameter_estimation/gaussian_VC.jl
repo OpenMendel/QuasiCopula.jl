@@ -94,9 +94,10 @@ struct GaussianCopulaVCModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     vcov::Matrix{T}
     ψ::Vector{T}
     Hθ::Matrix{T}   # Hessian wrt variance components θ
+    penalized::Bool
 end
 
-function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVCObs{T}}) where T <: BlasReal
+function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVCObs{T}}; penalized::Bool = false) where T <: BlasReal
     n, p, m = length(gcs), size(gcs[1].X, 2), length(gcs[1].V)
     β   = Vector{T}(undef, p)
     τ   = Vector{T}(undef, 1)
@@ -126,7 +127,7 @@ function GaussianCopulaVCModel(gcs::Vector{GaussianCopulaVCObs{T}}) where T <: B
     Hθ  = Matrix{T}(undef, m, m)
     GaussianCopulaVCModel{T}(gcs, ntotal, p, m, β, τ, θ,
         ∇β, ∇τ, ∇θ, Hβ, Hτ, XtX, TR, QF,
-        storage_n, storage_m, storage_θ, Ainv, Aevec, M, vcov, ψ, Hθ)
+        storage_n, storage_m, storage_θ, Ainv, Aevec, M, vcov, ψ, Hθ, penalized)
 end
 
 function fitted(
@@ -159,7 +160,8 @@ function loglikelihood!(
     τ::T, # inverse of linear regression variance
     θ::Vector{T},
     needgrad::Bool = false,
-    needhess::Bool = false
+    needhess::Bool = false;
+    penalized::Bool = false
     ) where T <: BlasReal
     # n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
     needgrad = needgrad || needhess
@@ -185,6 +187,10 @@ function loglikelihood!(
     end
     qsum  = dot(θ, gc.q)
     logl += log(1 + qsum)
+    # add L2 ridge penalty
+    if penalized
+        logl -= 0.5 * dot(θ, θ)
+    end
     # gradient
     if needgrad
         inv1pq = inv(1 + qsum)
@@ -207,6 +213,9 @@ function loglikelihood!(
         gc.∇β .*= sqrtτ
         gc.∇τ  .= (gc.n - rss + 2qsum * inv1pq) / 2τ
         gc.∇θ  .= inv1pq .* gc.q .- inv(1 + tsum) .* gc.t
+        if penalized
+            gc.∇θ .-= θ
+        end
     end
     # output
     logl
@@ -230,7 +239,7 @@ function loglikelihood!(
     logl = zeros(Threads.nthreads())
     Threads.@threads for i in eachindex(gcm.data)
         @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
-         gcm.τ[1], gcm.θ, needgrad, needhess)
+         gcm.τ[1], gcm.θ, needgrad, needhess; penalized = gcm.penalized)
      end
      @inbounds for i in eachindex(gcm.data)
          if needgrad

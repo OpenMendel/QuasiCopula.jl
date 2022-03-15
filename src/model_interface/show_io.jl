@@ -34,7 +34,10 @@ function Base.show(io::IO, x::Union{GLMCopulaVCModel, NBCopulaVCModel, GaussianC
     print(io, "  * number of clusters: $(nclusters(x))\n")
     print(io, "  * cluster size min, max: $(minclustersize(x)), $(maxclustersize(x))\n")
 	print(io, "  * number of variance components: $(nvc(x))\n")
-    print(io, "  * number of fixed effects: $(nfixedeffects(x))")
+    print(io, "  * number of fixed effects: $(nfixedeffects(x))\n")
+    if x.penalized == true
+        print(io, "  * L2 ridge penalty on variance components: $(x.penalized)")
+    end
 end
 
 function Base.show(io::IO, x::Union{GLMCopulaARModel, NBCopulaARModel, GaussianCopulaARModel})

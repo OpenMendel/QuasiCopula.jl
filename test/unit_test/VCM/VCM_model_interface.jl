@@ -44,6 +44,12 @@ Poisson_VC_model_intercept_only = VC_model(df, y, grouping, d, link)
 # check if default to intercept only
 @test sum(Poisson_VC_model_intercept_only.data[1].X) == Poisson_VC_model_intercept_only.data[1].n
 
+# intercept only model with V and penalty
+Poisson_2VC_model_intercept_only = VC_model(df, y, grouping, V, d, link; penalized = true)
+# check if default to intercept only
+@test Poisson_2VC_model_intercept_only.penalized == true
+@test sum(Poisson_2VC_model_intercept_only.data[1].X) == Poisson_2VC_model_intercept_only.data[1].n
+
 #### nb ####
 d = NegativeBinomial()
 link = LogLink()
@@ -63,6 +69,12 @@ nb_VC_model_intercept_only = VC_model(df, y, grouping, d, link)
 # check if default to intercept only
 @test sum(nb_VC_model_intercept_only.data[1].X) == nb_VC_model_intercept_only.data[1].n
 
+# intercept only model with V and penalty
+nb_2VC_model_intercept_only = VC_model(df, y, grouping, V, d, link; penalized = true)
+# check if default to intercept only
+@test nb_2VC_model_intercept_only.penalized == true
+@test sum(nb_2VC_model_intercept_only.data[1].X) == nb_2VC_model_intercept_only.data[1].n
+
 #### gaussian ####
 d = Normal()
 link = IdentityLink()
@@ -81,3 +93,9 @@ gaussian_2VC_model = VC_model(df, y, grouping, covariates, V, d, link)
 gaussian_VC_model_intercept_only = VC_model(df, y, grouping, d, link)
 # check if default to intercept only
 @test sum(gaussian_VC_model_intercept_only.data[1].X) == gaussian_VC_model_intercept_only.data[1].n
+
+# intercept only model with V and penalty
+gaussian_2VC_model_intercept_only = VC_model(df, y, grouping, V, d, link; penalized = true)
+# check if default to intercept only
+@test gaussian_2VC_model_intercept_only.penalized == true
+@test sum(gaussian_2VC_model_intercept_only.data[1].X) == gaussian_2VC_model_intercept_only.data[1].n

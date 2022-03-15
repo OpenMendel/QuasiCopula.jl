@@ -134,9 +134,10 @@ struct NBCopulaVCModel{T <: BlasReal, D, Link} <: MathProgBase.AbstractNLPEvalua
     storage_θ::Vector{T}
     d::Vector{D}
     link::Vector{Link}
+    penalized::Bool
 end
 
-function NBCopulaVCModel(gcs::Vector{NBCopulaVCObs{T, D, Link}}) where {T <: BlasReal, D, Link}
+function NBCopulaVCModel(gcs::Vector{NBCopulaVCObs{T, D, Link}}; penalized::Bool = false) where {T <: BlasReal, D, Link}
     n, p, m = length(gcs), size(gcs[1].X, 2), length(gcs[1].V)
     β   = Vector{T}(undef, p)
     τ   = [1.0]
@@ -178,7 +179,7 @@ function NBCopulaVCModel(gcs::Vector{NBCopulaVCObs{T, D, Link}}) where {T <: Bla
     storage_θ = Vector{T}(undef, m)
     NBCopulaVCModel{T, D, Link}(gcs, Ytotal, ntotal, n, p, m, β, τ, θ, r,
         ∇β, ∇τ, ∇θ, ∇r, XtX, Hβ, Hθ, Hr, Hτ, Ainv, Aevec, M, vcov, ψ, TR, QF, hess1, hess2,
-        storage_n, storage_n2, storage_m, storage_θ, d, link)
+        storage_n, storage_n2, storage_m, storage_θ, d, link, penalized)
 end
 
 """
@@ -192,7 +193,8 @@ function loglikelihood!(
   θ::Vector{T},
   r::T,
   needgrad::Bool = false,
-  needhess::Bool = false
+  needhess::Bool = false;
+  penalized::Bool = false
   ) where {T <: BlasReal, D, Link}
   # n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
   needgrad = needgrad || needhess
@@ -225,12 +227,18 @@ function loglikelihood!(
   qsum  = dot(θ, gc.q)
   logl += log(1 + qsum)
 
+  # add L2 ridge penalty
+  if penalized
+      logl -= 0.5 * dot(θ, θ)
+  end
   if needgrad
       inv1pq = inv(1 + qsum)
 
         # gradient with respect to r
         gc.∇r .= nb_first_derivative(gc, θ, r)
-
+        if penalized
+            gc.∇θ .-= θ
+        end
       if needhess
           BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 1.0, gc.Hβ) # only lower triangular
           # does adding this term to the approximation of the hessian violate negative semidefinite properties?
@@ -274,7 +282,7 @@ function loglikelihood!(
     logl = zeros(Threads.nthreads())
     Threads.@threads for i in eachindex(gcm.data)
         @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
-            gcm.τ[1], gcm.θ, gcm.r[1], needgrad, needhess)
+            gcm.τ[1], gcm.θ, gcm.r[1], needgrad, needhess; penalized = gcm.penalized)
     end
     @inbounds for i in eachindex(gcm.data)
         if needgrad
