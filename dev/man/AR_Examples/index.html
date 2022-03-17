@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>AR(1) Covariance · QuasiCopula</title><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.039/juliamono-regular.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.11/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">QuasiCopula</a></span></div><form class="docs-search" action="../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../api/">API</a></li><li class="is-active"><a class="tocitem" href>AR(1) Covariance</a><ul class="internal"><li><a class="tocitem" href="#Forming-the-Models"><span>Forming the Models</span></a></li><li><a class="tocitem" href="#Fitting-the-model"><span>Fitting the model</span></a></li></ul></li><li><a class="tocitem" href="../CS_Examples/">CS Covariance</a></li><li><a class="tocitem" href="../VC_Examples/">VC Covariance</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>AR(1) Covariance</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>AR(1) Covariance</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/OpenMendel/QuasiCopula.jl/blob/master/docs/src/man/AR_Examples.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Autoregressive-AR(1)-Covariance"><a class="docs-heading-anchor" href="#Autoregressive-AR(1)-Covariance">Autoregressive AR(1) Covariance</a><a id="Autoregressive-AR(1)-Covariance-1"></a><a class="docs-heading-anchor-permalink" href="#Autoregressive-AR(1)-Covariance" title="Permalink"></a></h1><p>In this notebook we will show how to form the quasi-copula model with Poisson base distribution, Log Link function and autoregressive AR(1) structured covariance on the <code>epilepsy</code> dataset provided in the <code>gcmr</code> R package. </p><h3 id="Table-of-Contents:"><a class="docs-heading-anchor" href="#Table-of-Contents:">Table of Contents:</a><a id="Table-of-Contents:-1"></a><a class="docs-heading-anchor-permalink" href="#Table-of-Contents:" title="Permalink"></a></h3><ul><li><a href="#Example-1:-Intercept-Only-AR(1)-Model">Example 1: Intercept Only AR(1) Model</a></li><li><a href="#Example-2:-AR(1)-Model-with-Covariates">Example 2: AR(1) Model with Covariates</a></li><li><a href="#Example-3:-AR(1)-Model-with-Covariates-L2-penalty-(optional)">Example 3: AR(1) Model with Covariates + L2 Penalty (optional)</a></li></ul><p>For these examples, we have <span>$n$</span> independent clusters indexed by <span>$i$</span>. </p><p>Under the AR(1) parameterization of the covariance matrix, the <span>$i^{th}$</span> cluster with cluster size <span>$d_i$</span>, has covariance matrix <span>$\mathbf{\Gamma_i}$</span> that takes the form: </p><p class="math-container">\[\mathbf{\Gamma_i}(\rho, \sigma^2) = \sigma^2 \times \left[\begin{array}{ccccccc}
+1 &amp; \rho &amp; \rho^2 &amp; \rho^3 &amp; ...  &amp;\rho^{d_i - 1}\\
+ \rho &amp; 1 &amp; \rho &amp; \rho^2 &amp; ... \\
+ &amp; &amp; ... &amp; &amp; \\ &amp; &amp;...&amp; \rho &amp; 1 &amp; \rho \\
+ \rho^{d_i - 1} &amp; \rho^{d_i - 2} &amp; ...&amp; \rho^2 &amp; \rho &amp; 1
+\end{array}\right]\]</p><pre><code class="language-julia hljs">versioninfo()</code></pre><pre><code class="nohighlight hljs">Julia Version 1.6.2
+Commit 1b93d53fc4 (2021-07-14 15:36 UTC)
+Platform Info:
+  OS: macOS (x86_64-apple-darwin18.7.0)
+  CPU: Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+  WORD_SIZE: 64
+  LIBM: libopenlibm
+  LLVM: libLLVM-11.0.1 (ORCJIT, skylake)</code></pre><pre><code class="language-julia hljs">using DataFrames, QuasiCopula, LinearAlgebra, GLM, RCall</code></pre><pre><code class="language-julia hljs">R&quot;&quot;&quot;
+    library(&quot;gcmr&quot;)
+    data(&quot;epilepsy&quot;, package = &quot;gcmr&quot;)
+&quot;&quot;&quot;
+@rget epilepsy;</code></pre><pre><code class="nohighlight hljs">┌ Warning: RCall.jl: Warning: package ‘gcmr’ was built under R version 4.0.2
+└ @ RCall /Users/sarahji/.julia/packages/RCall/6kphM/src/io.jl:172</code></pre><p>Let&#39;s take a preview of the first 10 lines of the epilepsy dataset.</p><pre><code class="language-julia hljs">@show epilepsy[1:10, :];</code></pre><pre><code class="nohighlight hljs">epilepsy[1:10, :] = 10×6 DataFrame
+ Row │ id     age    trt    counts  time     visit
+     │ Int64  Int64  Int64  Int64   Float64  Float64
+─────┼───────────────────────────────────────────────
+   1 │     1     31      0      11      8.0      0.0
+   2 │     1     31      0       5      2.0      1.0
+   3 │     1     31      0       3      2.0      1.0
+   4 │     1     31      0       3      2.0      1.0
+   5 │     1     31      0       3      2.0      1.0
+   6 │     2     30      0      11      8.0      0.0
+   7 │     2     30      0       3      2.0      1.0
+   8 │     2     30      0       5      2.0      1.0
+   9 │     2     30      0       3      2.0      1.0
+  10 │     2     30      0       3      2.0      1.0</code></pre><h2 id="Forming-the-Models"><a class="docs-heading-anchor" href="#Forming-the-Models">Forming the Models</a><a id="Forming-the-Models-1"></a><a class="docs-heading-anchor-permalink" href="#Forming-the-Models" title="Permalink"></a></h2><p>We can form the AR(1) models for regression with following arguments:</p><h5 id="Arguments"><a class="docs-heading-anchor" href="#Arguments">Arguments</a><a id="Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Arguments" title="Permalink"></a></h5><ul><li><code>df</code>: A named <code>DataFrame</code></li><li><code>y</code>: Ouctcome variable name of interest, specified as a <code>Symbol</code>.   This variable name must be present in <code>df</code>.</li><li><code>grouping</code>: Grouping or Clustering variable name of interest, specified as a <code>Symbol</code>.   This variable name must be present in <code>df</code>.</li><li><code>covariates</code>: Covariate names of interest as a vector of <code>Symbol</code>s.   Each variable name must be present in <code>df</code>.</li><li><code>d</code>: Base <code>Distribution</code> of outcome from <code>Distributions.jl</code>.</li><li><code>link</code>: Canonical <code>Link</code> function of the base distribution specified in <code>d</code>, from <code>GLM.jl</code>.</li></ul><h5 id="Optional-Arguments"><a class="docs-heading-anchor" href="#Optional-Arguments">Optional Arguments</a><a id="Optional-Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Optional-Arguments" title="Permalink"></a></h5><ul><li><code>penalized</code>: Boolean to specify whether or not to add an L2 Ridge penalty on the variance parameter for the AR(1) structured covariance.   One can put true (e.g. <code>penalized = true</code>) to add this penalty for numerical stability (default <code>penalized = false</code>).</li></ul><h3 id="Example-1:-Intercept-Only-AR(1)-Model"><a class="docs-heading-anchor" href="#Example-1:-Intercept-Only-AR(1)-Model">Example 1: Intercept Only AR(1) Model</a><a id="Example-1:-Intercept-Only-AR(1)-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Example-1:-Intercept-Only-AR(1)-Model" title="Permalink"></a></h3><p>We can form the AR(1) model with intercept only by excluding the <code>covariates</code> argument.</p><pre><code class="language-julia hljs">df = epilepsy
+y = :counts
+grouping = :id
+d = Poisson()
+link = LogLink()
+
+Poisson_AR_model = AR_model(df, y, grouping, d, link)</code></pre><pre><code class="nohighlight hljs">Quasi-Copula Autoregressive AR(1) Model
+  * base distribution: Poisson
+  * link function: LogLink
+  * number of clusters: 59
+  * cluster size min, max: 5, 5
+  * number of fixed effects: 1</code></pre><h3 id="Example-2:-AR(1)-Model-with-Covariates"><a class="docs-heading-anchor" href="#Example-2:-AR(1)-Model-with-Covariates">Example 2: AR(1) Model with Covariates</a><a id="Example-2:-AR(1)-Model-with-Covariates-1"></a><a class="docs-heading-anchor-permalink" href="#Example-2:-AR(1)-Model-with-Covariates" title="Permalink"></a></h3><p>We can form the AR(1) model with covariates by including the <code>covariates</code> argument.</p><pre><code class="language-julia hljs">covariates = [:visit, :trt]
+
+Poisson_AR_model = AR_model(df, y, grouping, covariates, d, link)</code></pre><pre><code class="nohighlight hljs">Quasi-Copula Autoregressive AR(1) Model
+  * base distribution: Poisson
+  * link function: LogLink
+  * number of clusters: 59
+  * cluster size min, max: 5, 5
+  * number of fixed effects: 3</code></pre><h3 id="Example-3:-AR(1)-Model-with-Covariates-L2-penalty-(optional)"><a class="docs-heading-anchor" href="#Example-3:-AR(1)-Model-with-Covariates-L2-penalty-(optional)">Example 3: AR(1) Model with Covariates + L2 penalty (optional)</a><a id="Example-3:-AR(1)-Model-with-Covariates-L2-penalty-(optional)-1"></a><a class="docs-heading-anchor-permalink" href="#Example-3:-AR(1)-Model-with-Covariates-L2-penalty-(optional)" title="Permalink"></a></h3><p>We can form the same AR(1) model from Example 2 with the optional argument for adding the L2 penalty on the variance parameter in the AR(1) parameterization of Gamma</p><pre><code class="language-julia hljs">Poisson_AR_model = AR_model(df, y, grouping, covariates, d, link; penalized = true)</code></pre><pre><code class="nohighlight hljs">Quasi-Copula Autoregressive AR(1) Model
+  * base distribution: Poisson
+  * link function: LogLink
+  * number of clusters: 59
+  * cluster size min, max: 5, 5
+  * number of fixed effects: 3
+  * L2 ridge penalty on AR(1) variance parameter: true</code></pre><h2 id="Fitting-the-model"><a class="docs-heading-anchor" href="#Fitting-the-model">Fitting the model</a><a id="Fitting-the-model-1"></a><a class="docs-heading-anchor-permalink" href="#Fitting-the-model" title="Permalink"></a></h2><p>Let&#39;s show how to fit the model on the model from Example 3. By default, we limit the maximum number of Quasi-Newton iterations to 100, and set the convergence tolerance to <span>$10^{-6}.$</span> </p><pre><code class="language-julia hljs">QuasiCopula.fit!(Poisson_AR_model);</code></pre><pre><code class="nohighlight hljs">initializing β using Newton&#39;s Algorithm under Independence Assumption
+initializing variance components using MM-Algorithm
+
+******************************************************************************
+This program contains Ipopt, a library for large-scale nonlinear optimization.
+ Ipopt is released as open source code under the Eclipse Public License (EPL).
+         For more information visit https://github.com/coin-or/Ipopt
+******************************************************************************
+
+Total number of variables............................:        5
+                     variables with only lower bounds:        1
+                variables with lower and upper bounds:        1
+                     variables with only upper bounds:        0
+Total number of equality constraints.................:        0
+Total number of inequality constraints...............:        0
+        inequality constraints with only lower bounds:        0
+   inequality constraints with lower and upper bounds:        0
+        inequality constraints with only upper bounds:        0
+
+
+Number of Iterations....: 18
+
+                                   (scaled)                 (unscaled)
+Objective...............:   5.2073621039210650e+02    2.1964303421468812e+03
+Dual infeasibility......:   2.3821081107655573e-08    1.0047571934396371e-07
+Constraint violation....:   0.0000000000000000e+00    0.0000000000000000e+00
+Complementarity.........:   1.0000000000000001e-11    4.2179328003577902e-11
+Overall NLP error.......:   2.3821081107655573e-08    1.0047571934396371e-07
+
+
+Number of objective function evaluations             = 24
+Number of objective gradient evaluations             = 19
+Number of equality constraint evaluations            = 0
+Number of inequality constraint evaluations          = 0
+Number of equality constraint Jacobian evaluations   = 0
+Number of inequality constraint Jacobian evaluations = 0
+Number of Lagrangian Hessian evaluations             = 0
+Total CPU secs in IPOPT (w/o function evaluations)   =      3.177
+Total CPU secs in NLP function evaluations           =      0.009
+
+EXIT: Optimal Solution Found.</code></pre><p>We can take a look at the MLE&#39;s</p><pre><code class="language-julia hljs">@show Poisson_AR_model.β
+@show Poisson_AR_model.σ2
+@show Poisson_AR_model.ρ;</code></pre><pre><code class="nohighlight hljs">Poisson_AR_model.β = [3.474475582753216, -1.323384706329884, -0.04366460297735922]
+Poisson_AR_model.σ2 = [0.5348860843799086]
+Poisson_AR_model.ρ = [1.0]</code></pre><p>Calculate the loglikelihood at the maximum</p><pre><code class="language-julia hljs">logl(Poisson_AR_model)</code></pre><pre><code class="nohighlight hljs">-2196.4303424825557</code></pre><p>Get asymptotic confidence intervals at the MLE&#39;s</p><pre><code class="language-julia hljs">get_CI(Poisson_AR_model)</code></pre><pre><code class="nohighlight hljs">5×2 Matrix{Float64}:
+  3.34736    3.60159
+ -1.49822   -1.14855
+ -0.489077   0.401748
+  0.871632   1.12837
+  0.461106   0.608666</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../api/">« API</a><a class="docs-footer-nextpage" href="../CS_Examples/">CS Covariance »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.15 on <span class="colophon-date" title="Thursday 17 March 2022 20:36">Thursday 17 March 2022</span>. Using Julia version 1.7.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>VC Covariance · QuasiCopula</title><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.039/juliamono-regular.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.11/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">QuasiCopula</a></span></div><form class="docs-search" action="../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../api/">API</a></li><li><a class="tocitem" href="../AR_Examples/">AR(1) Covariance</a></li><li><a class="tocitem" href="../CS_Examples/">CS Covariance</a></li><li class="is-active"><a class="tocitem" href>VC Covariance</a><ul class="internal"><li><a class="tocitem" href="#Forming-the-Models"><span>Forming the Models</span></a></li><li><a class="tocitem" href="#Fitting-the-model"><span>Fitting the model</span></a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>VC Covariance</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>VC Covariance</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/OpenMendel/QuasiCopula.jl/blob/master/docs/src/man/VC_Examples.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="VC-Covariance"><a class="docs-heading-anchor" href="#VC-Covariance">VC Covariance</a><a id="VC-Covariance-1"></a><a class="docs-heading-anchor-permalink" href="#VC-Covariance" title="Permalink"></a></h1><p>In this notebook we will demonstrate how to fit a variance component model (VCM) with Poisson base on the <code>Mmmec</code> dataset from the <code>mlmRev</code> R package. We will access the data using the <code>RDatasets</code> Julia package. </p><h3 id="Table-of-Contents:"><a class="docs-heading-anchor" href="#Table-of-Contents:">Table of Contents:</a><a id="Table-of-Contents:-1"></a><a class="docs-heading-anchor-permalink" href="#Table-of-Contents:" title="Permalink"></a></h3><ul><li><a href="#Example-1:-Intercept-Only-Random-Intercept-Model">Example 1: Intercept Only Random Intercept Model</a></li><li><a href="#Example-2:-Random-Intercept-Model-with-Covariates">Example 2: Random Intercept Model with Covariates</a></li><li><a href="#Example-3:-Multiple-VC-Model-with-Covariates">Example 2: Multiple VC Model with Covariates</a></li></ul><p>For these examples, we have <span>$n$</span> independent clusters indexed by <span>$i$</span>. </p><p>Under the VC parameterization of the covariance matrix, the <span>$i^{th}$</span> cluster with cluster size <span>$d_i$</span>, has covariance matrix <span>$\mathbf{\Gamma_i}$</span> that takes the form: </p><p class="math-container">\[\mathbf{\Gamma_i}(\boldsymbol{\theta}) = \sum_{k = 1}^m \theta_k * \mathbf{V_{ik}}\]</p><ul><li><p>where <span>$m$</span> is the number of variance components, which are arranged in a vector <span>$\boldsymbol{\theta} = \{\theta_1, ..., \theta_m \}$</span> for estimation</p></li><li><p>and <span>$\mathbf{V_{ik}}, k \in [1, m]$</span> are symmetric, positive semi-definite matrices of dimension <span>$d_i \times d_i$</span> provided by the user.</p></li></ul><pre><code class="language-julia hljs">versioninfo()</code></pre><pre><code class="nohighlight hljs">Julia Version 1.6.2
+Commit 1b93d53fc4 (2021-07-14 15:36 UTC)
+Platform Info:
+  OS: macOS (x86_64-apple-darwin18.7.0)
+  CPU: Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+  WORD_SIZE: 64
+  LIBM: libopenlibm
+  LLVM: libLLVM-11.0.1 (ORCJIT, skylake)</code></pre><pre><code class="language-julia hljs">using DataFrames, QuasiCopula, LinearAlgebra, GLM, RDatasets</code></pre><pre><code class="language-julia hljs">Mmmec = dataset(&quot;mlmRev&quot;, &quot;Mmmec&quot;);</code></pre><p>Let&#39;s take a preview of the first 20 lines of the Mmmec dataset.</p><pre><code class="language-julia hljs">@show Mmmec[1:20, :];</code></pre><pre><code class="nohighlight hljs">Mmmec[1:20, :] = 20×6 DataFrame
+ Row │ Nation     Region  County  Deaths  Expected  UVB
+     │ Cat…       Cat…    Cat…    Int32   Float64   Float64
+─────┼──────────────────────────────────────────────────────
+   1 │ Belgium    1       1           79   51.222   -2.9057
+   2 │ Belgium    2       2           80   79.956   -3.2075
+   3 │ Belgium    2       3           51   46.5169  -2.8038
+   4 │ Belgium    2       4           43   55.053   -3.0069
+   5 │ Belgium    2       5           89   67.758   -3.0069
+   6 │ Belgium    2       6           19   35.976   -3.4175
+   7 │ Belgium    3       7           19   13.28    -2.6671
+   8 │ Belgium    3       8           15   66.5579  -2.6671
+   9 │ Belgium    3       9           33   50.969   -3.1222
+  10 │ Belgium    3       10           9   11.171   -2.4852
+  11 │ Belgium    3       11          12   19.683   -2.5293
+  12 │ W.Germany  4       12         156  108.04    -1.1375
+  13 │ W.Germany  4       13         110   73.692   -1.3977
+  14 │ W.Germany  4       14          77   57.098   -0.4386
+  15 │ W.Germany  4       15          56   46.622   -1.0249
+  16 │ W.Germany  5       16         220  112.61    -0.5033
+  17 │ W.Germany  5       17          46   30.334   -1.4609
+  18 │ W.Germany  5       18          47   29.973   -1.8956
+  19 │ W.Germany  5       19          50   32.027   -2.5541
+  20 │ W.Germany  5       20          90   46.521   -1.9671</code></pre><h2 id="Forming-the-Models"><a class="docs-heading-anchor" href="#Forming-the-Models">Forming the Models</a><a id="Forming-the-Models-1"></a><a class="docs-heading-anchor-permalink" href="#Forming-the-Models" title="Permalink"></a></h2><p>We can form the VC models for regression with following arguments:</p><h5 id="Arguments"><a class="docs-heading-anchor" href="#Arguments">Arguments</a><a id="Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Arguments" title="Permalink"></a></h5><ul><li><code>df</code>: A named <code>DataFrame</code></li><li><code>y</code>: Ouctcome variable name of interest, specified as a <code>Symbol</code>.   This variable name must be present in <code>df</code>.</li><li><code>grouping</code>: Grouping or Clustering variable name of interest, specified as a <code>Symbol</code>.   This variable name must be present in <code>df</code>.</li><li><code>covariates</code>: Covariate names of interest as a vector of <code>Symbol</code>s.   Each variable name must be present in <code>df</code>.</li><li><code>V</code>: Vector of Vector of Positive Semi-Definite (PSD) Covariance Matrices. <code>V</code> is of length n, where n is the number of groups/clusters.   Each element of <code>V</code> is also a <code>Vector</code>, but of length m. Here m is the number of variance components.   Each element of <code>V</code> is a <code>Vector</code> of d<em>i x d</em>i PSD covariance matrices under the VCM framework,   where d_i is the cluster size of the ith cluster, which may vary for each cluster of observations i in [1, n].   Each of these dimensions must match that specified in <code>df</code>.</li><li><code>d</code>: Base <code>Distribution</code> of outcome from <code>Distributions.jl</code>.</li></ul><h3 id="Example-1:-Intercept-Only-Random-Intercept-Model"><a class="docs-heading-anchor" href="#Example-1:-Intercept-Only-Random-Intercept-Model">Example 1: Intercept Only Random Intercept Model</a><a id="Example-1:-Intercept-Only-Random-Intercept-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Example-1:-Intercept-Only-Random-Intercept-Model" title="Permalink"></a></h3><p>We first demonstrate how to form the intercept only random intercept model with Poisson base. </p><p>We can form the random intercept VC model with intercept only by excluding the <code>covariates</code> and <code>V</code> arguments. </p><p>By default, the <code>VC_model</code> function will construct a random intercept model using a single variance component. That is, it will parameterize <span>$\boldsymbol{\Gamma_i}(\boldsymbol{\theta})$</span> for each cluster <span>$i$</span> with cluster size <span>${d_i}$</span> as follows:</p><p class="math-container">\[\mathbf{\Gamma_i}(\boldsymbol{\theta}) = \theta_1 * \mathbf{1_{d_i}} \mathbf{1_{d_i}}^t\]</p><pre><code class="language-julia hljs">df = Mmmec
+y = :Deaths
+grouping = :Region
+d = Poisson()
+link = LogLink()
+
+Poisson_VC_model = VC_model(df, y, grouping, d, link)</code></pre><pre><code class="nohighlight hljs">Quasi-Copula Variance Component Model
+  * base distribution: Poisson
+  * link function: LogLink
+  * number of clusters: 78
+  * cluster size min, max: 1, 13
+  * number of variance components: 1
+  * number of fixed effects: 1</code></pre><h3 id="Example-2:-Random-Intercept-Model-with-Covariates"><a class="docs-heading-anchor" href="#Example-2:-Random-Intercept-Model-with-Covariates">Example 2: Random Intercept Model with Covariates</a><a id="Example-2:-Random-Intercept-Model-with-Covariates-1"></a><a class="docs-heading-anchor-permalink" href="#Example-2:-Random-Intercept-Model-with-Covariates" title="Permalink"></a></h3><p>We can form the random intercept model with covariates by including the <code>covariates</code> argument to the model in Example 1.</p><pre><code class="language-julia hljs">covariates = [:UVB]
+
+Poisson_VC_model = VC_model(df, y, grouping, covariates, d, link)</code></pre><pre><code class="nohighlight hljs">Quasi-Copula Variance Component Model
+  * base distribution: Poisson
+  * link function: LogLink
+  * number of clusters: 78
+  * cluster size min, max: 1, 13
+  * number of variance components: 1
+  * number of fixed effects: 2</code></pre><h3 id="Example-3:-Multiple-VC-Model-with-Covariates"><a class="docs-heading-anchor" href="#Example-3:-Multiple-VC-Model-with-Covariates">Example 3: Multiple VC Model with Covariates</a><a id="Example-3:-Multiple-VC-Model-with-Covariates-1"></a><a class="docs-heading-anchor-permalink" href="#Example-3:-Multiple-VC-Model-with-Covariates" title="Permalink"></a></h3><p>Next we demonstrate how to form the model with Poisson base and two variance components.</p><p>To specify our own positive semi-definite covariance matrices, <code>V_i = [V_i1, V_i2]</code>, we need to make sure the dimensions match that of each cluster size <span>$d_i$</span>, for each independent cluster <span>$i \in [1, n]$</span>. </p><p>To illustrate, we will add an additional variance component proportional to the Identity matrix to the random intercept model above to help capture overdispersion. More explicitly, I will make <span>$\mathbf{V_{i1}} = \mathbf{1_{d_i}} \mathbf{1_{d_i}}^t$</span> and <span>$\mathbf{V_{i2}} = \mathbf{I_{d_i}}$</span> to parameterize <span>$\mathbf{\Gamma_i}(\boldsymbol{\theta})$</span> follows:</p><p class="math-container">\[\mathbf{\Gamma_i}(\boldsymbol{\theta}) = \theta_1 * \mathbf{1_{d_i}} \mathbf{1_{d_i}}^t + \theta_2 * \mathbf{I_{d_i}}\]</p><pre><code class="language-julia hljs">function make_Vs(
+    df::DataFrame,
+    y::Symbol,
+    grouping::Symbol)
+    groups = unique(df[!, grouping])
+    n = length(groups)
+    V = Vector{Vector{Matrix{Float64}}}(undef, n)
+    for (i, grp) in enumerate(groups)
+        gidx = df[!, grouping] .== grp
+        ni = count(gidx)
+        V[i] = [ones(ni, ni), Matrix(I, ni, ni)]
+    end
+    V
+end
+
+V = make_Vs(df, y, grouping);</code></pre><pre><code class="language-julia hljs">Poisson_VC_model = VC_model(df, y, grouping, covariates, V, d, link)</code></pre><pre><code class="nohighlight hljs">Quasi-Copula Variance Component Model
+  * base distribution: Poisson
+  * link function: LogLink
+  * number of clusters: 78
+  * cluster size min, max: 1, 13
+  * number of variance components: 2
+  * number of fixed effects: 2</code></pre><h2 id="Fitting-the-model"><a class="docs-heading-anchor" href="#Fitting-the-model">Fitting the model</a><a id="Fitting-the-model-1"></a><a class="docs-heading-anchor-permalink" href="#Fitting-the-model" title="Permalink"></a></h2><p>By default, we limit the maximum number of Quasi-Newton iterations to 100, and set the convergence tolerance to <span>$10^{-6}.$</span> </p><pre><code class="language-julia hljs">QuasiCopula.fit!(Poisson_VC_model);</code></pre><pre><code class="nohighlight hljs">initializing β using Newton&#39;s Algorithm under Independence Assumption
+gcm.β = [3.25512456536309, -0.07968965522100831]
+initializing variance components using MM-Algorithm
+gcm.θ = [1.0, 1.0]
+
+******************************************************************************
+This program contains Ipopt, a library for large-scale nonlinear optimization.
+ Ipopt is released as open source code under the Eclipse Public License (EPL).
+         For more information visit https://github.com/coin-or/Ipopt
+******************************************************************************
+
+Total number of variables............................:        4
+                     variables with only lower bounds:        2
+                variables with lower and upper bounds:        0
+                     variables with only upper bounds:        0
+Total number of equality constraints.................:        0
+Total number of inequality constraints...............:        0
+        inequality constraints with only lower bounds:        0
+   inequality constraints with lower and upper bounds:        0
+        inequality constraints with only upper bounds:        0
+
+
+Number of Iterations....: 73
+
+                                   (scaled)                 (unscaled)
+Objective...............:   1.8794436356381009e+03    5.8110834763467265e+03
+Dual infeasibility......:   2.0173863100686985e-07    6.2375907580054106e-07
+Constraint violation....:   0.0000000000000000e+00    0.0000000000000000e+00
+Complementarity.........:   9.9999999999999978e-12    3.0919168663303757e-11
+Overall NLP error.......:   2.0173863100686985e-07    6.2375907580054106e-07
+
+
+Number of objective function evaluations             = 274
+Number of objective gradient evaluations             = 74
+Number of equality constraint evaluations            = 0
+Number of inequality constraint evaluations          = 0
+Number of equality constraint Jacobian evaluations   = 0
+Number of inequality constraint Jacobian evaluations = 0
+Number of Lagrangian Hessian evaluations             = 0
+Total CPU secs in IPOPT (w/o function evaluations)   =      2.771
+Total CPU secs in NLP function evaluations           =      0.036
+
+EXIT: Optimal Solution Found.</code></pre><p>We can take a look at the MLE&#39;s</p><pre><code class="language-julia hljs">@show Poisson_VC_model.β
+@show Poisson_VC_model.θ;</code></pre><pre><code class="nohighlight hljs">Poisson_VC_model.β = [3.267366389079128, -0.07503868222380021]
+Poisson_VC_model.θ = [14855.181986628666, 5411.298363976766]</code></pre><p>Calculate the loglikelihood at the maximum</p><pre><code class="language-julia hljs">logl(Poisson_VC_model)</code></pre><pre><code class="nohighlight hljs">-5811.0834763467265</code></pre><p>Get asymptotic confidence intervals at the MLE&#39;s</p><pre><code class="language-julia hljs">get_CI(Poisson_VC_model)</code></pre><pre><code class="nohighlight hljs">4×2 Matrix{Float64}:
+  3.09211     3.44262
+ -0.111956   -0.0381218
+ -9.59795e5   9.89505e5
+ -3.52785e5   3.63607e5</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../CS_Examples/">« CS Covariance</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.15 on <span class="colophon-date" title="Thursday 17 March 2022 20:36">Thursday 17 March 2022</span>. Using Julia version 1.7.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
