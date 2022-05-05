@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>CS Covariance · QuasiCopula</title><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.044/juliamono.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.11/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">QuasiCopula</a></span></div><form class="docs-search" action="../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../api/">API</a></li><li><a class="tocitem" href="../AR_Examples/">AR(1) Covariance</a></li><li class="is-active"><a class="tocitem" href>CS Covariance</a><ul class="internal"><li><a class="tocitem" href="#Forming-the-Models"><span>Forming the Models</span></a></li><li><a class="tocitem" href="#Fitting-the-model"><span>Fitting the model</span></a></li></ul></li><li><a class="tocitem" href="../VC_Examples/">VC Covariance</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>CS Covariance</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>CS Covariance</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/OpenMendel/QuasiCopula.jl/blob/master/docs/src/man/CS_Examples.md" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Compound-Symmetric-(CS)-Covariance"><a class="docs-heading-anchor" href="#Compound-Symmetric-(CS)-Covariance">Compound Symmetric (CS) Covariance</a><a id="Compound-Symmetric-(CS)-Covariance-1"></a><a class="docs-heading-anchor-permalink" href="#Compound-Symmetric-(CS)-Covariance" title="Permalink"></a></h1><p>In this notebook we will show how to form the quasi-copula model with Bernoulli base distribution, Logit Link function and compound symmetric (CS) structured covariance on the <code>respiratory</code> dataset provided in the <code>geepack</code> R package. </p><h3 id="Table-of-Contents:"><a class="docs-heading-anchor" href="#Table-of-Contents:">Table of Contents:</a><a id="Table-of-Contents:-1"></a><a class="docs-heading-anchor-permalink" href="#Table-of-Contents:" title="Permalink"></a></h3><ul><li><a href="#Example-1:-Intercept-Only-CS-Model">Example 1: Intercept Only CS Model</a></li><li><a href="#Example-2:-CS-Model-with-Covariates">Example 2: CS Model with Covariates</a></li><li><a href="#Example-3:-CS-Model-with-Covariates-L2-penalty-(optional)">Example 3: CS Model with Covariates + L2 Penalty (optional)</a></li></ul><p>For these examples, we have <span>$n$</span> independent clusters indexed by <span>$i$</span>. </p><p>Under the CS parameterization of the covariance matrix, the <span>$i^{th}$</span> cluster with cluster size <span>$d_i$</span>, has covariance matrix <span>$\mathbf{\Gamma_i}$</span> that takes the form: </p><p class="math-container">\[\mathbf{\Gamma_i}(\rho, \sigma^2) =  \sigma^2 * \Big[ \rho * \mathbf{1_{d_i}} \mathbf{1_{d_i}}^t + (1 - \rho) * \mathbf{I_{d_i}} \Big]\]</p><pre><code class="language-julia hljs">versioninfo()</code></pre><pre><code class="nohighlight hljs">Julia Version 1.6.2
+Commit 1b93d53fc4 (2021-07-14 15:36 UTC)
+Platform Info:
+  OS: macOS (x86_64-apple-darwin18.7.0)
+  CPU: Intel(R) Core(TM) i9-9880H CPU @ 2.30GHz
+  WORD_SIZE: 64
+  LIBM: libopenlibm
+  LLVM: libLLVM-11.0.1 (ORCJIT, skylake)</code></pre><pre><code class="language-julia hljs">using DataFrames, QuasiCopula, LinearAlgebra, GLM, RCall</code></pre><pre><code class="language-julia hljs">R&quot;&quot;&quot;
+    data(respiratory, package=&quot;geepack&quot;)
+    respiratory_df &lt;- respiratory[order(respiratory$id),]
+&quot;&quot;&quot;
+
+@rget respiratory_df;</code></pre><p>Let&#39;s take a preview of the first 10 lines of the respiratory dataset in long format.</p><pre><code class="language-julia hljs">@show respiratory_df[1:10, :];</code></pre><pre><code class="nohighlight hljs">respiratory_df[1:10, :] = 10×8 DataFrame
+ Row │ center  id     treat  sex   age    baseline  visit  outcome
+     │ Int64   Int64  Cat…   Cat…  Int64  Int64     Int64  Int64
+─────┼─────────────────────────────────────────────────────────────
+   1 │      1      1  P      M        46         0      1        0
+   2 │      1      1  P      M        46         0      2        0
+   3 │      1      1  P      M        46         0      3        0
+   4 │      1      1  P      M        46         0      4        0
+   5 │      2      1  P      F        39         0      1        0
+   6 │      2      1  P      F        39         0      2        0
+   7 │      2      1  P      F        39         0      3        0
+   8 │      2      1  P      F        39         0      4        0
+   9 │      1      2  P      M        28         0      1        0
+  10 │      1      2  P      M        28         0      2        0</code></pre><h2 id="Forming-the-Models"><a class="docs-heading-anchor" href="#Forming-the-Models">Forming the Models</a><a id="Forming-the-Models-1"></a><a class="docs-heading-anchor-permalink" href="#Forming-the-Models" title="Permalink"></a></h2><p>We can form the CS model for regression with following arguments:</p><h5 id="Arguments"><a class="docs-heading-anchor" href="#Arguments">Arguments</a><a id="Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Arguments" title="Permalink"></a></h5><ul><li><code>df</code>: A named <code>DataFrame</code></li><li><code>y</code>: Ouctcome variable name of interest, specified as a <code>Symbol</code>.   This variable name must be present in <code>df</code>.</li><li><code>grouping</code>: Grouping or Clustering variable name of interest, specified as a <code>Symbol</code>.   This variable name must be present in <code>df</code>.</li><li><code>covariates</code>: Covariate names of interest as a vector of <code>Symbol</code>s.   Each variable name must be present in <code>df</code>.</li><li><code>d</code>: Base <code>Distribution</code> of outcome from <code>Distributions.jl</code>.</li><li><code>link</code>: Canonical <code>Link</code> function of the base distribution specified in <code>d</code>, from <code>GLM.jl</code>.</li></ul><h5 id="Optional-Arguments"><a class="docs-heading-anchor" href="#Optional-Arguments">Optional Arguments</a><a id="Optional-Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Optional-Arguments" title="Permalink"></a></h5><ul><li><code>penalized</code>: Boolean to specify whether or not to add an L2 Ridge penalty on the variance parameter for the AR(1) structured covariance.   One can put true (e.g. <code>penalized = true</code>) to add this penalty for numerical stability (default <code>penalized = false</code>).</li></ul><h3 id="Example-1:-Intercept-Only-CS-Model"><a class="docs-heading-anchor" href="#Example-1:-Intercept-Only-CS-Model">Example 1: Intercept Only CS Model</a><a id="Example-1:-Intercept-Only-CS-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Example-1:-Intercept-Only-CS-Model" title="Permalink"></a></h3><p>We can form the CS model with intercept only by excluding the <code>covariates</code> argument.</p><pre><code class="language-julia hljs">df = respiratory_df
+y = :outcome
+grouping = :id
+d = Bernoulli()
+link = LogitLink()
+
+Bernoulli_CS_model = CS_model(df, y, grouping, d, link)</code></pre><pre><code class="nohighlight hljs">Quasi-Copula Compound Symmetric CS Model
+  * base distribution: Bernoulli
+  * link function: LogitLink
+  * number of clusters: 56
+  * cluster size min, max: 4, 8
+  * number of fixed effects: 1</code></pre><h3 id="Example-2:-CS-Model-with-Covariates"><a class="docs-heading-anchor" href="#Example-2:-CS-Model-with-Covariates">Example 2: CS Model with Covariates</a><a id="Example-2:-CS-Model-with-Covariates-1"></a><a class="docs-heading-anchor-permalink" href="#Example-2:-CS-Model-with-Covariates" title="Permalink"></a></h3><p>We can form the CS model with covariates by including the <code>covariates</code> argument.</p><pre><code class="language-julia hljs">covariates = [:center, :age, :baseline]
+
+Bernoulli_CS_model = CS_model(df, y, grouping, covariates, d, link)</code></pre><pre><code class="nohighlight hljs">Quasi-Copula Compound Symmetric CS Model
+  * base distribution: Bernoulli
+  * link function: LogitLink
+  * number of clusters: 56
+  * cluster size min, max: 4, 8
+  * number of fixed effects: 4</code></pre><h3 id="Example-3:-CS-Model-with-Covariates-L2-penalty-(optional)"><a class="docs-heading-anchor" href="#Example-3:-CS-Model-with-Covariates-L2-penalty-(optional)">Example 3: CS Model with Covariates + L2 penalty (optional)</a><a id="Example-3:-CS-Model-with-Covariates-L2-penalty-(optional)-1"></a><a class="docs-heading-anchor-permalink" href="#Example-3:-CS-Model-with-Covariates-L2-penalty-(optional)" title="Permalink"></a></h3><p>We can form the same CS model from Example 2 with the optional argument for adding the L2 penalty on the variance parameter in the CS parameterization of Gamma.</p><pre><code class="language-julia hljs">Bernoulli_CS_model = CS_model(df, y, grouping, covariates, d, link; penalized = true)</code></pre><pre><code class="nohighlight hljs">Quasi-Copula Compound Symmetric CS Model
+  * base distribution: Bernoulli
+  * link function: LogitLink
+  * number of clusters: 56
+  * cluster size min, max: 4, 8
+  * number of fixed effects: 4
+  * L2 ridge penalty on CS variance parameter: true</code></pre><h2 id="Fitting-the-model"><a class="docs-heading-anchor" href="#Fitting-the-model">Fitting the model</a><a id="Fitting-the-model-1"></a><a class="docs-heading-anchor-permalink" href="#Fitting-the-model" title="Permalink"></a></h2><p>Let&#39;s show how to fit the model on the model from example 3. By default, we limit the maximum number of Quasi-Newton iterations to 100, and set the convergence tolerance to <span>$10^{-6}.$</span> </p><pre><code class="language-julia hljs">QuasiCopula.fit!(Bernoulli_CS_model);</code></pre><pre><code class="nohighlight hljs">initializing β using Newton&#39;s Algorithm under Independence Assumption
+
+******************************************************************************
+This program contains Ipopt, a library for large-scale nonlinear optimization.
+ Ipopt is released as open source code under the Eclipse Public License (EPL).
+         For more information visit https://github.com/coin-or/Ipopt
+******************************************************************************
+
+Total number of variables............................:        6
+                     variables with only lower bounds:        1
+                variables with lower and upper bounds:        1
+                     variables with only upper bounds:        0
+Total number of equality constraints.................:        0
+Total number of inequality constraints...............:        0
+        inequality constraints with only lower bounds:        0
+   inequality constraints with lower and upper bounds:        0
+        inequality constraints with only upper bounds:        0
+
+
+Number of Iterations....: 23
+
+                                   (scaled)                 (unscaled)
+Objective...............:   2.5027875108223640e+02    2.5027875108223640e+02
+Dual infeasibility......:   4.5418531868790524e-07    4.5418531868790524e-07
+Constraint violation....:   0.0000000000000000e+00    0.0000000000000000e+00
+Complementarity.........:   1.0000038536138807e-11    1.0000038536138807e-11
+Overall NLP error.......:   4.5418531868790524e-07    4.5418531868790524e-07
+
+
+Number of objective function evaluations             = 39
+Number of objective gradient evaluations             = 24
+Number of equality constraint evaluations            = 0
+Number of inequality constraint evaluations          = 0
+Number of equality constraint Jacobian evaluations   = 0
+Number of inequality constraint Jacobian evaluations = 0
+Number of Lagrangian Hessian evaluations             = 0
+Total CPU secs in IPOPT (w/o function evaluations)   =     12.516
+Total CPU secs in NLP function evaluations           =      0.010
+
+EXIT: Optimal Solution Found.</code></pre><p>We can take a look at the MLE&#39;s</p><pre><code class="language-julia hljs">@show Bernoulli_CS_model.β
+@show Bernoulli_CS_model.σ2
+@show Bernoulli_CS_model.ρ;</code></pre><pre><code class="nohighlight hljs">Bernoulli_CS_model.β = [-0.834645421736292, 0.8091668556560436, -0.024759691500116324, 1.9286662077720407]
+Bernoulli_CS_model.σ2 = [0.1703805055662562]
+Bernoulli_CS_model.ρ = [1.0]</code></pre><p>Calculate the loglikelihood at the maximum</p><pre><code class="language-julia hljs">logl(Bernoulli_CS_model)</code></pre><pre><code class="nohighlight hljs">-250.2787511004698</code></pre><p>Get asymptotic confidence intervals at the MLE&#39;s</p><pre><code class="language-julia hljs">get_CI(Bernoulli_CS_model)</code></pre><pre><code class="nohighlight hljs">6×2 Matrix{Float64}:
+ -1.07019    -0.599097
+  0.771294    0.847039
+ -0.0339459  -0.0155735
+  1.81842     2.03892
+  0.46641     1.53359
+ -0.743613    1.08437</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../AR_Examples/">« AR(1) Covariance</a><a class="docs-footer-nextpage" href="../VC_Examples/">VC Covariance »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.16 on <span class="colophon-date" title="Thursday 5 May 2022 04:03">Thursday 5 May 2022</span>. Using Julia version 1.7.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
