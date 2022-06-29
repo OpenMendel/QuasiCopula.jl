@@ -476,37 +476,24 @@ function standardize_res!(gc::MixedCopulaVCObs, ϕ::AbstractVector)
     end
 end
 
+update_∇resβ(d::Normal, x_ji, res_j, μ_j, dμ_j, varμ_j) = -x_ji
+update_∇resβ(d::Bernoulli, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
+    -sqrt(varμ_j) * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji)
+update_∇resβ(d::Poisson, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
+    x_ji * (
+    -(inv(sqrt(varμ_j)) + (0.5 * inv(varμ_j)) * res_j) * dμ_j
+    )
+update_∇resβ(d::NegativeBinomial, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
+    -inv(sqrt(varμ_j)) * dμ_j * x_ji - (0.5 * inv(varμ_j)) *
+    res_j * (μ_j * inv(d.r) + (1 + inv(d.r) * μ_j)) * dμ_j * x_ji
+
 function std_res_differential!(
-    gc::MixedCopulaVCObs{T},
+    gc::MixedCopulaVCObs,
     vecdist::Vector{UnivariateDistribution},
-    ) where T
+    )
     fill!(gc.∇resβ, 0.0)
-    for j in 1:gc.n # loop over each marginal distributions
-        d = typeof(vecdist[j])
-        if d <: Normal
-            gc.∇resβ[j, :] .= @view(gc.X[j, :])
-            gc.∇resβ[j, :] .*= -one(T)
-        elseif d <: Bernoulli
-            @inbounds for i in 1:gc.p
-                gc.∇resβ[j, i] = -sqrt(gc.varμ[j]) * gc.X[j, i] - 
-                    (0.5 * gc.res[j] * (1 - (2 * gc.μ[j])) * gc.X[j, i])
-            end
-        elseif d <: Poisson
-            @inbounds for i in 1:gc.p
-                gc.∇resβ[j, i] = gc.X[j, i]
-                gc.∇resβ[j, i] *= -(inv(sqrt(gc.varμ[j])) + 
-                    (0.5 * inv(gc.varμ[j])) * gc.res[j]) * gc.dμ[j]
-            end
-        elseif d <: NegativeBinomal
-            @inbounds for i in 1:gc.p
-                gc.∇resβ[j, i] = -inv(sqrt(gc.varμ[j])) * gc.dμ[j] * 
-                    gc.X[j, i] - (0.5 * inv(gc.varμ[j])) * gc.res[j] * 
-                    (gc.μ[j] * inv(gc.d.r) + (1 + inv(gc.d.r) * gc.μ[j])) *
-                    gc.dμ[j] * gc.X[j, i]
-            end
-        else
-            error("Marginal distribution $d not supported! Sorry!")
-        end
+    @inbounds for i in 1:gc.p, j in 1:gc.n
+        gc.∇resβ[j, i] = update_∇resβ(vecdist[j], gc.X[j, i], gc.res[j], gc.μ[j], gc.dμ[j], gc.varμ[j])
     end
     return nothing
 end
