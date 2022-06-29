@@ -3,7 +3,7 @@ struct MixedCopulaVCObs{T <: BlasReal}
     y::Vector{T}
     X::Matrix{T}
     V::Vector{Matrix{T}} # vector of (known) covariances
-    n::Int          # number of observations within a single sample (note this is "d" in Quasi-Copula paper)
+    d::Int          # number of observations within a single sample
     p::Int          # number of mean parameters in linear regression
     m::Int          # number of variance components
     # working arrays
@@ -41,17 +41,17 @@ function MixedCopulaVCObs(
     X::Matrix{T},
     V::Vector{Matrix{T}},
     ) where T <: BlasReal
-    n, p, m = size(X, 1), size(X, 2), length(V)
-    @assert length(y) == n "length(y) should be equal to size(X, 1)"
+    d, p, m = size(X, 1), size(X, 2), length(V)
+    @assert length(y) == d "length(y) should be equal to size(X, 1)"
     # working arrays
     ∇β  = Vector{T}(undef, p)
-    ∇resβ = Matrix{T}(undef, n, p)
+    ∇resβ = Matrix{T}(undef, d, p)
     ∇ϕ  = Vector{T}(undef, 1)
     ∇θ  = Vector{T}(undef, m)
     Hβ  = Matrix{T}(undef, p, p)
     Hθ  = Matrix{T}(undef, m, m)
     Hϕ  = Matrix{T}(undef, 1, 1)
-    res = Vector{T}(undef, n)
+    res = Vector{T}(undef, d)
     t   = [tr(V[k])/2 for k in 1:m]
     q   = Vector{T}(undef, m)
     xtx = transpose(X) * X
@@ -64,16 +64,16 @@ function MixedCopulaVCObs(
     # storage_pp = Matrix{T}(undef, p, p)
     # added_term_numerator = Matrix{T}(undef, n, p)
     # added_term2 = Matrix{T}(undef, p, p)
-    η = Vector{T}(undef, n)
-    μ = Vector{T}(undef, n)
-    varμ = Vector{T}(undef, n)
-    dμ = Vector{T}(undef, n)
-    wt = Vector{T}(undef, n)
+    η = Vector{T}(undef, d)
+    μ = Vector{T}(undef, d)
+    varμ = Vector{T}(undef, d)
+    dμ = Vector{T}(undef, d)
+    wt = Vector{T}(undef, d)
     fill!(wt, one(T))
-    w1 = Vector{T}(undef, n)
-    w2 = Vector{T}(undef, n)
+    w1 = Vector{T}(undef, d)
+    w2 = Vector{T}(undef, d)
     # constructor
-    MixedCopulaVCObs{T}(y, X, V, n, p, m, 
+    MixedCopulaVCObs{T}(y, X, V, d, p, m, 
         ∇β, ∇resβ, ∇ϕ, ∇θ, Hβ, Hθ, Hϕ, res, t, q, xtx, η, μ, varμ, dμ, wt, w1, w2)
 end
 
@@ -106,6 +106,7 @@ struct MixedCopulaVCModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     # vcov::Matrix{T}
     # ψ::Vector{T}
     # storage variables
+    storage_d::Vector{T}
     # storage_n::Vector{T}
     # storage_m::Vector{T}
     # storage_θ::Vector{T}
@@ -143,11 +144,12 @@ function MixedCopulaVCModel(
         TR[i, :] .= gcs[i].t
     end
     QF = Matrix{T}(undef, n, m)
+    storage_d = Vector{T}(undef, d)
     # storage_n = Vector{T}(undef, n)
     # storage_m = Vector{T}(undef, m)
     # storage_θ = Vector{T}(undef, m)
     MixedCopulaVCModel{T}(gcs, ntotal, p, m, vecdist, veclink, 
-        β, ϕ, θ, ∇β, ∇ϕ, ∇θ, XtX, Hβ, Hθ, Hϕ, TR, QF, penalized)
+        β, ϕ, θ, ∇β, ∇ϕ, ∇θ, XtX, Hβ, Hθ, Hϕ, TR, QF, storage_d, penalized)
 end
 
 """
@@ -349,7 +351,8 @@ function loglikelihood!(
     veclink::Vector{Link},
     needgrad::Bool = false,
     needhess::Bool = false;
-    penalized::Bool = false
+    penalized::Bool = false,
+    storage_d::Vector{T} = zeros(gc.d)
     ) where T <: BlasReal
     # n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
     needgrad = needgrad || needhess
@@ -364,20 +367,21 @@ function loglikelihood!(
     standardize_res!(gc, ϕ)
     std_res_differential!(gc, vecdist) # compute ∇resβ
 
-    println("Reached here")
-    fdsa
-
-    rss  = abs2(norm(gc.res)) # RSS of standardized residual
-    tsum = dot(θ, gc.t)
-    logl = - log(1 + tsum) - (gc.n * log(2π) -  gc.n * log(abs(ϕ)) + rss) / 2
-    @inbounds for k in 1:gc.m
-        mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
-        if needgrad # ∇β stores X'*Γ*res (standardized residual)
-            BLAS.gemv!('T', θ[k], gc.X, gc.storage_n, one(T), gc.∇β)
+    # loglikelihood term 2 i.e. sum sum ln(f_ij | β)
+    logl = QuasiCopula.component_loglikelihood(gc, vecdist)
+    # loglikelihood term 1 i.e. -sum ln(1 + 0.5tr(Γ(θ)))
+    tsum = dot(θ, gc.t) # tsum = 0.5tr(Γ)
+    logl += -log(1 + tsum)
+    # update Γ before computing logl term3 (todo: multiple dispatch to handle VC/AR/CS)
+    @inbounds for k in 1:gc.m # loop over m variance components
+        mul!(storage_d, gc.V[k], gc.res) # storage_d = V[k] * r
+        if needgrad
+            BLAS.gemv!('T', θ[k], gc.∇resβ, storage_d, 1.0, gc.∇β) # ∇β = ∇r'Γr
         end
-        gc.q[k] = dot(gc.res, gc.storage_n) / 2
+        gc.q[k] = dot(gc.res, storage_d) / 2 # q[k] = 0.5 r' * V[k] * r
     end
-    qsum  = dot(θ, gc.q)
+    # loglikelihood term 3 i.e. sum ln(1 + 0.5 r'Γr)
+    qsum = dot(θ, gc.q) # qsum = 0.5 r'Γr
     logl += log(1 + qsum)
     # add L2 ridge penalty
     if penalized
@@ -385,25 +389,26 @@ function loglikelihood!(
     end
     # gradient
     if needgrad
-        inv1pq = inv(1 + qsum)
+        inv1pq = inv(1 + qsum) # inv1pq = 1 / (1 + 0.5r'Γr)
         if needhess
+            # Hessian of β: Hβ = ∇β*∇β' / (1 + 0.5r'Γr)
             BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, one(T), gc.Hβ) # only lower triangular
-            gc.Hϕ[1, 1] = - abs2(qsum * inv1pq / ϕ)
-            # # hessian of vc vector use with fit_newton_normal.jl
-            inv1pt = inv(1 + tsum)
+            # Hessian of ϕ (todo)
+            # gc.Hϕ[1, 1] = - abs2(qsum * inv1pq / ϕ)
+            # Hessian of vc vector
+            inv1pt = inv(1 + tsum) # inv1pt = 1 / (1 + 0.5tr(Γ))
             gc.m1 .= gc.q
-            gc.m1 .*= inv1pq
+            gc.m1 .*= inv1pq # m1[k] = 0.5 r' * V[k] * r
             gc.m2 .= gc.t
             gc.m2 .*= inv1pt
-            # hessian for vc
             fill!(gc.Hθ, 0.0)
             BLAS.syr!('U', one(T), gc.m2, gc.Hθ)
             BLAS.syr!('U', -one(T), gc.m1, gc.Hθ)
             copytri!(gc.Hθ, 'U')
         end
-        BLAS.gemv!('T', one(T), gc.X, gc.res, -inv1pq, gc.∇β)
-        gc.∇β .*= sqrtϕ
-        gc.∇ϕ  .= (gc.n - rss + 2qsum * inv1pq) / 2ϕ
+        BLAS.gemv!('T', one(T), gc.X, gc.res, -inv1pq, gc.∇β) 
+        # gc.∇β .*= sqrtϕ # todo: deal with ϕ
+        # gc.∇ϕ  .= (gc.n - rss + 2qsum * inv1pq) / 2ϕ
         gc.∇θ  .= inv1pq .* gc.q .- inv(1 + tsum) .* gc.t
         if penalized
             gc.∇θ .-= θ
@@ -426,6 +431,8 @@ function loglikelihood!(
     end
     if needhess
         # todo
+        fill!(gcm.Hβ, 0)
+        fill!(gcm.Hϕ, 0)
         # gcm.Hβ .= - gcm.XtX
         # gcm.Hϕ .= - gcm.ntotal / 2abs2(gcm.ϕ[1])
     end
@@ -433,9 +440,9 @@ function loglikelihood!(
     Threads.@threads for i in eachindex(gcm.data)
         @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
             gcm.ϕ, gcm.θ, gcm.vecdist, gcm.veclink, needgrad, needhess; 
-            penalized = gcm.penalized)
-     end
-     @inbounds for i in eachindex(gcm.data)
+            penalized = gcm.penalized, storage_d = gcm.storage_d)
+    end
+    @inbounds for i in eachindex(gcm.data)
         if needgrad
             gcm.∇β .+= gcm.data[i].∇β
             gcm.∇ϕ .+= gcm.data[i].∇ϕ
@@ -446,7 +453,7 @@ function loglikelihood!(
             gcm.Hϕ .+= gcm.data[i].Hϕ
             gcm.Hθ .+= gcm.data[i].Hθ
         end
-     end
+    end
     needhess && error("todo")
     return sum(logl)
 end
@@ -458,7 +465,7 @@ function update_res!(
     veclink::Vector{Link}
     )
     mul!(gc.η, gc.X, β)
-    @turbo for i in 1:gc.n
+    @inbounds for i in 1:gc.d
         gc.μ[i] = GLM.linkinv(veclink[i], gc.η[i])
         gc.varμ[i] = GLM.glmvar(vecdist[i], gc.μ[i]) # Note: for negative binomial, d.r is used
         gc.dμ[i] = GLM.mueta(veclink[i], gc.η[i])
@@ -492,8 +499,19 @@ function std_res_differential!(
     vecdist::Vector{UnivariateDistribution},
     )
     fill!(gc.∇resβ, 0.0)
-    @inbounds for i in 1:gc.p, j in 1:gc.n
+    @inbounds for i in 1:gc.p, j in 1:gc.d
         gc.∇resβ[j, i] = update_∇resβ(vecdist[j], gc.X[j, i], gc.res[j], gc.μ[j], gc.dμ[j], gc.varμ[j])
     end
     return nothing
+end
+
+function component_loglikelihood(
+    gc::MixedCopulaVCObs{T},
+    vecdist::Vector{UnivariateDistribution},
+    ) where T <: BlasReal
+    logl = zero(T)
+    @inbounds for j in 1:gc.d
+        logl += QuasiCopula.loglik_obs(vecdist[j], gc.y[j], gc.μ[j], gc.wt[j], 1.0)
+    end
+    logl
 end
