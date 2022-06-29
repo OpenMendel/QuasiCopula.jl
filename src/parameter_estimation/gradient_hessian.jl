@@ -24,7 +24,6 @@ function std_res_differential!(gc::Union{NBCopulaVCObs{T, D, Link}, NBCopulaAROb
     nothing
 end
 
-
 """
     std_res_differential!(gc)
 

@@ -13,11 +13,13 @@ export glm_regress_jl, glm_regress_model, glm_score_statistic!  # these are to i
 export component_loglikelihood, glm_gradient, hessian_glm
 export GLMCopulaVCObs, GLMCopulaVCModel
 export Poisson_Bernoulli_VCObs, Poisson_Bernoulli_VCModel
+export MixedCopulaVCObs, MixedCopulaVCModel
 
 include("parameter_estimation/gaussian_CS.jl")
 include("parameter_estimation/NBCopulaCS.jl")
 include("parameter_estimation/GLM_CS.jl")
 include("parameter_estimation/bivariate_mixed.jl")
+include("parameter_estimation/mixed_VC.jl")
 include("parameter_estimation/GLM_VC.jl")
 include("parameter_estimation/gaussian_VC.jl")
 include("parameter_estimation/gaussian_AR.jl")
