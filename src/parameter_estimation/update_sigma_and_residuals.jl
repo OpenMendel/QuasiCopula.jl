@@ -10,11 +10,11 @@ function update_θ_jensen!(
     verbose::Bool=false) where {T <: BlasReal, D<:Union{Poisson, Bernoulli, NegativeBinomial}, Link, VD, VL}
     rsstotal = zero(T)
     @inbounds for i in eachindex(gcm.data)
-        update_res!(gcm.data[i], gcm.β)
+        update_res!(gcm.data[i], gcm.β)
         rsstotal += abs2(norm(gcm.data[i].res))  # needed for updating τ in normal case
-        standardize_res!(gcm.data[i])            # standardize the residuals GLM variance(μ)
-        QuasiCopula.update_quadform!(gcm.data[i]) # with standardized residuals
-        gcm.QF[i, :] = gcm.data[i].q
+        standardize_res!(gcm.data[i])            # standardize the residuals GLM variance(μ)
+        QuasiCopula.update_quadform!(gcm.data[i]) # with standardized residuals
+        gcm.QF[i, :] = gcm.data[i].q
     end
     # MM iteration
     for iter in 1:maxiter
@@ -59,18 +59,18 @@ end
 Update the residual vector according to `β` given link function and distribution.
 """
 function update_res!(
-   gc::Union{GLMCopulaVCObs, NBCopulaVCObs, GLMCopulaCSObs, GLMCopulaARObs, NBCopulaARObs, NBCopulaCSObs},
-   β::Vector)
-   mul!(gc.η, gc.X, β)
-   @turbo for i in 1:gc.n
-       gc.μ[i] = GLM.linkinv(gc.link, gc.η[i])
-       gc.varμ[i] = GLM.glmvar(gc.d, gc.μ[i]) # Note: for negative binomial, d.r is used
-       gc.dμ[i] = GLM.mueta(gc.link, gc.η[i])
-       gc.w1[i] = gc.dμ[i] / gc.varμ[i]
-       gc.w2[i] = gc.w1[i] * gc.dμ[i]
-       gc.res[i] = gc.y[i] - gc.μ[i]
-   end
-   return gc.res
+    gc::Union{GLMCopulaVCObs, NBCopulaVCObs, GLMCopulaCSObs, GLMCopulaARObs, NBCopulaARObs, NBCopulaCSObs},
+    β::Vector)
+    mul!(gc.η, gc.X, β)
+    @turbo for i in 1:gc.n
+        gc.μ[i] = GLM.linkinv(gc.link, gc.η[i])
+        gc.varμ[i] = GLM.glmvar(gc.d, gc.μ[i]) # Note: for negative binomial, d.r is used
+        gc.dμ[i] = GLM.mueta(gc.link, gc.η[i])
+        gc.w1[i] = gc.dμ[i] / gc.varμ[i]
+        gc.w2[i] = gc.w1[i] * gc.dμ[i]
+        gc.res[i] = gc.y[i] - gc.μ[i]
+    end
+    return gc.res
 end
 
 """
@@ -78,18 +78,18 @@ end
 Update the residual vector according to `β` given link function and distribution.
 """
 function update_res!(
-   gc::Poisson_Bernoulli_VCObs,
-   β::Vector)
-   mul!(gc.η, gc.X, β)
-   @turbo for i in 1:gc.n
-       gc.μ[i] = GLM.linkinv(gc.veclink[i], gc.η[i])
-       gc.varμ[i] = GLM.glmvar(gc.vecd[i], gc.μ[i]) # Note: for negative binomial, d.r is used
-       gc.dμ[i] = GLM.mueta(gc.veclink[i], gc.η[i])
-       gc.w1[i] = gc.dμ[i] / gc.varμ[i]
-       gc.w2[i] = gc.w1[i] * gc.dμ[i]
-       gc.res[i] = gc.y[i] - gc.μ[i]
-   end
-   return gc.res
+    gc::Poisson_Bernoulli_VCObs,
+    β::Vector)
+    mul!(gc.η, gc.X, β)
+    @turbo for i in 1:gc.n
+        gc.μ[i] = GLM.linkinv(gc.veclink[i], gc.η[i])
+        gc.varμ[i] = GLM.glmvar(gc.vecd[i], gc.μ[i]) # Note: for negative binomial, d.r is used
+        gc.dμ[i] = GLM.mueta(gc.veclink[i], gc.η[i])
+        gc.w1[i] = gc.dμ[i] / gc.varμ[i]
+        gc.w2[i] = gc.w1[i] * gc.dμ[i]
+        gc.res[i] = gc.y[i] - gc.μ[i]
+    end
+    return gc.res
 end
 
 function update_res!(
@@ -156,9 +156,7 @@ function update_res!(
     gc.res
 end
 
-function update_res!(
-    gcm::GaussianCopulaVCModel{T}
-    ) where T <: BlasReal
+function update_res!(gcm::GaussianCopulaVCModel{T}) where T <: BlasReal
     @inbounds for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
     end
@@ -172,9 +170,7 @@ function standardize_res!(
     gc.res .*= σinv
 end
 
-function standardize_res!(
-    gcm::GaussianCopulaVCModel{T}
-    ) where T <: BlasReal
+function standardize_res!(gcm::GaussianCopulaVCModel{T}) where T <: BlasReal
     σinv = sqrt(gcm.τ[1])
     # standardize residual
     @inbounds for i in eachindex(gcm.data)
