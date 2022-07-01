@@ -84,7 +84,7 @@ struct MixedCopulaVCModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     p::Int          # number of mean parameters in linear regression
     m::Int          # number of variance components
     vecdist::Vector{UnivariateDistribution} # vector of marginal distributions for each data point
-    veclink::Vector{Link} # vector of link functions for each marginal distribution
+    veclink::Vector{<:Link} # vector of link functions for each marginal distribution
     # parameters
     β::Vector{T}    # p-vector of mean regression coefficients
     ϕ::Vector{T}    # dispersion parameters for each marginal; for poissona/bernoulli this should be NaN
@@ -116,7 +116,7 @@ end
 function MixedCopulaVCModel(
     gcs::Vector{MixedCopulaVCObs{T}},
     vecdist::Vector{UnivariateDistribution}, # vector of marginal distributions for each data point
-    veclink::Vector{Link}; # vector of link functions for each marginal distribution
+    veclink::Vector{<:Link}; # vector of link functions for each marginal distribution
     penalized::Bool = false
     ) where T <: BlasReal
     n, p, m = length(gcs), size(gcs[1].X, 2), length(gcs[1].V)
@@ -348,7 +348,7 @@ function loglikelihood!(
     ϕ::Vector{T}, # dispersion parameters for each marginal distributions
     θ::Vector{T}, # variance components
     vecdist::Vector{UnivariateDistribution},
-    veclink::Vector{Link},
+    veclink::Vector{<:Link},
     needgrad::Bool = false,
     needhess::Bool = false;
     penalized::Bool = false,
@@ -462,7 +462,7 @@ function update_res!(
     gc::MixedCopulaVCObs,
     β::Vector,
     vecdist::Vector{UnivariateDistribution},
-    veclink::Vector{Link}
+    veclink::Vector{<:Link}
     )
     mul!(gc.η, gc.X, β)
     @inbounds for i in 1:gc.d
