@@ -1,7 +1,7 @@
 struct MixedCopulaVCObs{T <: BlasReal}
     # data
-    y::Vector{T}
-    X::Matrix{T}
+    y::Vector{T}    # d by 1 vector of response
+    X::Matrix{T}    # d by p design matrix
     V::Vector{Matrix{T}} # vector of (known) covariances
     d::Int          # number of observations within a single sample
     p::Int          # number of mean parameters in linear regression
@@ -68,8 +68,7 @@ function MixedCopulaVCObs(
     μ = Vector{T}(undef, d)
     varμ = Vector{T}(undef, d)
     dμ = Vector{T}(undef, d)
-    wt = Vector{T}(undef, d)
-    fill!(wt, one(T))
+    wt = ones(T, d)
     w1 = Vector{T}(undef, d)
     w2 = Vector{T}(undef, d)
     # constructor
@@ -83,12 +82,12 @@ struct MixedCopulaVCModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     ntotal::Int     # total number of singleton observations
     p::Int          # number of mean parameters in linear regression
     m::Int          # number of variance components
-    vecdist::Vector{UnivariateDistribution} # vector of marginal distributions for each data point
-    veclink::Vector{<:Link} # vector of link functions for each marginal distribution
+    vecdist::Vector{<:UnivariateDistribution} # length d vector of marginal distributions for each data point
+    veclink::Vector{<:Link} # length d vector of link functions for each marginal distribution
     # parameters
     β::Vector{T}    # p-vector of mean regression coefficients
-    ϕ::Vector{T}    # dispersion parameters for each marginal; for poissona/bernoulli this should be NaN
-    θ::Vector{T}    # variance components
+    ϕ::Vector{T}    # length d vector of dispersion parameters for each marginal; for poissona/bernoulli this should be NaN
+    θ::Vector{T}    # length m vector of variance components
     # working arrays
     ∇β::Vector{T}   # gradient terms from all observations
     ∇ϕ::Vector{T}
@@ -115,7 +114,7 @@ end
 
 function MixedCopulaVCModel(
     gcs::Vector{MixedCopulaVCObs{T}},
-    vecdist::Vector{UnivariateDistribution}, # vector of marginal distributions for each data point
+    vecdist::Vector{<:UnivariateDistribution}, # vector of marginal distributions for each data point
     veclink::Vector{<:Link}; # vector of link functions for each marginal distribution
     penalized::Bool = false
     ) where T <: BlasReal
@@ -169,13 +168,13 @@ function fit!(
     limited_memory_max_history = 20, warm_start_init_point="yes", hessian_approximation = "limited-memory")
     )
     initialize_model!(gcm)
-    npar = gcm.p + gcm.m + 1
+    npar = gcm.p + gcm.m # todo: optimize ϕ
     optm = MathProgBase.NonlinearModel(solver)
     # set lower bounds and upper bounds of parameters
     lb   = fill(-Inf, npar)
     ub   = fill( Inf, npar)
     offset = gcm.p + 1
-    for k in 1:gcm.m + 1
+    for k in 1:gcm.m # variance components must be >0
         lb[offset] = 0
         offset += 1
     end
@@ -211,7 +210,7 @@ function modelpar_to_optimpar!(
         par[offset] = gcm.θ[k]
         offset += 1
     end
-    par[offset] = gcm.ϕ[1]
+    # par[offset] = gcm.ϕ[1] # todo
     par
 end
 
@@ -231,7 +230,7 @@ function optimpar_to_modelpar!(
         gcm.θ[k] = par[offset]
         offset   += 1
     end
-    gcm.ϕ[1] = par[offset]
+    # gcm.ϕ[1] = par[offset] # todo
     gcm
 end
 
@@ -270,8 +269,8 @@ function MathProgBase.eval_grad_f(
         grad[offset] = gcm.∇θ[k]
         offset += 1
     end
-    grad[offset] = gcm.∇ϕ[1]
-obj
+    # grad[offset] = gcm.∇ϕ[1] # todo
+    obj
 end
 
 MathProgBase.eval_g(gcm::MixedCopulaVCModel, g, par) = nothing
@@ -325,7 +324,7 @@ function MathProgBase.eval_hesslag(
         H[idx] = gcm.Hθ[i, j]
         idx += 1
     end
-    H[idx] = gcm.Hϕ[1, 1]
+    # H[idx] = gcm.Hϕ[1, 1] # todo
     # lmul!(σ, H)
     H .*= σ
 end
@@ -347,14 +346,13 @@ function loglikelihood!(
     β::Vector{T},
     ϕ::Vector{T}, # dispersion parameters for each marginal distributions
     θ::Vector{T}, # variance components
-    vecdist::Vector{UnivariateDistribution},
+    vecdist::Vector{<:UnivariateDistribution},
     veclink::Vector{<:Link},
     needgrad::Bool = false,
     needhess::Bool = false;
     penalized::Bool = false,
     storage_d::Vector{T} = zeros(gc.d)
     ) where T <: BlasReal
-    # n, p, m = size(gc.X, 1), size(gc.X, 2), length(gc.V)
     needgrad = needgrad || needhess
     if needgrad
         fill!(gc.∇β, 0)
@@ -423,7 +421,6 @@ function loglikelihood!(
     needgrad::Bool = false,
     needhess::Bool = false
     ) where T <: BlasReal
-    logl = zero(T)
     if needgrad
         fill!(gcm.∇β, 0)
         fill!(gcm.∇ϕ, 0)
@@ -436,7 +433,7 @@ function loglikelihood!(
         # gcm.Hβ .= - gcm.XtX
         # gcm.Hϕ .= - gcm.ntotal / 2abs2(gcm.ϕ[1])
     end
-    logl = zeros(Threads.nthreads())
+    logl = zeros(T, Threads.nthreads())
     Threads.@threads for i in eachindex(gcm.data)
         @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
             gcm.ϕ, gcm.θ, gcm.vecdist, gcm.veclink, needgrad, needhess; 
@@ -461,7 +458,7 @@ end
 function update_res!(
     gc::MixedCopulaVCObs,
     β::Vector,
-    vecdist::Vector{UnivariateDistribution},
+    vecdist::Vector{<:UnivariateDistribution},
     veclink::Vector{<:Link}
     )
     mul!(gc.η, gc.X, β)
@@ -496,7 +493,7 @@ update_∇resβ(d::NegativeBinomial, x_ji, res_j, μ_j, dμ_j, varμ_j) =
 
 function std_res_differential!(
     gc::MixedCopulaVCObs,
-    vecdist::Vector{UnivariateDistribution},
+    vecdist::Vector{<:UnivariateDistribution},
     )
     fill!(gc.∇resβ, 0.0)
     @inbounds for i in 1:gc.p, j in 1:gc.d
@@ -507,7 +504,7 @@ end
 
 function component_loglikelihood(
     gc::MixedCopulaVCObs{T},
-    vecdist::Vector{UnivariateDistribution},
+    vecdist::Vector{<:UnivariateDistribution},
     ) where T <: BlasReal
     logl = zero(T)
     @inbounds for j in 1:gc.d
