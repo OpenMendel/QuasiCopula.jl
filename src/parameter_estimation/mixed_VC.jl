@@ -52,8 +52,8 @@ function MixedCopulaVCObs(
     Hθ  = Matrix{T}(undef, m, m)
     Hϕ  = Matrix{T}(undef, 1, 1)
     res = Vector{T}(undef, d)
-    t   = [tr(V[k])/2 for k in 1:m]
-    q   = Vector{T}(undef, m)
+    t   = [tr(V[k])/2 for k in 1:m] # t is variable c in f(θ) = sum ln(1 + θ'b) - sum ln(1 + θ'c) in section 6.2
+    q   = Vector{T}(undef, m) # q is variable b in f(θ) = sum ln(1 + θ'b) - sum ln(1 + θ'c) in section 6.2
     xtx = transpose(X) * X
     # storage_n = Vector{T}(undef, n)
     # m1        = Vector{T}(undef, m)
@@ -404,9 +404,9 @@ function loglikelihood!(
             BLAS.syr!('U', -one(T), gc.m1, gc.Hθ)
             copytri!(gc.Hθ, 'U')
         end
-        BLAS.gemv!('T', one(T), gc.X, gc.res, -inv1pq, gc.∇β) 
-        # gc.∇β .*= sqrtϕ # todo: deal with ϕ
-        # gc.∇ϕ  .= (gc.n - rss + 2qsum * inv1pq) / 2ϕ
+        BLAS.gemv!('T', one(T), gc.X, gc.res, inv1pq, gc.∇β) # ∇β = X*r + ∇r'Γr/(1 + 0.5r'Γr)
+        # gc.∇β .*= sqrtϕ # todo: how does ϕ get involved here?
+        # gc.∇ϕ  .= (gc.n - rss + 2qsum * inv1pq) / 2ϕ # todo: deal with ϕ
         gc.∇θ  .= inv1pq .* gc.q .- inv(1 + tsum) .* gc.t
         if penalized
             gc.∇θ .-= θ
