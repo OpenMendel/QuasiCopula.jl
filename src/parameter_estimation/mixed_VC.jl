@@ -114,7 +114,7 @@ end
 
 function MixedCopulaVCModel(
     gcs::Vector{MixedCopulaVCObs{T}},
-    vecdist::Vector{<:UnivariateDistribution}, # vector of marginal distributions for each data point
+    vecdist::Union{Vector{<:UnivariateDistribution}, Vector{UnionAll}}, # vector of marginal distributions for each data point
     veclink::Vector{<:Link}; # vector of link functions for each marginal distribution
     penalized::Bool = false
     ) where T <: BlasReal
@@ -144,6 +144,9 @@ function MixedCopulaVCModel(
     end
     QF = Matrix{T}(undef, n, m)
     storage_d = Vector{T}(undef, d)
+    if typeof(vecdist) <: Vector{UnionAll}
+        vecdist = [vecdist[j]() for j in 1:d]
+    end
     # storage_n = Vector{T}(undef, n)
     # storage_m = Vector{T}(undef, m)
     # storage_θ = Vector{T}(undef, m)
