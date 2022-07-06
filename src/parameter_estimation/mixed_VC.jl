@@ -152,7 +152,7 @@ function MixedCopulaVCModel(
 end
 
 """
-    fit_quasi!(gcm::MixedCopulaVCModel, solver=Ipopt.IpoptSolver)
+    fit!(gcm::MixedCopulaVCModel, solver=Ipopt.IpoptSolver)
 
 Fit an `MixedCopulaVCModel` object by MLE using a nonlinear programming solver. Start point
 should be provided in `gcm.β`, `gcm.θ`, `gcm.ϕ` this is for Normal base.
@@ -225,10 +225,11 @@ function optimpar_to_modelpar!(
     )
     # β
     copyto!(gcm.β, 1, par, 1, gcm.p)
+    # variance components # todo: dispatch to CS/VC/AR variance models
     offset = gcm.p + 1
     @inbounds for k in 1:gcm.m
         gcm.θ[k] = par[offset]
-        offset   += 1
+        offset += 1
     end
     # gcm.ϕ[1] = par[offset] # todo
     gcm
@@ -404,10 +405,12 @@ function loglikelihood!(
             BLAS.syr!('U', -one(T), gc.m1, gc.Hθ)
             copytri!(gc.Hθ, 'U')
         end
-        BLAS.gemv!('T', one(T), gc.X, gc.res, inv1pq, gc.∇β) # ∇β = X*r + ∇r'Γr/(1 + 0.5r'Γr)
+        # note: currently res = (y-μ)/sqrt(varμ), but we need (y-μ)*(dg/varμ) for remaining parts of ∇β
+        gc.res .= gc.w1 .* (gc.y .- gc.μ)
+        BLAS.gemv!('T', one(T), gc.X, gc.res, inv1pq, gc.∇β) # ∇β = X'*Diagonal(dg/varμ)*(y-μ) + ∇r'Γr/(1 + 0.5r'Γr)
         # gc.∇β .*= sqrtϕ # todo: how does ϕ get involved here?
         # gc.∇ϕ  .= (gc.n - rss + 2qsum * inv1pq) / 2ϕ # todo: deal with ϕ
-        gc.∇θ  .= inv1pq .* gc.q .- inv(1 + tsum) .* gc.t
+        gc.∇θ .= inv1pq .* gc.q .- inv(1 + tsum) .* gc.t
         if penalized
             gc.∇θ .-= θ
         end
@@ -430,6 +433,7 @@ function loglikelihood!(
         # todo
         fill!(gcm.Hβ, 0)
         fill!(gcm.Hϕ, 0)
+        fill!(gcm.Hθ, 0)
         # gcm.Hβ .= - gcm.XtX
         # gcm.Hϕ .= - gcm.ntotal / 2abs2(gcm.ϕ[1])
     end
