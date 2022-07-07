@@ -154,6 +154,60 @@ function MixedCopulaVCModel(
         β, ϕ, θ, ∇β, ∇ϕ, ∇θ, XtX, Hβ, Hθ, Hϕ, TR, QF, storage_d, penalized)
 end
 
+struct GWASCopulaVCModel{T <: BlasReal}
+    gcm::MixedCopulaVCModel{T} # fitted null model
+    G::SnpArray     # n by q (compressed) genotype matrix
+    Pinv::Matrix{T} # p by p matrix
+    W::Vector{T} # length p vector
+    Q::Vector{T} # length 1 vector
+    R::Vector{T} # length 1 vector
+    pvals::Vector{T} # length q vector of p-values for each SNP in G
+end
+
+"""
+    GWASCopulaVCModel(gcm::MixedCopulaVCModel, x::SnpArray)
+
+Performs score tests for each SNP in `x`, given a fitted (null) model on the non-genetic covariates.
+
+# Inputs
++ `gcm`: A fitted `MixedCopulaVCModel` that includes `n` sample points and `p` non-genetic covariates.
++ `G`: A `SnpArray` (compressed `.bed/bim/fam` PLINK file) with `n` samples and `q` SNPs
+
+# Outputs
+A length `q` vector of p-values storing the score statistics for each SNP
+"""
+function GWASCopulaVCModel(
+    gcm::MixedCopulaVCModel{T},
+    G::SnpArray
+    ) where T <: BlasReal
+    n, q = size(G)
+    n == length(gcm.data) || error("sample size do not agree")
+    # assemble needed variables from the null model 
+    Pinv = inv(Symmetric(gcm.Hβ))
+    # preallocated arrays for efficiency
+    z = zeros(T, q)
+    W = zeros(T, p)
+    χ2 = Chisq(1)
+    pvals = zeros(T, q)
+    # score test for each SNP
+    for j in 1:q
+        # sync vectors
+        SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=true, impute=true)
+        Q, R = zero(T), zero(T)
+        fill!(W, 0)
+        # accumulate precomputed quantities (todo: efficiency)
+        for i in 1:n
+            R += Transpose(z) * Diagonal(gcm.data[i].w1) * (gcm.data[i].y - gcm.data[i].μ)
+            W .+= Transpose(gcm.data[i].X) * Diagonal(gcm.data[i].w2) * z
+            Q += Transpose(z) * Diagonal(gcm.data[i].w2) * z
+        end
+        # score test (todo: efficiency)
+        S = Transpose(R) * inv(Q - W'*Pinv*W) * R
+        pvals[j] = ccdf(χ2, S)
+    end
+    return pvals
+end
+
 """
     fit!(gcm::MixedCopulaVCModel, solver=Ipopt.IpoptSolver)
 

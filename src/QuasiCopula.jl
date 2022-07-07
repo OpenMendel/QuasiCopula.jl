@@ -4,8 +4,10 @@ using LoopVectorization, DataFrames
 using LinearAlgebra: BlasReal, copytri!
 using SpecialFunctions
 using FFTW
+using SnpArrays
 @reexport using Ipopt
 import Base: show
+
 export fit!, update_θ_jensen!, init_β!, initialize_model!, loglikelihood!, standardize_res!, std_res_differential!
 export update_res!, update_θ!
 export update_∇θ!, update_Hθ! # update gradient and hessian of variance components
