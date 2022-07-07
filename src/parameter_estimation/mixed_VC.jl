@@ -17,14 +17,14 @@ struct MixedCopulaVCObs{T <: BlasReal}
     res::Vector{T}  # residual vector res_i
     t::Vector{T}    # t[k] = tr(V_i[k]) / 2
     q::Vector{T}    # q[k] = res_i' * V_i[k] * res_i / 2
-    xtx::Matrix{T}  # Xi'Xi
     # storage_n::Vector{T}
-    # m1::Vector{T}
-    # m2::Vector{T}
+    m1::Vector{T}
+    m2::Vector{T}
+    storage_d::Vector{T}
     # storage_p1::Vector{T}
     # storage_p2::Vector{T}
     # storage_np::Matrix{T}
-    # storage_pp::Matrix{T}
+    storage_dp::Matrix{T}
     # added_term_numerator::Matrix{T}
     # added_term2::Matrix{T}
     η::Vector{T}    # η = Xβ systematic component
@@ -54,14 +54,14 @@ function MixedCopulaVCObs(
     res = Vector{T}(undef, d)
     t   = [tr(V[k])/2 for k in 1:m] # t is variable c in f(θ) = sum ln(1 + θ'b) - sum ln(1 + θ'c) in section 6.2
     q   = Vector{T}(undef, m) # q is variable b in f(θ) = sum ln(1 + θ'b) - sum ln(1 + θ'c) in section 6.2
-    xtx = transpose(X) * X
+    m1  = Vector{T}(undef, m)
+    m2  = Vector{T}(undef, m)
+    storage_d = Vector{T}(undef, d)
+    storage_dp = Matrix{T}(undef, d, p)
     # storage_n = Vector{T}(undef, n)
-    # m1        = Vector{T}(undef, m)
-    # m2        = Vector{T}(undef, m)
     # storage_p1 = Vector{T}(undef, p)
     # storage_p2 = Vector{T}(undef, p)
     # storage_np = Matrix{T}(undef, n, p)
-    # storage_pp = Matrix{T}(undef, p, p)
     # added_term_numerator = Matrix{T}(undef, n, p)
     # added_term2 = Matrix{T}(undef, p, p)
     η = Vector{T}(undef, d)
@@ -72,8 +72,8 @@ function MixedCopulaVCObs(
     w1 = Vector{T}(undef, d)
     w2 = Vector{T}(undef, d)
     # constructor
-    MixedCopulaVCObs{T}(y, X, V, d, p, m, 
-        ∇β, ∇resβ, ∇ϕ, ∇θ, Hβ, Hθ, Hϕ, res, t, q, xtx, η, μ, varμ, dμ, wt, w1, w2)
+    MixedCopulaVCObs{T}(y, X, V, d, p, m, ∇β, ∇resβ, ∇ϕ, ∇θ, Hβ, Hθ, Hϕ, 
+        res, t, q, m1, m2, storage_d, storage_dp, η, μ, varμ, dμ, wt, w1, w2)
 end
 
 struct MixedCopulaVCModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
@@ -92,7 +92,6 @@ struct MixedCopulaVCModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     ∇β::Vector{T}   # gradient terms from all observations
     ∇ϕ::Vector{T}
     ∇θ::Vector{T}
-    XtX::Matrix{T}  # X'X = sum_i Xi'Xi
     Hβ::Matrix{T}   # Hessian terms from all observations
     Hθ::Matrix{T}
     Hϕ::Matrix{T}
@@ -105,7 +104,6 @@ struct MixedCopulaVCModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     # vcov::Matrix{T}
     # ψ::Vector{T}
     # storage variables
-    storage_d::Vector{T}
     # storage_n::Vector{T}
     # storage_m::Vector{T}
     # storage_θ::Vector{T}
@@ -126,7 +124,6 @@ function MixedCopulaVCModel(
     ∇β      = Vector{T}(undef, p)
     ∇ϕ      = Vector{T}(undef, d)
     ∇θ      = Vector{T}(undef, m)
-    XtX     = zeros(T, p, p) # sum_i xi'xi
     Hβ      = Matrix{T}(undef, p, p)
     Hθ      = Matrix{T}(undef, m, m)
     Hϕ      = Matrix{T}(undef, d, d)
@@ -139,11 +136,9 @@ function MixedCopulaVCModel(
     ntotal  = 0
     for i in eachindex(gcs)
         ntotal  += length(gcs[i].y)
-        BLAS.axpy!(one(T), gcs[i].xtx, XtX)
         TR[i, :] .= gcs[i].t
     end
     QF = Matrix{T}(undef, n, m)
-    storage_d = Vector{T}(undef, d)
     if typeof(vecdist) <: Vector{UnionAll}
         vecdist = [vecdist[j]() for j in 1:d]
     end
@@ -151,7 +146,7 @@ function MixedCopulaVCModel(
     # storage_m = Vector{T}(undef, m)
     # storage_θ = Vector{T}(undef, m)
     MixedCopulaVCModel{T}(gcs, ntotal, p, m, vecdist, veclink, 
-        β, ϕ, θ, ∇β, ∇ϕ, ∇θ, XtX, Hβ, Hθ, Hϕ, TR, QF, storage_d, penalized)
+        β, ϕ, θ, ∇β, ∇ϕ, ∇θ, Hβ, Hθ, Hϕ, TR, QF, penalized)
 end
 
 struct GWASCopulaVCModel{T <: BlasReal}
@@ -182,7 +177,7 @@ function GWASCopulaVCModel(
     ) where T <: BlasReal
     n, q = size(G)
     n == length(gcm.data) || error("sample size do not agree")
-    # assemble needed variables from the null model 
+    # assemble needed variables from the null model
     Pinv = inv(Symmetric(gcm.Hβ))
     # preallocated arrays for efficiency
     z = zeros(T, q)
@@ -408,8 +403,7 @@ function loglikelihood!(
     veclink::Vector{<:Link},
     needgrad::Bool = false,
     needhess::Bool = false;
-    penalized::Bool = false,
-    storage_d::Vector{T} = zeros(gc.d)
+    penalized::Bool = false
     ) where T <: BlasReal
     needgrad = needgrad || needhess
     if needgrad
@@ -417,7 +411,11 @@ function loglikelihood!(
         fill!(gc.∇ϕ, 0)
         fill!(gc.∇θ, 0)
     end
-    needhess && fill!(gc.Hβ, 0)
+    if needhess
+        fill!(gc.Hβ, 0)
+        fill!(gc.Hθ, 0)
+        fill!(gc.Hϕ, 0)
+    end
     # update residuals and its gradient
     update_res!(gc, β, vecdist, veclink)
     standardize_res!(gc, ϕ)
@@ -430,11 +428,11 @@ function loglikelihood!(
     logl += -log(1 + tsum)
     # update Γ before computing logl term3 (todo: multiple dispatch to handle VC/AR/CS)
     @inbounds for k in 1:gc.m # loop over m variance components
-        mul!(storage_d, gc.V[k], gc.res) # storage_d = V[k] * r
+        mul!(gc.storage_d, gc.V[k], gc.res) # storage_d = V[k] * r
         if needgrad
-            BLAS.gemv!('T', θ[k], gc.∇resβ, storage_d, 1.0, gc.∇β) # ∇β = ∇r'Γr
+            BLAS.gemv!('T', θ[k], gc.∇resβ, gc.storage_d, 1.0, gc.∇β) # ∇β = ∇r'Γr
         end
-        gc.q[k] = dot(gc.res, storage_d) / 2 # q[k] = 0.5 r' * V[k] * r
+        gc.q[k] = dot(gc.res, gc.storage_d) / 2 # q[k] = 0.5 r' * V[k] * r
     end
     # loglikelihood term 3 i.e. sum ln(1 + 0.5 r'Γr)
     qsum = dot(θ, gc.q) # qsum = 0.5 r'Γr
@@ -447,20 +445,22 @@ function loglikelihood!(
     if needgrad
         inv1pq = inv(1 + qsum) # inv1pq = 1 / (1 + 0.5r'Γr)
         if needhess
-            # Hessian of β: Hβ = ∇β*∇β' / (1 + 0.5r'Γr)
-            BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, one(T), gc.Hβ) # only lower triangular
-            # Hessian of ϕ (todo)
-            # gc.Hϕ[1, 1] = - abs2(qsum * inv1pq / ϕ)
+            # approximate Hessian of β
+            mul!(gc.storage_dp, Diagonal(gc.w2), gc.X)
+            BLAS.gemm!('T', 'N', -ones(T), gc.X, gc.storage_dp, zero(T), gc.Hβ) # Hβ = -Xi'*Diagonal(W2)*Xi
+            BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, one(T), gc.Hβ) # Hβ = -Xi'*Diagonal(W2)*Xi - ∇β*∇β' / (1 + 0.5r'Γr)
+            copytri!(gc.Hβ, 'L') # syrk! above only lower triangular
             # Hessian of vc vector
             inv1pt = inv(1 + tsum) # inv1pt = 1 / (1 + 0.5tr(Γ))
             gc.m1 .= gc.q
-            gc.m1 .*= inv1pq # m1[k] = 0.5 r' * V[k] * r
+            gc.m1 .*= inv1pq # m1[k] = 0.5 r' * V[k] * r / (1 + 0.5r'Γr)
             gc.m2 .= gc.t
             gc.m2 .*= inv1pt
-            fill!(gc.Hθ, 0.0)
             BLAS.syr!('U', one(T), gc.m2, gc.Hθ)
             BLAS.syr!('U', -one(T), gc.m1, gc.Hθ)
             copytri!(gc.Hθ, 'U')
+            # Hessian of ϕ (todo)
+            # gc.Hϕ[1, 1] = - abs2(qsum * inv1pq / ϕ)
         end
         # note: currently res = (y-μ)/sqrt(varμ), but we need (y-μ)*(dg/varμ) for remaining parts of ∇β
         gc.res .= gc.w1 .* (gc.y .- gc.μ)
@@ -487,18 +487,15 @@ function loglikelihood!(
         fill!(gcm.∇θ, 0)
     end
     if needhess
-        # todo
         fill!(gcm.Hβ, 0)
         fill!(gcm.Hϕ, 0)
         fill!(gcm.Hθ, 0)
-        # gcm.Hβ .= - gcm.XtX
-        # gcm.Hϕ .= - gcm.ntotal / 2abs2(gcm.ϕ[1])
     end
     logl = zeros(T, Threads.nthreads())
     Threads.@threads for i in eachindex(gcm.data)
         @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
             gcm.ϕ, gcm.θ, gcm.vecdist, gcm.veclink, needgrad, needhess; 
-            penalized = gcm.penalized, storage_d = gcm.storage_d)
+            penalized = gcm.penalized)
     end
     @inbounds for i in eachindex(gcm.data)
         if needgrad
@@ -512,7 +509,6 @@ function loglikelihood!(
             gcm.Hθ .+= gcm.data[i].Hθ
         end
     end
-    needhess && error("todo")
     return sum(logl)
 end
 
