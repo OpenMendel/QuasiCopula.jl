@@ -176,11 +176,14 @@ function GWASCopulaVCModel(
     G::SnpArray
     ) where T <: BlasReal
     n, q = size(G)
+    p = length(gcm.β)
+    d = length(gcm.vecdist)
     n == length(gcm.data) || error("sample size do not agree")
     # assemble needed variables from the null model
     Pinv = inv(Symmetric(gcm.Hβ))
     # preallocated arrays for efficiency
-    z = zeros(T, q)
+    z = zeros(T, n)
+    zi = zeros(T, d)
     W = zeros(T, p)
     χ2 = Chisq(1)
     pvals = zeros(T, q)
@@ -192,12 +195,13 @@ function GWASCopulaVCModel(
         fill!(W, 0)
         # accumulate precomputed quantities (todo: efficiency)
         for i in 1:n
-            R += Transpose(z) * Diagonal(gcm.data[i].w1) * (gcm.data[i].y - gcm.data[i].μ)
-            W .+= Transpose(gcm.data[i].X) * Diagonal(gcm.data[i].w2) * z
-            Q += Transpose(z) * Diagonal(gcm.data[i].w2) * z
+            zi .= z[i]
+            R += Transpose(zi) * Diagonal(gcm.data[i].w1) * (gcm.data[i].y - gcm.data[i].μ)
+            W .+= Transpose(gcm.data[i].X) * Diagonal(gcm.data[i].w2) * zi
+            Q += Transpose(zi) * Diagonal(gcm.data[i].w2) * zi
         end
         # score test (todo: efficiency)
-        S = Transpose(R) * inv(Q - W'*Pinv*W) * R
+        S = R * inv(Q - W'*Pinv*W) * R
         pvals[j] = ccdf(χ2, S)
     end
     return pvals
@@ -447,10 +451,12 @@ function loglikelihood!(
         if needhess
             # approximate Hessian of β
             mul!(gc.storage_dp, Diagonal(gc.w2), gc.X)
-            BLAS.gemm!('T', 'N', -ones(T), gc.X, gc.storage_dp, zero(T), gc.Hβ) # Hβ = -Xi'*Diagonal(W2)*Xi
-            BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, one(T), gc.Hβ) # Hβ = -Xi'*Diagonal(W2)*Xi - ∇β*∇β' / (1 + 0.5r'Γr)
+            BLAS.gemm!('T', 'N', -one(T), gc.X, gc.storage_dp, zero(T), gc.Hβ) # Hβ = -Xi'*Diagonal(W2)*Xi
+            BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, one(T), gc.Hβ) # Hβ = -Xi'*Diagonal(W2)*Xi - ∇β*∇β' / (1 + 0.5r'Γr)^2
             copytri!(gc.Hβ, 'L') # syrk! above only lower triangular
-            # Hessian of vc vector
+            # println(gc.Hβ)
+            # println(-1 .* (transpose(gc.X)*Diagonal(gc.w2)*gc.X) - abs2(inv1pq) .* (gc.∇β * transpose(gc.∇β)))
+            # Hessian of vc vector (todo: are these correct?)
             inv1pt = inv(1 + tsum) # inv1pt = 1 / (1 + 0.5tr(Γ))
             gc.m1 .= gc.q
             gc.m1 .*= inv1pq # m1[k] = 0.5 r' * V[k] * r / (1 + 0.5r'Γr)
