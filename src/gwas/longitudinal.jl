@@ -571,7 +571,7 @@ function component_loglikelihood(
     ) where T <: BlasReal
     logl = zero(T)
     @inbounds for j in 1:gc.d
-        logl += QuasiCopula.loglik_obs(vecdist[j], gc.y[j], gc.μ[j], gc.wt[j], 1.0)
+        logl += QuasiCopula.loglik_obs(vecdist[j], gc.y[j], gc.μ[j], gc.wt[j], one(T))
     end
     logl
 end
