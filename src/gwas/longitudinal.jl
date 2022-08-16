@@ -14,7 +14,7 @@ struct MixedCopulaVCObs{T <: BlasReal}
     Hβ::Matrix{T}   # Hessian wrt β
     Hθ::Matrix{T}   # Hessian wrt variance components θ
     Hϕ::Matrix{T}   # Hessian wrt ϕ
-    res::Vector{T}  # residual vector res_i
+    res::Vector{T}  # standardized residual vector res_i
     t::Vector{T}    # t[k] = tr(V_i[k]) / 2
     q::Vector{T}    # q[k] = res_i' * V_i[k] * res_i / 2
     # storage_n::Vector{T}
@@ -179,6 +179,7 @@ function GWASCopulaVCModel(
     p = length(gcm.β)
     d = length(gcm.vecdist)
     n == length(gcm.data) || error("sample size do not agree")
+    any(x -> abs(x) > 1e-3, gcm.∇β) && error("Null model gradient is not zero!")
     # assemble needed variables from the null model
     Pinv = inv(Symmetric(gcm.Hβ))
     # preallocated arrays for efficiency
@@ -187,6 +188,8 @@ function GWASCopulaVCModel(
     W = zeros(T, p)
     χ2 = Chisq(1)
     pvals = zeros(T, q)
+    ∇resγ = zeros(T, d)
+    Γ = zeros(T, d, d)
     # score test for each SNP
     for j in 1:q
         # sync vectors
@@ -196,9 +199,31 @@ function GWASCopulaVCModel(
         # accumulate precomputed quantities (todo: efficiency)
         for i in 1:n
             zi .= z[i]
-            R += Transpose(zi) * Diagonal(gcm.data[i].w1) * (gcm.data[i].y - gcm.data[i].μ)
-            W .+= Transpose(gcm.data[i].X) * Diagonal(gcm.data[i].w2) * zi
-            Q += Transpose(zi) * Diagonal(gcm.data[i].w2) * zi
+            # update ∇resγ
+            gc = gcm.data[i]
+            res = gc.res # d × 1
+            ∇resβ = gc.∇resβ # d × p
+            for j in 1:gc.d
+                ∇resγ[j] = update_∇resβ(gcm.vecdist[j], zi[j], res[j], gc.μ[j], gc.dμ[j], gc.varμ[j])
+            end
+            # calculate trailing terms (todo: efficiency)
+            fill!(Γ, 0)
+            for k in 1:gc.m # loop over variance components
+                Γ .+= gcm.θ[k] .* gc.V[k]
+            end
+            # denom = 1 + dot(gcm.θ, gc.q) # note dot(θ, gc.q) = qsum = 0.5 r'Γr
+            denom = 1 + 0.5 * (res' * Γ * res)
+            denom2 = abs2(denom)
+            Wtrail = (∇resβ' * Γ * res) .* ((∇resγ' * Γ * res) / denom2)
+            Qtrail = (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
+            Rtrail = (∇resγ' * Γ * res) / denom
+            # score test variables
+            W .+= Transpose(gcm.data[i].X) * Diagonal(gcm.data[i].w2) * zi .+ Wtrail
+            Q += Transpose(zi) * Diagonal(gcm.data[i].w2) * zi + Qtrail
+            R += Transpose(zi) * Diagonal(gcm.data[i].w1) * (gcm.data[i].y - gcm.data[i].μ) + Rtrail
+            # W .+= Transpose(gcm.data[i].X) * Diagonal(gcm.data[i].w2) * zi
+            # Q += Transpose(zi) * Diagonal(gcm.data[i].w2) * zi
+            # R += Transpose(zi) * Diagonal(gcm.data[i].w1) * (gcm.data[i].y - gcm.data[i].μ)
         end
         # score test (todo: efficiency)
         S = R * inv(Q - W'*Pinv*W) * R
@@ -246,7 +271,6 @@ function fit!(
     # update parameters and refresh gradient
     optimpar_to_modelpar!(gcm, MathProgBase.getsolution(optm))
     loglikelihood!(gcm, true, false)
-    # gcm
 end
 
 """
@@ -468,9 +492,9 @@ function loglikelihood!(
             # Hessian of ϕ (todo)
             # gc.Hϕ[1, 1] = - abs2(qsum * inv1pq / ϕ)
         end
-        # note: currently res = (y-μ)/sqrt(varμ), but we need (y-μ)*(dg/varμ) for remaining parts of ∇β
-        gc.res .= gc.w1 .* (gc.y .- gc.μ)
-        BLAS.gemv!('T', one(T), gc.X, gc.res, inv1pq, gc.∇β) # ∇β = X'*Diagonal(dg/varμ)*(y-μ) + ∇r'Γr/(1 + 0.5r'Γr)
+        # compute (y-μ)*(dg/varμ) for remaining parts of ∇β
+        gc.storage_d .= gc.w1 .* (gc.y .- gc.μ)
+        BLAS.gemv!('T', one(T), gc.X, gc.storage_d, inv1pq, gc.∇β) # ∇β = X'*Diagonal(dg/varμ)*(y-μ) + ∇r'Γr/(1 + 0.5r'Γr)
         # gc.∇β .*= sqrtϕ # todo: how does ϕ get involved here?
         # gc.∇ϕ  .= (gc.n - rss + 2qsum * inv1pq) / 2ϕ # todo: deal with ϕ
         gc.∇θ .= inv1pq .* gc.q .- inv(1 + tsum) .* gc.t
