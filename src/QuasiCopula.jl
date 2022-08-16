@@ -15,7 +15,9 @@ export glm_regress_jl, glm_regress_model, glm_score_statistic!  # these are to i
 export component_loglikelihood, glm_gradient, hessian_glm
 export GLMCopulaVCObs, GLMCopulaVCModel
 export Poisson_Bernoulli_VCObs, Poisson_Bernoulli_VCModel
+# for GWAS
 export MixedCopulaVCObs, MixedCopulaVCModel
+export MultivariateCopulaVCModel
 
 include("parameter_estimation/gaussian_CS.jl")
 include("parameter_estimation/NBCopulaCS.jl")
@@ -45,4 +47,5 @@ include("model_interface/CS_interface.jl")
 include("model_interface/VC_interface.jl")
 include("model_interface/show_io.jl")
 include("gwas/longitudinal.jl")
+include("gwas/multivariate.jl")
 end # module
