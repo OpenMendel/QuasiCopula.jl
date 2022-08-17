@@ -159,6 +159,22 @@ end
 #     pvals::Vector{T} # length q vector of p-values for each SNP in G
 # end
 
+_get_null_distribution(gcm::GaussianCopulaVCModel) = Normal()
+_get_null_distribution(gcm::NBCopulaVCModel) = NegativeBinomial()
+function _get_null_distribution(
+    gcm::GLMCopulaVCModel
+    )
+    T = eltype(gcm.data[1].X)
+    if eltype(gcm.d) == Bernoulli{T}
+        d = Bernoulli()
+    elseif eltype(gcm.d) == Poisson{T}
+        d = Poisson()
+    else
+        error("GLMCopulaVCModel should have marginal distributions Bernoulli or Poisson but was $(eltype(gcm.d))")
+    end
+    return d
+end
+
 """
     GWASCopulaVCModel(gcm::MixedCopulaVCModel, x::SnpArray)
 
@@ -172,12 +188,12 @@ Performs score tests for each SNP in `x`, given a fitted (null) model on the non
 A length `q` vector of p-values storing the score statistics for each SNP
 """
 function GWASCopulaVCModel(
-    gcm::Union{MixedCopulaVCModel, GLMCopulaVCModel},
+    gcm::Union{GLMCopulaVCModel, GaussianCopulaVCModel, NBCopulaVCModel},
     G::SnpArray
     )
     n, q = size(G)
     p = length(gcm.β)
-    dist = eltype(gcm.d)
+    dist = _get_null_distribution(gcm)
     T = eltype(gcm.data[1].X)
     n == length(gcm.data) || error("sample size do not agree")
     any(x -> abs(x) > 1e-3, gcm.∇β) && error("Null model gradient is not zero!")
@@ -201,7 +217,7 @@ function GWASCopulaVCModel(
             d = gc.n # number of observations for current sample
             zi = fill(z[i], d)
             res = gc.res # d × 1
-            ∇resβ = gc.∇resβ # d × p (todo: should this be 0??)
+            ∇resβ = gc.∇resβ # d × p (todo: how to get this for Gaussian case?)
             # update ∇resγ
             ∇resγ = zeros(T, d)
             for j in 1:d # loop over each sample's observation
@@ -221,10 +237,10 @@ function GWASCopulaVCModel(
             # score test variables
             W .+= Transpose(gcm.data[i].X) * Diagonal(gcm.data[i].w2) * zi .+ Wtrail
             Q += Transpose(zi) * Diagonal(gcm.data[i].w2) * zi + Qtrail
-            # R += Transpose(zi) * Diagonal(gcm.data[i].w1) * (gcm.data[i].y - gcm.data[i].μ) + Rtrail
+            R += Transpose(zi) * Diagonal(gcm.data[i].w1) * (gcm.data[i].y - gcm.data[i].μ) + Rtrail
             # W .+= Transpose(gcm.data[i].X) * Diagonal(gcm.data[i].w2) * zi
             # Q += Transpose(zi) * Diagonal(gcm.data[i].w2) * zi
-            R += Transpose(zi) * Diagonal(gcm.data[i].w1) * (gcm.data[i].y - gcm.data[i].μ)
+            # R += Transpose(zi) * Diagonal(gcm.data[i].w1) * (gcm.data[i].y - gcm.data[i].μ)
         end
         # score test (todo: efficiency)
         S = R * inv(Q - W'*Pinv*W) * R
@@ -235,7 +251,7 @@ end
 
 
 update_∇resβ(d::Normal, x_ji, res_j, μ_j, dμ_j, varμ_j) = -x_ji
-update_∇resβ(d::Type{Bernoulli{Float64}}, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
+update_∇resβ(d::Bernoulli, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
     -sqrt(varμ_j) * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji)
 update_∇resβ(d::Poisson, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
     x_ji * (
