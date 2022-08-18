@@ -188,7 +188,7 @@ Performs score tests for each SNP in `x`, given a fitted (null) model on the non
 A length `q` vector of p-values storing the score statistics for each SNP
 """
 function GWASCopulaVCModel(
-    gcm::Union{GLMCopulaVCModel, GaussianCopulaVCModel, NBCopulaVCModel},
+    gcm::Union{GLMCopulaVCModel, NBCopulaVCModel},
     G::SnpArray
     )
     n, q = size(G)
@@ -207,7 +207,7 @@ function GWASCopulaVCModel(
     # score test for each SNP
     for j in 1:q
         # sync vectors
-        SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=true, impute=true)
+        SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=true)
         Q, R = zero(T), zero(T)
         fill!(W, 0)
         # accumulate precomputed quantities (todo: efficiency)
@@ -217,9 +217,9 @@ function GWASCopulaVCModel(
             d = gc.n # number of observations for current sample
             zi = fill(z[i], d)
             res = gc.res # d × 1
-            ∇resβ = gc.∇resβ # d × p (todo: how to get this for Gaussian case?)
             # update ∇resγ
             ∇resγ = zeros(T, d)
+            ∇resβ = gc.∇resβ # d × p
             for j in 1:d # loop over each sample's observation
                 ∇resγ[j] = update_∇resβ(dist, zi[j], res[j], gc.μ[j], gc.dμ[j], gc.varμ[j])
             end
@@ -231,13 +231,72 @@ function GWASCopulaVCModel(
             # denom = 1 + dot(gcm.θ, gc.q) # note dot(θ, gc.q) = qsum = 0.5 r'Γr
             denom = 1 + 0.5 * (res' * Γ * res)
             denom2 = abs2(denom)
-            Wtrail = (∇resβ' * Γ * res) .* ((∇resγ' * Γ * res) / denom2)
+            Wtrail = (∇resβ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
             Qtrail = (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
             Rtrail = (∇resγ' * Γ * res) / denom
             # score test variables
             W .+= Transpose(gcm.data[i].X) * Diagonal(gcm.data[i].w2) * zi .+ Wtrail
             Q += Transpose(zi) * Diagonal(gcm.data[i].w2) * zi + Qtrail
             R += Transpose(zi) * Diagonal(gcm.data[i].w1) * (gcm.data[i].y - gcm.data[i].μ) + Rtrail
+            # W .+= Transpose(gcm.data[i].X) * Diagonal(gcm.data[i].w2) * zi
+            # Q += Transpose(zi) * Diagonal(gcm.data[i].w2) * zi
+            # R += Transpose(zi) * Diagonal(gcm.data[i].w1) * (gcm.data[i].y - gcm.data[i].μ)
+        end
+        # score test (todo: efficiency)
+        S = R * inv(Q - W'*Pinv*W) * R
+        pvals[j] = ccdf(χ2, S)
+    end
+    return pvals
+end
+
+function GWASCopulaVCModel(
+    gcm::GaussianCopulaVCModel,
+    G::SnpArray
+    )
+    n, q = size(G)
+    p = length(gcm.β)
+    dist = _get_null_distribution(gcm)
+    T = eltype(gcm.data[1].X)
+    n == length(gcm.data) || error("sample size do not agree")
+    any(x -> abs(x) > 1e-3, gcm.∇β) && error("Null model gradient is not zero!")
+    # approximate FIM by negative Hessian
+    Pinv = inv(Symmetric(-gcm.Hβ))
+    # preallocated arrays for efficiency
+    z = zeros(T, n)
+    W = zeros(T, p)
+    χ2 = Chisq(1)
+    pvals = zeros(T, q)
+    # score test for each SNP
+    for j in 1:q
+        # sync vectors
+        SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=true)
+        Q, R = zero(T), zero(T)
+        fill!(W, 0)
+        # accumulate precomputed quantities (todo: efficiency)
+        for i in 1:n
+            # variables for current sample
+            gc = gcm.data[i]
+            d = gc.n # number of observations for current sample
+            zi = fill(z[i], d)
+            res = gc.res # d × 1
+            # update ∇resγ
+            ∇resγ = fill(z[i], d)
+            ∇resβ = -sqrt(gcm.τ[1]) .* gc.X # see end of 11.3.1 https://arxiv.org/abs/2205.03505
+            # calculate trailing terms (todo: efficiency)
+            Γ = zeros(T, d, d)
+            for k in 1:gc.m # loop over variance components
+                Γ .+= gcm.θ[k] .* gc.V[k]
+            end
+            # denom = 1 + dot(gcm.θ, gc.q) # note dot(θ, gc.q) = qsum = 0.5 r'Γr
+            denom = 1 + 0.5 * (res' * Γ * res)
+            denom2 = abs2(denom)
+            Wtrail = (∇resβ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
+            Qtrail = (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
+            Rtrail = (∇resγ' * Γ * res) / denom
+            # score test variables
+            W .+= Transpose(gc.X) * zi .+ Wtrail
+            Q += Transpose(zi) * zi + Qtrail
+            R += Transpose(zi) * (gc.y - gc.X * gcm.β) + Rtrail
             # W .+= Transpose(gcm.data[i].X) * Diagonal(gcm.data[i].w2) * zi
             # Q += Transpose(zi) * Diagonal(gcm.data[i].w2) * zi
             # R += Transpose(zi) * Diagonal(gcm.data[i].w1) * (gcm.data[i].y - gcm.data[i].μ)
