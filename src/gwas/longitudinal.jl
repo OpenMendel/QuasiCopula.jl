@@ -280,8 +280,8 @@ function GWASCopulaVCModel(
             zi = fill(z[i], d)
             res = gc.res # d × 1
             # update ∇resγ
-            ∇resγ = fill(z[i], d)
             ∇resβ = -sqrt(gcm.τ[1]) .* gc.X # see end of 11.3.1 https://arxiv.org/abs/2205.03505
+            ∇resγ = -sqrt(gcm.τ[1]) .* fill(z[i], d)
             # calculate trailing terms (todo: efficiency)
             Γ = zeros(T, d, d)
             for k in 1:gc.m # loop over variance components
