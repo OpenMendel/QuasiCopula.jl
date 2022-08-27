@@ -204,24 +204,26 @@ function GWASCopulaVCModel(
     W = zeros(T, p)
     χ2 = Chisq(1)
     pvals = zeros(T, q)
+    # Standardize the residuals (res = (y-μ)/σ), since for VC GLM, res are not standardized, see GLM_VC.jl line 241
+    standardize_res!(gcm)
     # score test for each SNP
     for j in 1:q
         # sync vectors
         SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=true)
         Q, R = zero(T), zero(T)
         fill!(W, 0)
-        # accumulate precomputed quantities (todo: efficiency)
+        # loop over each sample
         for i in 1:n
             # variables for current sample
             gc = gcm.data[i]
             d = gc.n # number of observations for current sample
             zi = fill(z[i], d)
-            res = gc.res # d × 1
+            res = gc.res # d × 1 standardized residuals ()
             # update ∇resγ
             ∇resγ = zeros(T, d)
             ∇resβ = gc.∇resβ # d × p
-            for j in 1:d # loop over each sample's observation
-                ∇resγ[j] = update_∇resβ(dist, zi[j], res[j], gc.μ[j], gc.dμ[j], gc.varμ[j])
+            for k in 1:d # loop over each sample's observation
+                ∇resγ[k] = update_∇resβ(dist, zi[k], res[k], gc.μ[k], gc.dμ[k], gc.varμ[k])
             end
             # calculate trailing terms (todo: efficiency)
             Γ = zeros(T, d, d)
@@ -235,12 +237,9 @@ function GWASCopulaVCModel(
             Qtrail = (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
             Rtrail = (∇resγ' * Γ * res) / denom
             # score test variables
-            W .+= Transpose(gcm.data[i].X) * Diagonal(gcm.data[i].w2) * zi .+ Wtrail
-            Q += Transpose(zi) * Diagonal(gcm.data[i].w2) * zi + Qtrail
-            R += Transpose(zi) * Diagonal(gcm.data[i].w1) * (gcm.data[i].y - gcm.data[i].μ) + Rtrail
-            # W .+= Transpose(gcm.data[i].X) * Diagonal(gcm.data[i].w2) * zi
-            # Q += Transpose(zi) * Diagonal(gcm.data[i].w2) * zi
-            # R += Transpose(zi) * Diagonal(gcm.data[i].w1) * (gcm.data[i].y - gcm.data[i].μ)
+            W .+= Transpose(gc.X) * Diagonal(gc.w2) * zi .+ Wtrail
+            Q += Transpose(zi) * Diagonal(gc.w2) * zi + Qtrail
+            R += Transpose(zi) * Diagonal(gc.w1) * (gc.y - gc.μ) + Rtrail
         end
         # score test (todo: efficiency)
         S = R * inv(Q - W'*Pinv*W) * R
