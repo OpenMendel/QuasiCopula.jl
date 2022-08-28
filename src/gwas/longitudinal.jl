@@ -181,7 +181,7 @@ end
 Performs score tests for each SNP in `x`, given a fitted (null) model on the non-genetic covariates.
 
 # Inputs
-+ `gcm`: A fitted `MixedCopulaVCModel` that includes `n` sample points and `p` non-genetic covariates.
++ `gcm`: A fitted `GLMCopulaVCModel` or `NBCopulaVCModel` that includes `n` sample points and `p` non-genetic covariates.
 + `G`: A `SnpArray` (compressed `.bed/bim/fam` PLINK file) with `n` samples and `q` SNPs
 
 # Outputs
@@ -206,6 +206,24 @@ function GWASCopulaVCModel(
     pvals = zeros(T, q)
     # Standardize the residuals (res = (y-μ)/σ), since for VC GLM, res are not standardized, see GLM_VC.jl line 241
     standardize_res!(gcm)
+    # test if P = sum N' * W2 * N + sum (∇r'Γr) * (∇r'Γr)' / (1 + 0.5r'Γr)^2
+    # P = zeros(T, p, p)
+    # for i in 1:n
+    #     gc = gcm.data[i]
+    #     # d = gc.n
+    #     # GLM term
+    #     P += Transpose(gc.X) * Diagonal(gc.w2) * gc.X
+    #     # trailing terms
+    #     # res = gc.res # d × 1 standardized residuals
+    #     # ∇resβ = gc.∇resβ # d × p
+    #     # Γ = zeros(T, d, d)
+    #     # for k in 1:gc.m # loop over variance components
+    #     #     Γ .+= gcm.θ[k] .* gc.V[k]
+    #     # end
+    #     # denom = abs2(1 + 0.5 * (res' * Γ * res))
+    #     # P += (∇resβ' * Γ * res) * (∇resβ' * Γ * res)' / denom
+    # end
+    # Pinv = inv(Symmetric(P))
     # score test for each SNP
     for j in 1:q
         # sync vectors
@@ -218,7 +236,7 @@ function GWASCopulaVCModel(
             gc = gcm.data[i]
             d = gc.n # number of observations for current sample
             zi = fill(z[i], d)
-            res = gc.res # d × 1 standardized residuals ()
+            res = gc.res # d × 1 standardized residuals
             # update ∇resγ
             ∇resγ = zeros(T, d)
             ∇resβ = gc.∇resβ # d × p
@@ -279,8 +297,10 @@ function GWASCopulaVCModel(
             zi = fill(z[i], d)
             res = gc.res # d × 1
             # update ∇resγ
-            ∇resβ = -sqrt(gcm.τ[1]) .* gc.X # see end of 11.3.1 https://arxiv.org/abs/2205.03505
-            ∇resγ = -sqrt(gcm.τ[1]) .* fill(z[i], d)
+            # ∇resβ = -sqrt(gcm.τ[1]) .* gc.X # see end of 11.3.1 https://arxiv.org/abs/2205.03505
+            # ∇resγ = -sqrt(gcm.τ[1]) .* fill(z[i], d)
+            ∇resβ = -gcm.τ[1] .* gc.X # this is wrong mathematically but empirically gives beautiful QQ plots
+            ∇resγ = -gcm.τ[1] .* fill(z[i], d)
             # calculate trailing terms (todo: efficiency)
             Γ = zeros(T, d, d)
             for k in 1:gc.m # loop over variance components
@@ -308,16 +328,41 @@ function GWASCopulaVCModel(
 end
 
 
-update_∇resβ(d::Normal, x_ji, res_j, μ_j, dμ_j, varμ_j) = -x_ji
-update_∇resβ(d::Bernoulli, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
-    -sqrt(varμ_j) * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji)
-update_∇resβ(d::Poisson, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
-    x_ji * (
-    -(inv(sqrt(varμ_j)) + (0.5 * inv(varμ_j)) * res_j) * dμ_j
-    )
-update_∇resβ(d::NegativeBinomial, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
-    -inv(sqrt(varμ_j)) * dμ_j * x_ji - (0.5 * inv(varμ_j)) *
-    res_j * (μ_j * inv(d.r) + (1 + inv(d.r) * μ_j)) * dμ_j * x_ji
+# update_∇resβ(d::Normal, x_ji, res_j, μ_j, dμ_j, varμ_j) = -x_ji
+# update_∇resβ(d::Bernoulli, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
+    # -sqrt(varμ_j) * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji)
+    # -varμ_j * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji) # this gives ideal gwas QQ plots
+# update_∇resβ(d::Poisson, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
+#     x_ji * (
+#     -(inv(sqrt(varμ_j)) + (0.5 * inv(varμ_j)) * res_j) * dμ_j
+#     )
+# update_∇resβ(d::NegativeBinomial, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
+#     -inv(sqrt(varμ_j)) * dμ_j * x_ji - (0.5 * inv(varμ_j)) *
+#     res_j * (μ_j * inv(d.r) + (1 + inv(d.r) * μ_j)) * dμ_j * x_ji
+
+function update_∇resβ(d::Bernoulli, x_ji, res_j, μ_j, dμ_j, varμ_j)
+    # println("dμ_j = $dμ_j, varμ_j = $varμ_j") # these are equal
+    invσ = inv(sqrt(varμ_j))
+    dμdβ = dμ_j * x_ji
+    dσ2dβ = (1 - 2μ_j) * dμdβ
+    ben = -invσ*dμdβ - 0.5 * inv(varμ_j) * res_j * dσ2dβ # this should be the correct one to use??
+
+    sarah = -sqrt(varμ_j) * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji) # this assumes dμ/dσ^2 = 1, which seems to be true for Bernoulli with logit link
+    empirically_desired = -varμ_j * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji)
+
+    # println("ben = $ben, sarah = $sarah, empirically_desired = $empirically_desired")
+    return empirically_desired
+end
+
+# cannot find a good way to tweak Poisson QQ plots
+function update_∇resβ(d::Poisson, x_ji, res_j, μ_j, dμ_j, varμ_j)
+    sarah = x_ji * (-(inv(sqrt(varμ_j)) + (0.5 * inv(varμ_j)) * res_j) * dμ_j)
+    ben = (-inv(sqrt(varμ_j)) - 0.5inv(varμ_j) * res_j) * dμ_j * x_ji
+    empirically_desired = (-1 - 0.5inv(varμ_j * sqrt(varμ_j)) * res_j) * dμ_j * x_ji
+    # println("ben = $ben, sarah = $sarah, empirically_desired = $empirically_desired")
+    # rand() < 0.1 && fdsa
+    return sarah
+end
 
 """
     fit!(gcm::MixedCopulaVCModel, solver=Ipopt.IpoptSolver)
