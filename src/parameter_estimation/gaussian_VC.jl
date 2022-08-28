@@ -172,11 +172,11 @@ function loglikelihood!(
     end
     needhess && fill!(gc.Hβ, 0)
     # evaluate copula loglikelihood
-    sqrtτ = sqrt(abs(τ))
+    sqrtτ = sqrt(abs(τ)) # ben: why is there abs here?
     update_res!(gc, β)
     standardize_res!(gc, sqrtτ)
     rss  = abs2(norm(gc.res)) # RSS of standardized residual
-    tsum = dot(θ, gc.t)
+    tsum = dot(abs.(θ), gc.t) # ben: why is there abs here?
     logl = - log(1 + tsum) - (gc.n * log(2π) -  gc.n * log(abs(τ)) + rss) / 2
     @inbounds for k in 1:gc.m
         mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
