@@ -217,18 +217,17 @@ function loglikelihood!(
             gc.∇θ .-= θ
         end
         if needhess
-            BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 1.0, gc.Hβ) # only lower triangular
+            BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, 1.0, gc.Hβ) # gc.Hβ = -∇res*∇res'/(1 + 0.5r'Γr) (only lower triangular)
             # does adding this term to the approximation of the hessian violate negative semidefinite properties?
             fill!(gc.added_term_numerator, 0.0) # fill gradient with 0
             fill!(gc.added_term2, 0.0) # fill hessian with 0
             @inbounds for k in 1:gc.m
-                mul!(gc.added_term_numerator, gc.V[k], gc.∇resβ) # storage_n = V[k] * res
-                BLAS.gemm!('T', 'N', θ[k], gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2)
+                mul!(gc.added_term_numerator, gc.V[k], gc.∇resβ) # added_term_numerator = V[k] * ∇res
+                BLAS.gemm!('T', 'N', θ[k], gc.∇resβ, gc.added_term_numerator, one(T), gc.added_term2) # added_term2 = ∇resβ' * V[k] * ∇res
             end
-            gc.added_term2 .*= inv1pq
+            gc.added_term2 .*= inv1pq # added_term2 = ∇resβ * V[k] * ∇res / (1 + 0.5r'Γr)
             gc.Hβ .+= gc.added_term2
-            gc.Hβ .+= QuasiCopula.glm_hessian(gc)
-
+            gc.Hβ .+= QuasiCopula.glm_hessian(gc) # Hβ += -X'*W2*X 
             # hessian for vc
             fill!(gc.Hθ, 0.0)
             BLAS.syr!('U', one(T), gc.m2, gc.Hθ)
@@ -241,6 +240,7 @@ function loglikelihood!(
         gc.res .= gc.y .- gc.μ
         gc.∇β .= QuasiCopula.glm_gradient(gc)
         gc.∇β .+= gc.storage_p2
+        update_res!(gc, β) # ensure that residuals are standardized
     end
     logl
 end
