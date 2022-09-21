@@ -192,24 +192,24 @@ function loglikelihood!(
         if needgrad
             BLAS.gemv!('T', θ[k], gc.∇resβ, gc.storage_n, 1.0, gc.∇β) # stores ∇resβ*Γ*res (standardized residual)
         end
-        gc.q[k] = dot(gc.res, gc.storage_n) / 2
+        gc.q[k] = dot(gc.res, gc.storage_n) / 2 # q[k] = 0.5 r' * V[k] * r (update variable b for variance component model)
     end
     # loglikelihood
     logl = QuasiCopula.component_loglikelihood(gc)
     tsum = dot(θ, gc.t)
     logl += -log(1 + tsum)
-    qsum  = dot(θ, gc.q)
+    qsum  = dot(θ, gc.q) # qsum = 0.5 r'Γr (matches)
     logl += log(1 + qsum)
     # add L2 ridge penalty
     if penalized
         logl -= 0.5 * dot(θ, θ)
     end
     if needgrad
-        inv1pq = inv(1 + qsum)
-        inv1pt = inv(1 + tsum) #
+        inv1pq = inv(1 + qsum) # inv1pq = 1 / (1 + 0.5r'Γr)
+        inv1pt = inv(1 + tsum) # inv1pt = 1 / (1 + 0.5tr(Γ))
         # gc.∇θ .= inv1pq * gc.q .- inv1pt * gc.t
         gc.m1 .= gc.q
-        gc.m1 .*= inv1pq
+        gc.m1 .*= inv1pq # m1[k] = 0.5 r' * V[k] * r / (1 + 0.5r'Γr)
         gc.m2 .= gc.t
         gc.m2 .*= inv1pt
         gc.∇θ .= gc.m1 .- gc.m2
@@ -236,11 +236,10 @@ function loglikelihood!(
             copytri!(gc.Hθ, 'U')
             # gc.Hθ .= gc.m2 * transpose(gc.m2) - gc.m1 * transpose(gc.m1)
         end
+        # set gc.storage_p2 = ∇r'*Γ*r / (1 + 0.5r'Γr) (which is 2nd term of ∇β)
         gc.storage_p2 .= gc.∇β .* inv1pq
-        # @show gc.res
         gc.res .= gc.y .- gc.μ
         gc.∇β .= QuasiCopula.glm_gradient(gc)
-        # @show gc.res
         gc.∇β .+= gc.storage_p2
     end
     logl
