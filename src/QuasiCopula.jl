@@ -5,6 +5,7 @@ using LinearAlgebra: BlasReal, copytri!
 using SpecialFunctions
 using FFTW
 using SnpArrays
+using ForwardDiff
 @reexport using Ipopt
 import Base: show
 

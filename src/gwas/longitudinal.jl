@@ -189,41 +189,32 @@ A length `q` vector of p-values storing the score statistics for each SNP
 """
 function GWASCopulaVCModel(
     gcm::Union{GLMCopulaVCModel, NBCopulaVCModel},
-    G::SnpArray
+    G::SnpArray;
+    num_Hessian_terms::Int = 4
     )
     n, q = size(G)
     p = length(gcm.β)
     dist = _get_null_distribution(gcm)
     T = eltype(gcm.data[1].X)
     n == length(gcm.data) || error("sample size do not agree")
-    any(x -> abs(x) > 1e-3, gcm.∇β) && error("Null model gradient is not zero!")
-    # approximate FIM by negative Hessian
-    Pinv = inv(Symmetric(-gcm.Hβ))
+    any(x -> abs(x) > 1e-3, gcm.∇β) && error("Null model gradient of beta is not zero!")
+    any(x -> abs(x) > 1e-3, gcm.∇θ) && error("Null model gradient of variance components is not zero!")
     # preallocated arrays for efficiency
     z = zeros(T, n)
     W = zeros(T, p)
     χ2 = Chisq(1)
     pvals = zeros(T, q)
-    # Standardize the residuals (res = (y-μ)/σ), since for VC GLM, res are not standardized, see GLM_VC.jl line 241
-    standardize_res!(gcm)
-    # test if P = sum N' * W2 * N + sum (∇r'Γr) * (∇r'Γr)' / (1 + 0.5r'Γr)^2
-    # P = zeros(T, p, p)
-    # for i in 1:n
-    #     gc = gcm.data[i]
-    #     # d = gc.n
-    #     # GLM term
-    #     P += Transpose(gc.X) * Diagonal(gc.w2) * gc.X
-    #     # trailing terms
-    #     # res = gc.res # d × 1 standardized residuals
-    #     # ∇resβ = gc.∇resβ # d × p
-    #     # Γ = zeros(T, d, d)
-    #     # for k in 1:gc.m # loop over variance components
-    #     #     Γ .+= gcm.θ[k] .* gc.V[k]
-    #     # end
-    #     # denom = abs2(1 + 0.5 * (res' * Γ * res))
-    #     # P += (∇resβ' * Γ * res) * (∇resβ' * Γ * res)' / denom
-    # end
-    # Pinv = inv(Symmetric(P))
+    # compute P (negative Hessian) and inv(P)
+    if num_Hessian_terms == 2
+        P = -two_term_Hessian(gcm)
+    elseif num_Hessian_terms == 3
+        P = -three_term_Hessian(gcm)
+    elseif num_Hessian_terms == 4
+        P = -four_term_Hessian(gcm)
+    else
+        error("num_Hessian_terms should be 2, 3, or 4 but was $num_Hessian_terms")
+    end
+    Pinv = inv(P)
     # score test for each SNP
     for j in 1:q
         # sync vectors
@@ -266,17 +257,120 @@ function GWASCopulaVCModel(
     return pvals
 end
 
+# 2 term hessian from math
+function two_term_Hessian(gcm)
+    p = length(gcm.β)
+    T = eltype(gcm.β)
+    H = zeros(T, p, p)
+    for gc in gcm.data
+        d = gc.n # number of observations for current sample
+        # GLM term
+        H -= Transpose(gc.X) * Diagonal(gc.w2) * gc.X
+        # trailing terms
+        res = gc.res # d × 1 standardized residuals
+        ∇resβ = gc.∇resβ # d × p
+        Γ = zeros(T, d, d)
+        for k in 1:gc.m # loop over variance components
+            Γ .+= gcm.θ[k] .* gc.V[k]
+        end
+        denom = abs2(1 + 0.5 * (res' * Γ * res))
+        H -= (∇resβ' * Γ * res) * (∇resβ' * Γ * res)' / denom
+    end
+    return H
+end
+
+# 3 term hessian from math
+function three_term_Hessian(qc_model)
+    loglikelihood!(qc_model, true, true)
+    return qc_model.Hβ
+end
+
+# 4 term hessian using autodiff
+function four_term_Hessian(qc_model)
+    # to use autodiff on loglikelihood, define autodiff_loglikelihood which has only 1 argument
+    autodiff_loglikelihood(β) = loglikelihood(β, qc_model)
+    # call autodiff on autodiff_loglikelihood
+    ∇²logl = x -> ForwardDiff.hessian(autodiff_loglikelihood, x)
+    return ∇²logl(qc_model.β)
+end
+
+# Matrix-vector multiply friendly to autodiffing
+function A_mul_b!(c::AbstractVector{T}, A::AbstractMatrix, b::AbstractVector) where T
+    n, p = size(A)
+    fill!(c, zero(T))
+    for j in 1:p, i in 1:n
+        c[i] += A[i, j] * b[j]
+    end
+    return c
+end
+
+# loglikelihood friendly to autodiffing 
+function loglikelihood(
+    β::AbstractVector{T}, 
+    qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}
+    ) where T
+    θ = qc_model.θ
+    # allocate vector of type T
+    n, p = size(qc_model.data[1].X)
+    η = zeros(T, n)
+    μ = zeros(T, n)
+    varμ = zeros(T, n)
+    res = zeros(T, n)
+    storage_n = zeros(T, n)
+    q = zeros(T, length(θ))
+    logl = zero(T)
+    for gc in qc_model.data
+        X = gc.X
+        y = gc.y
+        n, p = size(X)
+        # update_res! step (need to avoid BLAS)
+        A_mul_b!(η, X, β)
+        for i in 1:gc.n
+            μ[i] = GLM.linkinv(gc.link, η[i])
+            varμ[i] = GLM.glmvar(gc.d, μ[i]) # Note: for negative binomial, d.r is used
+#             dμ[i] = GLM.mueta(gc.link, η[i])
+#             w1[i] = dμ[i] / varμ[i]
+#             w2[i] = w1[i] * dμ[i]
+            res[i] = y[i] - μ[i]
+        end
+        # standardize_res! step
+        for j in eachindex(y)
+            res[j] /= sqrt(varμ[j])
+        end
+        # std_res_differential! step (this will compute ∇resβ)
+#         for i in 1:gc.p
+#             for j in 1:gc.n
+#                 ∇resβ[j, i] = -sqrt(varμ[j]) * X[j, i] - (0.5 * res[j] * (1 - (2 * μ[j])) * X[j, i])
+#             end
+#         end
+        # update Γ
+        @inbounds for k in 1:gc.m
+            A_mul_b!(storage_n, gc.V[k], res)
+            q[k] = dot(res, storage_n) / 2 # q[k] = 0.5 r' * V[k] * r (update variable b for variance component model)
+        end
+        # component_loglikelihood
+        for j in 1:gc.n
+            logl += QuasiCopula.loglik_obs(gc.d, y[j], μ[j], one(T), one(T))
+        end
+        tsum = dot(θ, gc.t)
+        logl += -log(1 + tsum)
+        qsum  = dot(θ, q) # qsum = 0.5 r'Γr
+        logl += log(1 + qsum)
+    end
+    return logl
+end
+
 function GWASCopulaVCModel(
     gcm::GaussianCopulaVCModel,
     G::SnpArray
     )
     n, q = size(G)
     p = length(gcm.β)
-    dist = _get_null_distribution(gcm)
     T = eltype(gcm.data[1].X)
     n == length(gcm.data) || error("sample size do not agree")
-    any(x -> abs(x) > 1e-3, gcm.∇β) && error("Null model gradient is not zero!")
-    # approximate FIM by negative Hessian
+    any(x -> abs(x) > 1e-3, gcm.∇β) && error("Null model gradient of beta is not zero!")
+    any(x -> abs(x) > 1e-3, gcm.∇θ) && error("Null model gradient of variance components is not zero!")
+    # approximate FIM by negative Hessian (todo: is the Hessian in gaussian_VC.jl actually the expect Hessian?)
     Pinv = inv(Symmetric(-gcm.Hβ))
     # preallocated arrays for efficiency
     z = zeros(T, n)
@@ -297,10 +391,10 @@ function GWASCopulaVCModel(
             zi = fill(z[i], d)
             res = gc.res # d × 1
             # update ∇resγ
-            # ∇resβ = -sqrt(gcm.τ[1]) .* gc.X # see end of 11.3.1 https://arxiv.org/abs/2205.03505
-            # ∇resγ = -sqrt(gcm.τ[1]) .* fill(z[i], d)
-            ∇resβ = -gcm.τ[1] .* gc.X # this is wrong mathematically but empirically gives beautiful QQ plots
-            ∇resγ = -gcm.τ[1] .* fill(z[i], d)
+            ∇resβ = -sqrt(gcm.τ[1]) .* gc.X # see end of 11.3.1 https://arxiv.org/abs/2205.03505
+            ∇resγ = -sqrt(gcm.τ[1]) .* fill(z[i], d)
+            # ∇resβ = -gcm.τ[1] .* gc.X # this is wrong mathematically but empirically gives beautiful QQ plots
+            # ∇resγ = -gcm.τ[1] .* fill(z[i], d)
             # calculate trailing terms (todo: efficiency)
             Γ = zeros(T, d, d)
             for k in 1:gc.m # loop over variance components
@@ -351,7 +445,7 @@ function update_∇resβ(d::Bernoulli, x_ji, res_j, μ_j, dμ_j, varμ_j)
     empirically_desired = -varμ_j * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji)
 
     # println("ben = $ben, sarah = $sarah, empirically_desired = $empirically_desired")
-    return empirically_desired
+    return sarah
 end
 
 # cannot find a good way to tweak Poisson QQ plots
