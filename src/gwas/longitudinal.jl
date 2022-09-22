@@ -190,7 +190,7 @@ A length `q` vector of p-values storing the score statistics for each SNP
 function GWASCopulaVCModel(
     gcm::Union{GLMCopulaVCModel, NBCopulaVCModel},
     G::SnpArray;
-    num_Hessian_terms::Int = 4
+    num_Hessian_terms::Int = 3
     )
     n, q = size(G)
     p = length(gcm.β)
@@ -245,9 +245,12 @@ function GWASCopulaVCModel(
             Wtrail = (∇resβ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
             Qtrail = (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
             Rtrail = (∇resγ' * Γ * res) / denom
+            # third Hessian term
+            Wtrail2 = ∇resβ' * Γ * ∇resγ / denom
+            Qtrail2 = ∇resγ' * Γ * ∇resγ / denom
             # score test variables
-            W .+= Transpose(gc.X) * Diagonal(gc.w2) * zi .+ Wtrail
-            Q += Transpose(zi) * Diagonal(gc.w2) * zi + Qtrail
+            W .+= Transpose(gc.X) * Diagonal(gc.w2) * zi .+ Wtrail .- Wtrail2
+            Q += Transpose(zi) * Diagonal(gc.w2) * zi + Qtrail - Qtrail2
             R += Transpose(zi) * Diagonal(gc.w1) * (gc.y - gc.μ) + Rtrail
         end
         # score test (todo: efficiency)
@@ -422,41 +425,40 @@ function GWASCopulaVCModel(
 end
 
 
-# update_∇resβ(d::Normal, x_ji, res_j, μ_j, dμ_j, varμ_j) = -x_ji
-# update_∇resβ(d::Bernoulli, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
-    # -sqrt(varμ_j) * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji)
-    # -varμ_j * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji) # this gives ideal gwas QQ plots
-# update_∇resβ(d::Poisson, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
-#     x_ji * (
-#     -(inv(sqrt(varμ_j)) + (0.5 * inv(varμ_j)) * res_j) * dμ_j
-#     )
-# update_∇resβ(d::NegativeBinomial, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
-#     -inv(sqrt(varμ_j)) * dμ_j * x_ji - (0.5 * inv(varμ_j)) *
-#     res_j * (μ_j * inv(d.r) + (1 + inv(d.r) * μ_j)) * dμ_j * x_ji
+update_∇resβ(d::Normal, x_ji, res_j, μ_j, dμ_j, varμ_j) = -x_ji
+update_∇resβ(d::Bernoulli, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
+    -sqrt(varμ_j) * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji)
+update_∇resβ(d::Poisson, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
+    x_ji * (
+    -(inv(sqrt(varμ_j)) + (0.5 * inv(varμ_j)) * res_j) * dμ_j
+    )
+update_∇resβ(d::NegativeBinomial, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
+    -inv(sqrt(varμ_j)) * dμ_j * x_ji - (0.5 * inv(varμ_j)) *
+    res_j * (μ_j * inv(d.r) + (1 + inv(d.r) * μ_j)) * dμ_j * x_ji
 
-function update_∇resβ(d::Bernoulli, x_ji, res_j, μ_j, dμ_j, varμ_j)
-    # println("dμ_j = $dμ_j, varμ_j = $varμ_j") # these are equal
-    invσ = inv(sqrt(varμ_j))
-    dμdβ = dμ_j * x_ji
-    dσ2dβ = (1 - 2μ_j) * dμdβ
-    ben = -invσ*dμdβ - 0.5 * inv(varμ_j) * res_j * dσ2dβ # this should be the correct one to use??
+# function update_∇resβ(d::Bernoulli, x_ji, res_j, μ_j, dμ_j, varμ_j)
+#     # println("dμ_j = $dμ_j, varμ_j = $varμ_j") # these are equal
+#     invσ = inv(sqrt(varμ_j))
+#     dμdβ = dμ_j * x_ji
+#     dσ2dβ = (1 - 2μ_j) * dμdβ
+#     ben = -invσ*dμdβ - 0.5 * inv(varμ_j) * res_j * dσ2dβ # this should be the correct one to use??
 
-    sarah = -sqrt(varμ_j) * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji) # this assumes dμ/dσ^2 = 1, which seems to be true for Bernoulli with logit link
-    empirically_desired = -varμ_j * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji)
+#     sarah = -sqrt(varμ_j) * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji) # this assumes dμ/dσ^2 = 1, which seems to be true for Bernoulli with logit link
+#     empirically_desired = -varμ_j * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji)
 
-    # println("ben = $ben, sarah = $sarah, empirically_desired = $empirically_desired")
-    return sarah
-end
+#     # println("ben = $ben, sarah = $sarah, empirically_desired = $empirically_desired")
+#     return sarah
+# end
 
 # cannot find a good way to tweak Poisson QQ plots
-function update_∇resβ(d::Poisson, x_ji, res_j, μ_j, dμ_j, varμ_j)
-    sarah = x_ji * (-(inv(sqrt(varμ_j)) + (0.5 * inv(varμ_j)) * res_j) * dμ_j)
-    ben = (-inv(sqrt(varμ_j)) - 0.5inv(varμ_j) * res_j) * dμ_j * x_ji
-    empirically_desired = (-1 - 0.5inv(varμ_j * sqrt(varμ_j)) * res_j) * dμ_j * x_ji
-    # println("ben = $ben, sarah = $sarah, empirically_desired = $empirically_desired")
-    # rand() < 0.1 && fdsa
-    return sarah
-end
+# function update_∇resβ(d::Poisson, x_ji, res_j, μ_j, dμ_j, varμ_j)
+#     sarah = x_ji * (-(inv(sqrt(varμ_j)) + (0.5 * inv(varμ_j)) * res_j) * dμ_j)
+#     ben = (-inv(sqrt(varμ_j)) - 0.5inv(varμ_j) * res_j) * dμ_j * x_ji
+#     empirically_desired = (-1 - 0.5inv(varμ_j * sqrt(varμ_j)) * res_j) * dμ_j * x_ji
+#     # println("ben = $ben, sarah = $sarah, empirically_desired = $empirically_desired")
+#     # rand() < 0.1 && fdsa
+#     return sarah
+# end
 
 """
     fit!(gcm::MixedCopulaVCModel, solver=Ipopt.IpoptSolver)
