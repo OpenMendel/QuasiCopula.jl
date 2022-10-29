@@ -74,17 +74,17 @@ Initialize the linear regression parameters `β` using GLM.jl, and update varian
 """
 function initialize_model!(
     gcm::Union{GLMCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}}) where {T <: BlasReal, D, Link,  VD, VL}
-    println("initializing β using Newton's Algorithm under Independence Assumption")
+    # println("initializing β using Newton's Algorithm under Independence Assumption")
     initialize_beta!(gcm)
-    @show gcm.β
+    # @show gcm.β
     fill!(gcm.τ, 1.0)
-    println("initializing variance components using MM-Algorithm")
+    # println("initializing variance components using MM-Algorithm")
     fill!(gcm.θ, 1.0)
     update_θ!(gcm)
     if sum(gcm.θ) >= 20
       fill!(gcm.θ, 1.0)
     end
-    @show gcm.θ
+    # @show gcm.θ
     nothing
 end
 
@@ -101,20 +101,20 @@ function initialize_model!(gcm::GaussianCopulaVCModel{T}) where T <: BlasReal
     end
     # least square solution for β
     ldiv!(gcm.β, cholesky(Symmetric(gcm.XtX)), xty)
-    @show gcm.β
+    # @show gcm.β
     # accumulate residual sum of squares
     rss = zero(T)
     for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
         rss += abs2(norm(gcm.data[i].res))
     end
-    println("initializing dispersion using residual sum of squares")
+    # println("initializing dispersion using residual sum of squares")
     gcm.τ[1] = gcm.ntotal / rss
-    @show gcm.τ
-    println("initializing variance components using MM-Algorithm")
+    # @show gcm.τ
+    # println("initializing variance components using MM-Algorithm")
     fill!(gcm.θ, 1.0)
     update_θ!(gcm)
-    @show gcm.θ
+    # @show gcm.θ
     nothing
 end
 

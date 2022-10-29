@@ -240,7 +240,7 @@ function loglikelihood!(
         gc.res .= gc.y .- gc.μ
         gc.∇β .= QuasiCopula.glm_gradient(gc)
         gc.∇β .+= gc.storage_p2
-        update_res!(gc, β) # ensure that residuals are standardized
+        standardize_res!(gc) # ensure that residuals are standardized
     end
     logl
 end
