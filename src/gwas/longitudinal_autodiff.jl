@@ -3,23 +3,32 @@ function loglikelihood(
     qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, # fitted null model
     z::AbstractVector # n × 1 genotype vector
     ) where T
-    n, p = size(qc_model.data[1].X)
+    p = qc_model.p
     m = length(par) - 1 - p
     β = [par[1:end-(m+1)]; par[end]] # nongenetic + genetic beta
     θ = par[end-m:end-1]             # vc parameters
     # allocate storage vectors of type T
-    η = zeros(T, n)
-    μ = zeros(T, n)
-    varμ = zeros(T, n)
-    res = zeros(T, n)
-    storage_n = zeros(T, n)
+    nmax = maximum(size(qc_model.data[i].X, 1) for i in 1:length(qc_model.data))
+    η_store = zeros(T, nmax)
+    μ_store = zeros(T, nmax)
+    varμ_store = zeros(T, nmax)
+    res_store = zeros(T, nmax)
+    storage_n_store = zeros(T, nmax)
+    Xstore = zeros(T, nmax, p+1)
     q = zeros(T, length(θ))
     logl = zero(T)
     for (i, gc) in enumerate(qc_model.data)
-        snps = fill(z[i], size(gc.X, 1))
-        X = hcat(gc.X, snps) # genetic and nongenetic covariates
+        n = size(gc.X, 1)
+        X = @view(Xstore[1:n, :])
+        η = @view(η_store[1:n])
+        μ = @view(μ_store[1:n])
+        varμ = @view(varμ_store[1:n])
+        res = @view(res_store[1:n])
+        storage_n = @view(storage_n_store[1:n])
+        # sync nogenetic + genetic covariates
+        copyto!(X, gc.X)
+        X[:, end] .= z[i]
         y = gc.y
-        n, p = size(X)
         # update_res! step (need to avoid BLAS)
         A_mul_b!(η, X, β)
         for j in 1:gc.n
@@ -62,22 +71,29 @@ function loglikelihood(
     gcm::GaussianCopulaVCModel,
     z::AbstractVector # n × 1 genotype vector
     ) where T
-    n, p = size(gcm.data[1].X)
+    p = gcm.p
     m = length(par) - 2 - p
     β = [par[1:end-(m+2)]; par[end]] # nongenetic + genetic beta
     θ = par[end-3:end-2]             # vc parameters
     τ = par[end-1]                   # dispersion for gaussian
     # allocate vector of type T
-    μ = zeros(T, n)
-    res = zeros(T, n)
-    storage_n = zeros(T, n)
+    nmax = maximum(size(gcm.data[i].X, 1) for i in 1:length(gcm.data))
+    μ_store = zeros(T, nmax)
+    res_store = zeros(T, nmax)
+    storage_n_store = zeros(T, nmax)
+    Xstore = zeros(T, nmax, p+1)
     q = zeros(T, length(θ))
     logl = zero(T)
     for (i, gc) in enumerate(gcm.data)
-        snps = fill(z[i], size(gc.X, 1))
-        X = hcat(gc.X, snps) # genetic and nongenetic covariates
+        n = size(gc.X, 1)
+        X = @view(Xstore[1:n, :])
+        μ = @view(μ_store[1:n])
+        res = @view(res_store[1:n])
+        storage_n = @view(storage_n_store[1:n])
+        # sync nogenetic + genetic covariates
+        copyto!(X, gc.X)
+        X[:, end] .= z[i]
         y = gc.y
-        n, p = size(X)
         sqrtτ = sqrt(abs(τ))
         # update_res! step (need to avoid BLAS)
         A_mul_b!(μ, X, β)
@@ -87,7 +103,7 @@ function loglikelihood(
         # standardize_res! step
         res .*= sqrtτ
         rss  = abs2(norm(res)) # RSS of standardized residual
-        tsum = dot(abs.(θ), gc.t) # ben: why is there abs here?
+        tsum = dot(θ, gc.t) # ben: originally θ was abs.(θ), but I'm not sure if that's needed
         logl += - log(1 + tsum) - (gc.n * log(2π) -  gc.n * log(abs(τ)) + rss) / 2
         # update Γ
         @inbounds for k in 1:gc.m
