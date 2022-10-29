@@ -19,6 +19,7 @@ export Poisson_Bernoulli_VCObs, Poisson_Bernoulli_VCModel
 # for GWAS
 export MixedCopulaVCObs, MixedCopulaVCModel
 export MultivariateCopulaVCModel
+export GWASCopulaVCModel_autodiff
 
 include("parameter_estimation/gaussian_CS.jl")
 include("parameter_estimation/NBCopulaCS.jl")
@@ -48,5 +49,6 @@ include("model_interface/CS_interface.jl")
 include("model_interface/VC_interface.jl")
 include("model_interface/show_io.jl")
 include("gwas/longitudinal.jl")
+include("gwas/longitudinal_autodiff.jl")
 include("gwas/multivariate.jl")
 end # module

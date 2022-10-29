@@ -187,89 +187,11 @@ Performs score tests for each SNP in `x`, given a fitted (null) model on the non
 # Outputs
 A length `q` vector of p-values storing the score statistics for each SNP
 """
-# function GWASCopulaVCModel(
-#     gcm::Union{GLMCopulaVCModel, NBCopulaVCModel},
-#     G::SnpArray;
-#     num_Hessian_terms::Int = 3
-#     )
-#     n, q = size(G)
-#     p = length(gcm.β)
-#     dist = _get_null_distribution(gcm)
-#     T = eltype(gcm.data[1].X)
-#     n == length(gcm.data) || error("sample size do not agree")
-#     any(x -> abs(x) > 1e-3, gcm.∇β) && error("Null model gradient of beta is not zero!")
-#     any(x -> abs(x) > 1e-3, gcm.∇θ) && error("Null model gradient of variance components is not zero!")
-#     # preallocated arrays for efficiency
-#     z = zeros(T, n)
-#     W = zeros(T, p)
-#     χ2 = Chisq(1)
-#     pvals = zeros(T, q)
-#     # compute P (negative Hessian) and inv(P)
-#     if num_Hessian_terms == 2
-#         P = -two_term_Hessian(gcm)
-#     elseif num_Hessian_terms == 3
-#         P = -three_term_Hessian(gcm)
-#     elseif num_Hessian_terms == 4
-#         P = -four_term_Hessian(gcm)
-#     else
-#         error("num_Hessian_terms should be 2, 3, or 4 but was $num_Hessian_terms")
-#     end
-#     Pinv = inv(P)
-#     # score test for each SNP
-#     for j in 1:q
-#         # sync vectors
-#         SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=true)
-#         Q, R = zero(T), zero(T)
-#         fill!(W, 0)
-#         # loop over each sample
-#         for i in 1:n
-#             # variables for current sample
-#             gc = gcm.data[i]
-#             d = gc.n # number of observations for current sample
-#             zi = fill(z[i], d)
-#             res = gc.res # d × 1 standardized residuals
-#             # update ∇resγ
-#             ∇resγ = zeros(T, d)
-#             ∇resβ = gc.∇resβ # d × p
-#             for k in 1:d # loop over each sample's observation
-#                 ∇resγ[k] = update_∇resβ(dist, zi[k], res[k], gc.μ[k], gc.dμ[k], gc.varμ[k])
-#             end
-#             # calculate trailing terms (todo: efficiency)
-#             Γ = zeros(T, d, d)
-#             for k in 1:gc.m # loop over variance components
-#                 Γ .+= gcm.θ[k] .* gc.V[k]
-#             end
-#             # denom = 1 + dot(gcm.θ, gc.q) # note dot(θ, gc.q) = qsum = 0.5 r'Γr
-#             denom = 1 + 0.5 * (res' * Γ * res)
-#             denom2 = abs2(denom)
-#             Wtrail = (∇resβ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
-#             Qtrail = (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
-#             Rtrail = (∇resγ' * Γ * res) / denom
-#             # third Hessian term
-#             Wtrail2 = ∇resβ' * Γ * ∇resγ / denom
-#             Qtrail2 = ∇resγ' * Γ * ∇resγ / denom
-#             # score test variables
-#             W .+= Transpose(gc.X) * Diagonal(gc.w2) * zi .+ Wtrail .- Wtrail2
-#             Q += Transpose(zi) * Diagonal(gc.w2) * zi + Qtrail - Qtrail2
-#             R += Transpose(zi) * Diagonal(gc.w1) * (gc.y - gc.μ) + Rtrail
-#         end
-#         # score test (todo: efficiency)
-#         S = R * inv(Q - W'*Pinv*W) * R
-#         pvals[j] = ccdf(χ2, S)
-#     end
-#     return pvals
-# end
-
 function GWASCopulaVCModel(
     gcm::Union{GLMCopulaVCModel, NBCopulaVCModel},
     G::SnpArray;
-    num_Hessian_terms::Int = 3
+    num_Hessian_terms::Int = 2
     )
-    # define autodiff likelihood, gradient, and Hessians
-    autodiff_loglikelihood(β) = loglikelihood(β, gcm, z)
-    ∇logl = x -> ForwardDiff.gradient(autodiff_loglikelihood, x)
-    ∇²logl = x -> ForwardDiff.hessian(autodiff_loglikelihood, x)
-    # some needed constants
     n, q = size(G)
     p = length(gcm.β)
     dist = _get_null_distribution(gcm)
@@ -282,7 +204,6 @@ function GWASCopulaVCModel(
     W = zeros(T, p)
     χ2 = Chisq(1)
     pvals = zeros(T, q)
-    fullβ = [gcm.β; 0.0]
     # compute P (negative Hessian) and inv(P)
     if num_Hessian_terms == 2
         P = -two_term_Hessian(gcm)
@@ -297,8 +218,7 @@ function GWASCopulaVCModel(
     # score test for each SNP
     for j in 1:q
         # sync vectors
-        SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=false)
-        full_grad = zeros(p + 1)
+        SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=true)
         Q, R = zero(T), zero(T)
         fill!(W, 0)
         # loop over each sample
@@ -311,26 +231,9 @@ function GWASCopulaVCModel(
             # update ∇resγ
             ∇resγ = zeros(T, d)
             ∇resβ = gc.∇resβ # d × p
-
-            Xfull = [gc.X zi]
-            ∇resfull = zeros(d, p+1)
-
-            # @show zi
-            # @show ∇resβ
-            for ii in 1:gc.p+1
-                for jj in 1:gc.n
-                    ∇resfull[jj, ii] = update_∇resβ(dist, Xfull[jj, ii], gc.res[jj], gc.μ[jj], gc.dμ[jj], gc.varμ[jj])
-                end
-            end
-            # @show ∇resfull[:, 1:p]
-
-
             for k in 1:d # loop over each sample's observation
                 ∇resγ[k] = update_∇resβ(dist, zi[k], res[k], gc.μ[k], gc.dμ[k], gc.varμ[k])
             end
-            # @show ∇resγ
-            # @show ∇resfull[:, p+1]
-
             # calculate trailing terms (todo: efficiency)
             Γ = zeros(T, d, d)
             for k in 1:gc.m # loop over variance components
@@ -341,41 +244,18 @@ function GWASCopulaVCModel(
             denom2 = abs2(denom)
             Wtrail = (∇resβ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
             Qtrail = (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
+            Rtrail = (∇resγ' * Γ * res) / denom
             # third Hessian term
             Wtrail2 = ∇resβ' * Γ * ∇resγ / denom
             Qtrail2 = ∇resγ' * Γ * ∇resγ / denom
             # score test variables
             W .+= Transpose(gc.X) * Diagonal(gc.w2) * zi .+ Wtrail .- Wtrail2
             Q += Transpose(zi) * Diagonal(gc.w2) * zi + Qtrail - Qtrail2
-            R += Transpose(zi) * Diagonal(gc.w1) * (gc.y - gc.μ) + (∇resγ' * Γ * res) / denom
-
-            # @show Xfull
-            # @show ∇resfull
-            # @show Transpose(Xfull) * Diagonal(gc.w1) * (gc.y - gc.μ) + (∇resfull' * Γ * res) / denom
-            full_grad += Transpose(Xfull) * Diagonal(gc.w1) * (gc.y - gc.μ) + (∇resfull' * Γ * res) / denom
+            R += Transpose(zi) * Diagonal(gc.w1) * (gc.y - gc.μ) + Rtrail
         end
-        # compute Q via autodiff
-        # Hfull = ∇²logl(fullβ)
-        # Qauto = -Hfull[end, end]
-        # Wauto = -Hfull[1:end-1, end]
-
-        full_grad_auto = ∇logl(fullβ)
-        Rauto = full_grad_auto[end]
-        # @show full_grad_auto
-        # @show full_grad
-        # @show gcm.∇β
-        # @show Rauto, R
-
-        # fff
-        # @show Qauto, Q
-        # @show Wauto, W
-        # j > 5 && fdsa
-        S = Rauto * inv(Q - W'*Pinv*W) * Rauto
-        # S = Rauto * inv(Qauto - Wauto'*Pinv*Wauto) * Rauto
         # score test (todo: efficiency)
-        # S = R * inv(Q - W'*Pinv*W) * R
-        pval = ccdf(χ2, S)
-        pvals[j] = pval == 0 ? 1 : pval
+        S = R * inv(Q - W'*Pinv*W) * R
+        pvals[j] = ccdf(χ2, S)
     end
     return pvals
 end
@@ -383,7 +263,7 @@ end
 function GWASCopulaVCModel(
     gcm::GaussianCopulaVCModel,
     G::SnpArray;
-    num_Hessian_terms::Int = 3
+    num_Hessian_terms::Int = 2
     )
     n, q = size(G)
     p = length(gcm.β)
@@ -509,201 +389,6 @@ function four_term_Hessian(qc_model)
     # call autodiff on autodiff_loglikelihood
     ∇²logl = x -> ForwardDiff.hessian(autodiff_loglikelihood, x)
     return ∇²logl(qc_model.β)
-end
-
-# Matrix-vector multiply friendly to autodiffing
-function A_mul_b!(c::AbstractVector{T}, A::AbstractMatrix, b::AbstractVector) where T
-    n, p = size(A)
-    fill!(c, zero(T))
-    for j in 1:p, i in 1:n
-        c[i] += A[i, j] * b[j]
-    end
-    return c
-end
-
-# loglikelihood friendly to autodiffing 
-function loglikelihood(
-    β::AbstractVector{T}, 
-    qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}
-    ) where T
-    θ = qc_model.θ
-    # allocate vector of type T
-    n, p = size(qc_model.data[1].X)
-    η = zeros(T, n)
-    μ = zeros(T, n)
-    varμ = zeros(T, n)
-    res = zeros(T, n)
-    storage_n = zeros(T, n)
-    q = zeros(T, length(θ))
-    logl = zero(T)
-    for gc in qc_model.data
-        X = gc.X
-        y = gc.y
-        n, p = size(X)
-        # update_res! step (need to avoid BLAS)
-        A_mul_b!(η, X, β)
-        for i in 1:gc.n
-            μ[i] = GLM.linkinv(gc.link, η[i])
-            varμ[i] = GLM.glmvar(gc.d, μ[i]) # Note: for negative binomial, d.r is used
-            res[i] = y[i] - μ[i]
-        end
-        # standardize_res! step
-        for j in eachindex(y)
-            res[j] /= sqrt(varμ[j])
-        end
-        # std_res_differential! step (this will compute ∇resβ)
-        # update Γ
-        @inbounds for k in 1:gc.m
-            A_mul_b!(storage_n, gc.V[k], res)
-            q[k] = dot(res, storage_n) / 2 # q[k] = 0.5 r' * V[k] * r (update variable b for variance component model)
-        end
-        # component_loglikelihood
-        for j in 1:gc.n
-            logl += QuasiCopula.loglik_obs(gc.d, y[j], μ[j], one(T), one(T))
-        end
-        tsum = dot(θ, gc.t)
-        logl += -log(1 + tsum)
-        qsum  = dot(θ, q) # qsum = 0.5 r'Γr
-        logl += log(1 + qsum)
-    end
-    return logl
-end
-
-function loglikelihood(
-    β::AbstractVector{T}, 
-    gcm::GaussianCopulaVCModel
-    ) where T
-    θ = gcm.θ
-    τ = gcm.τ[1]
-    # allocate vector of type T
-    n, p = size(gcm.data[1].X)
-    μ = zeros(T, n)
-    res = zeros(T, n)
-    storage_n = zeros(T, n)
-    q = zeros(T, length(θ))
-    logl = zero(T)
-    for gc in gcm.data
-        X = gc.X
-        y = gc.y
-        n, p = size(X)
-        sqrtτ = sqrt(abs(τ))
-        # update_res! step (need to avoid BLAS)
-        A_mul_b!(μ, X, β)
-        for i in 1:gc.n
-            res[i] = y[i] - μ[i]
-        end
-        # standardize_res! step
-        res .*= sqrtτ
-        rss  = abs2(norm(res)) # RSS of standardized residual
-        tsum = dot(abs.(θ), gc.t) # ben: why is there abs here?
-        logl += - log(1 + tsum) - (gc.n * log(2π) -  gc.n * log(abs(τ)) + rss) / 2
-        # update Γ
-        @inbounds for k in 1:gc.m
-            A_mul_b!(storage_n, gc.V[k], res)
-            q[k] = dot(res, storage_n) / 2 # q[k] = 0.5 r' * V[k] * r (update variable b for variance component model)
-        end
-        qsum  = dot(θ, q)
-        logl += log(1 + qsum)
-    end
-    return logl
-end
-
-function loglikelihood(
-    β::AbstractVector{T}, # p+1 × 1 where p is number of non-genetic covariates
-    qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, # fitted null model
-    z::AbstractVector # n × 1 genotype vector
-    ) where T
-    θ = qc_model.θ
-    # allocate vector of type T
-    n, p = size(qc_model.data[1].X)
-    η = zeros(T, n)
-    μ = zeros(T, n)
-    varμ = zeros(T, n)
-    res = zeros(T, n)
-    storage_n = zeros(T, n)
-    q = zeros(T, length(θ))
-    logl = zero(T)
-    for (i, gc) in enumerate(qc_model.data)
-        snps = [z[i] for i in 1:size(gc.X, 1)]
-        X = hcat(gc.X, snps) # genetic and nongenetic covariates
-        y = gc.y
-        n, p = size(X)
-        # update_res! step (need to avoid BLAS)
-        A_mul_b!(η, X, β)
-        for j in 1:gc.n
-            μ[j] = GLM.linkinv(gc.link, η[j])
-            varμ[j] = GLM.glmvar(gc.d, μ[j]) # Note: for negative binomial, d.r is used
-#             dμ[j] = GLM.mueta(gc.link, η[j])
-#             w1[j] = dμ[j] / varμ[j]
-#             w2[j] = w1[j] * dμ[j]
-            res[j] = y[j] - μ[j]
-        end
-        # standardize_res! step
-        for j in eachindex(y)
-            res[j] /= sqrt(varμ[j])
-        end
-        # std_res_differential! step (this will compute ∇resβ)
-#         for i in 1:gc.p
-#             for j in 1:gc.n
-#                 ∇resβ[j, i] = -sqrt(varμ[j]) * X[j, i] - (0.5 * res[j] * (1 - (2 * μ[j])) * X[j, i])
-#             end
-#         end
-        # update Γ
-        @inbounds for k in 1:gc.m
-            A_mul_b!(storage_n, gc.V[k], res)
-            q[k] = dot(res, storage_n) / 2 # q[k] = 0.5 r' * V[k] * r (update variable b for variance component model)
-        end
-        # component_loglikelihood
-        for j in 1:gc.n
-            logl += QuasiCopula.loglik_obs(gc.d, y[j], μ[j], one(T), one(T))
-        end
-        tsum = dot(θ, gc.t)
-        logl += -log(1 + tsum)
-        qsum  = dot(θ, q) # qsum = 0.5 r'Γr
-        logl += log(1 + qsum)
-    end
-    return logl
-end
-
-function loglikelihood(
-    β::AbstractVector{T}, # p+1 × 1 where p is number of non-genetic covariates
-    gcm::GaussianCopulaVCModel,
-    z::AbstractVector # n × 1 genotype vector
-    ) where T
-    θ = gcm.θ
-    τ = gcm.τ[1]
-    # allocate vector of type T
-    n, p = size(gcm.data[1].X)
-    μ = zeros(T, n)
-    res = zeros(T, n)
-    storage_n = zeros(T, n)
-    q = zeros(T, length(θ))
-    logl = zero(T)
-    for (i, gc) in enumerate(qc_model.data)
-        snps = [z[i] for i in 1:size(gc.X, 1)]
-        X = hcat(gc.X, snps) # genetic and nongenetic covariates
-        y = gc.y
-        n, p = size(X)
-        sqrtτ = sqrt(abs(τ))
-        # update_res! step (need to avoid BLAS)
-        A_mul_b!(μ, X, β)
-        for j in 1:gc.n
-            res[j] = y[j] - μ[j]
-        end
-        # standardize_res! step
-        res .*= sqrtτ
-        rss  = abs2(norm(res)) # RSS of standardized residual
-        tsum = dot(abs.(θ), gc.t) # ben: why is there abs here?
-        logl += - log(1 + tsum) - (gc.n * log(2π) -  gc.n * log(abs(τ)) + rss) / 2
-        # update Γ
-        @inbounds for k in 1:gc.m
-            A_mul_b!(storage_n, gc.V[k], res)
-            q[k] = dot(res, storage_n) / 2 # q[k] = 0.5 r' * V[k] * r (update variable b for variance component model)
-        end
-        qsum  = dot(θ, q)
-        logl += log(1 + qsum)
-    end
-    return logl
 end
 
 update_∇resβ(d::Normal, x_ji, res_j, μ_j, dμ_j, varμ_j) = -x_ji
