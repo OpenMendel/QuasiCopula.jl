@@ -1,12 +1,13 @@
 function loglikelihood(
-    par::AbstractVector{T}, # p+2+1 × 1 where 2 is for θ, 1 is for the SNP
+    par::AbstractVector{T}, # p+m+1 × 1 where m is number of VCs, 1 is for the SNP
     qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, # fitted null model
     z::AbstractVector # n × 1 genotype vector
     ) where T
-    β = [par[1:end-3]; par[end]] # nongenetic + genetic beta
-    θ = par[end-2:end-1]         # vc parameters
-    # allocate vector of type T
     n, p = size(qc_model.data[1].X)
+    m = length(par) - 1 - p
+    β = [par[1:end-(m+1)]; par[end]] # nongenetic + genetic beta
+    θ = par[end-m:end-1]             # vc parameters
+    # allocate storage vectors of type T
     η = zeros(T, n)
     μ = zeros(T, n)
     varμ = zeros(T, n)
@@ -57,15 +58,16 @@ function loglikelihood(
 end
 
 function loglikelihood(
-    par::AbstractVector{T}, # p+2+1+1, where 2 is for θ, 1 is τ, and last 1 is for the SNP
+    par::AbstractVector{T}, # p+m+1+1, where m is number of VCs, 1 is τ, and last 1 is for the SNP
     gcm::GaussianCopulaVCModel,
     z::AbstractVector # n × 1 genotype vector
     ) where T
-    β = [par[1:end-4]; par[end]] # nongenetic + genetic beta
-    θ = par[end-3:end-2]         # vc parameters
-    τ = par[end-1]               # dispersion for gaussian
-    # allocate vector of type T
     n, p = size(gcm.data[1].X)
+    m = length(par) - 2 - p
+    β = [par[1:end-(m+2)]; par[end]] # nongenetic + genetic beta
+    θ = par[end-3:end-2]             # vc parameters
+    τ = par[end-1]                   # dispersion for gaussian
+    # allocate vector of type T
     μ = zeros(T, n)
     res = zeros(T, n)
     storage_n = zeros(T, n)
