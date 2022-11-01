@@ -192,8 +192,10 @@ function GWASCopulaVCModel(
     G::SnpArray;
     num_Hessian_terms::Int = 2
     )
-    n, q = size(G)
-    p = length(gcm.β)
+    n = size(G, 1)    # number of samples with genotypes
+    q = size(G, 2)    # number of SNPs in each sample
+    p = length(gcm.β) # number of fixed effects in each sample
+    m = length(gcm.θ) # number of variance components in each sample
     dist = _get_null_distribution(gcm)
     T = eltype(gcm.data[1].X)
     n == length(gcm.data) || error("sample size do not agree")
@@ -201,19 +203,22 @@ function GWASCopulaVCModel(
     any(x -> abs(x) > 1e-3, gcm.∇θ) && error("Null model gradient of variance components is not zero!")
     # preallocated arrays for efficiency
     z = zeros(T, n)
-    W = zeros(T, p)
+    W = zeros(T, p + m)
     χ2 = Chisq(1)
     pvals = zeros(T, q)
     # compute P (negative Hessian) and inv(P)
     if num_Hessian_terms == 2
-        P = -two_term_Hessian(gcm)
+        Hββ = -two_term_Hββ(gcm)
+        Hθθ = -get_Hθθ(gcm)
+        Hβθ = -get_Hβθ(gcm)
     elseif num_Hessian_terms == 3
-        P = -three_term_Hessian(gcm)
+        Hββ = -three_term_Hessian(gcm)
     elseif num_Hessian_terms == 4
-        P = -four_term_Hessian(gcm)
+        Hββ = -four_term_Hessian(gcm)
     else
         error("num_Hessian_terms should be 2, 3, or 4 but was $num_Hessian_terms")
     end
+    P = [Hββ Hβθ; Hβθ' Hθθ]
     Pinv = inv(P)
     # score test for each SNP
     for j in 1:q
@@ -234,7 +239,7 @@ function GWASCopulaVCModel(
             for k in 1:d # loop over each sample's observation
                 ∇resγ[k] = update_∇resβ(dist, zi[k], res[k], gc.μ[k], gc.dμ[k], gc.varμ[k])
             end
-            # calculate trailing terms (todo: efficiency)
+            # form some constants 
             Γ = zeros(T, d, d)
             for k in 1:gc.m # loop over variance components
                 Γ .+= gcm.θ[k] .* gc.V[k]
@@ -242,18 +247,42 @@ function GWASCopulaVCModel(
             # denom = 1 + dot(gcm.θ, gc.q) # note dot(θ, gc.q) = qsum = 0.5 r'Γr
             denom = 1 + 0.5 * (res' * Γ * res)
             denom2 = abs2(denom)
-            Wtrail = (∇resβ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
+            # calculate W (with 2 hessian terms)
+            Hβγ_i = get_Hβγ_i(gc, Γ, ∇resβ, ∇resγ, zi) # approx
+            Hθγ_i = get_neg_Hθγ_i(gc, gcm.θ, ∇resγ) # exact
+            W .+= vcat(Hβγ_i, Hθγ_i)
+            # calculate Q (with 2 hessian terms)
             Qtrail = (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
+            Q += Transpose(zi) * Diagonal(gc.w2) * zi + Qtrail
+            # calculate Q (with 3 hessian terms)
+            # Qtrail2 = ∇resγ' * Γ * ∇resγ / denom
+            # Q += Transpose(zi) * Diagonal(gc.w2) * zi + Qtrail - Qtrail2
+            # calculate R
             Rtrail = (∇resγ' * Γ * res) / denom
-            # third Hessian term
-            Wtrail2 = ∇resβ' * Γ * ∇resγ / denom
-            Qtrail2 = ∇resγ' * Γ * ∇resγ / denom
-            # score test variables
-            W .+= Transpose(gc.X) * Diagonal(gc.w2) * zi .+ Wtrail .- Wtrail2
-            Q += Transpose(zi) * Diagonal(gc.w2) * zi + Qtrail - Qtrail2
             R += Transpose(zi) * Diagonal(gc.w1) * (gc.y - gc.μ) + Rtrail
+
+
+
+            # denom = 1 + dot(gcm.θ, gc.q) # note dot(θ, gc.q) = qsum = 0.5 r'Γr
+            # denom = 1 + 0.5 * (res' * Γ * res)
+            # denom2 = abs2(denom)
+            # Wtrail = (∇resβ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
+            # Qtrail = (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
+            # Rtrail = (∇resγ' * Γ * res) / denom
+            # # third Hessian term
+            # Wtrail2 = ∇resβ' * Γ * ∇resγ / denom
+            # Qtrail2 = ∇resγ' * Γ * ∇resγ / denom
+            # # score test variables
+            # W .+= Transpose(gc.X) * Diagonal(gc.w2) * zi .+ Wtrail .- Wtrail2
+            # Q += Transpose(zi) * Diagonal(gc.w2) * zi + Qtrail - Qtrail2
+            # R += Transpose(zi) * Diagonal(gc.w1) * (gc.y - gc.μ) + Rtrail
         end
         # score test (todo: efficiency)
+        @show R
+        @show Q
+        @show W
+        @show Pinv
+        fff
         S = R * inv(Q - W'*Pinv*W) * R
         pvals[j] = ccdf(χ2, S)
     end
@@ -273,7 +302,7 @@ function GWASCopulaVCModel(
     any(x -> abs(x) > 1e-3, gcm.∇θ) && error("Null model gradient of variance components is not zero!")
     # approximate FIM by negative Hessian (todo: is the Hessian in gaussian_VC.jl actually the expect Hessian?)
     if num_Hessian_terms == 2
-        P = -two_term_Hessian(gcm)
+        P = -two_term_Hββ(gcm)
     elseif num_Hessian_terms == 3
         P = -three_term_Hessian(gcm)
     elseif num_Hessian_terms == 4
@@ -333,8 +362,63 @@ function GWASCopulaVCModel(
     return pvals
 end
 
+function get_Hθθ(qc_model)
+    # use loglikelihood! function to get Hθθ. Commented out code gives the same answer
+    loglikelihood!(qc_model, true, true)
+    return qc_model.Hθ
+    # m = length(qc_model.data[1].V) # number of variance components
+    # hess_math = zeros(m, m)
+    # for i in eachindex(qc_model.data)
+    #     r = qc_model.data[i].res
+    #     Ω = qc_model.data[i].V
+    #     b = [0.5r' * Ω[k] * r for k in 1:m]
+    #     c = [0.5tr(Ω[k]) for k in 1:m]
+    #     hess_math += b*b' / (1 + qc_model.θ'*b)^2 - c*c' / (1 + qc_model.θ'*c)^2
+    # end
+    # return -hess_math
+end
+
+function get_Hβθ(qc_model)
+    m = length(qc_model.data[1].V)  # number of variance components
+    p = size(qc_model.data[1].X, 2) # number of fixed effects
+    hess_math = zeros(p, m)
+    for i in eachindex(qc_model.data)
+        r = qc_model.data[i].res
+        Ω = qc_model.data[i].V
+        θ = qc_model.θ
+        ∇resβ = qc_model.data[i].∇resβ
+        b = [0.5r' * Ω[k] * r for k in 1:m]
+        A = hcat([∇resβ' * Ω[k] * r for k in 1:m]...)
+        hess_math += A ./ (1 + θ'*b) - (A*θ ./ (1 + θ'*b)^2) * b'
+    end
+    return hess_math
+end
+
+function get_neg_Hθγ_i(gc, θ, ∇resγ)
+    m = length(gc.V)  # number of variance components
+    r = gc.res
+    Ω = gc.V
+    b = [0.5r' * Ω[k] * r for k in 1:m]
+    A = hcat([∇resγ' * Ω[k] * r for k in 1:m]...)
+    # calculate Hγθ, then return Hθγ = Hγθ'
+    Hγθ = (A*θ ./ (1 + θ'*b)^2) * b' - A ./ (1 + θ'*b)
+    return Hγθ'
+end
+
+function get_Hβγ_i(gc, Γ, ∇resβ, ∇resγ, zi)
+    res = gc.res
+    denom = 1 + 0.5 * (res' * Γ * res)
+    denom2 = abs2(denom)
+    trail = (∇resβ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
+    Hβγ_i = Transpose(gc.X) * Diagonal(gc.w2) * zi + trail
+    # 3 Hessian terms
+    # trail2 = ∇resβ' * Γ * ∇resγ / denom
+    # Hβγ_i = Transpose(gc.X) * Diagonal(gc.w2) * zi + trail - trail2
+    return Hβγ_i
+end
+
 # 2 term hessian from math
-function two_term_Hessian(gcm::Union{GLMCopulaVCModel, NBCopulaVCModel})
+function two_term_Hββ(gcm::Union{GLMCopulaVCModel, NBCopulaVCModel})
     p = length(gcm.β)
     T = eltype(gcm.β)
     H = zeros(T, p, p)
@@ -355,7 +439,7 @@ function two_term_Hessian(gcm::Union{GLMCopulaVCModel, NBCopulaVCModel})
     return H
 end
 
-function two_term_Hessian(gcm::GaussianCopulaVCModel)
+function two_term_Hββ(gcm::GaussianCopulaVCModel)
     p = length(gcm.β)
     T = eltype(gcm.β)
     H = zeros(T, p, p)
