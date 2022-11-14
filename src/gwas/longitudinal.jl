@@ -209,15 +209,15 @@ function GWASCopulaVCModel(
     # compute P (negative Hessian) and inv(P)
     if num_Hessian_terms == 2
         Hββ = -two_term_Hββ(gcm)
-        Hθθ = -get_Hθθ(gcm)
-        Hβθ = -get_Hβθ(gcm)
     elseif num_Hessian_terms == 3
-        Hββ = -three_term_Hessian(gcm)
+        Hββ = -three_term_Hββ(gcm)
     elseif num_Hessian_terms == 4
         Hββ = -four_term_Hessian(gcm)
     else
         error("num_Hessian_terms should be 2, 3, or 4 but was $num_Hessian_terms")
     end
+    Hθθ = -get_Hθθ(gcm)
+    Hβθ = -get_Hβθ(gcm)
     P = [Hββ Hβθ; Hβθ' Hθθ]
     Pinv = inv(P)
     # score test for each SNP
@@ -304,7 +304,7 @@ function GWASCopulaVCModel(
     if num_Hessian_terms == 2
         P = -two_term_Hββ(gcm)
     elseif num_Hessian_terms == 3
-        P = -three_term_Hessian(gcm)
+        P = -three_term_Hββ(gcm)
     elseif num_Hessian_terms == 4
         P = -four_term_Hessian(gcm)
     else
@@ -461,9 +461,32 @@ function two_term_Hββ(gcm::GaussianCopulaVCModel)
 end
 
 # 3 term hessian from math
-function three_term_Hessian(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel})
+function three_term_Hββ(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel})
     loglikelihood!(qc_model, true, true)
     return qc_model.Hβ
+    # @show qc_model.Hβ
+    # p = length(qc_model.β)
+    # T = eltype(qc_model.β)
+    # H = zeros(T, p, p)
+    # for gc in qc_model.data
+    #     d = gc.n # number of observations for current sample
+    #     # GLM term
+    #     H -= Transpose(gc.X) * Diagonal(gc.w2) * gc.X
+    #     # 2nd term
+    #     res = gc.res # d × 1 standardized residuals
+    #     ∇resβ = gc.∇resβ # d × p
+    #     Γ = zeros(T, d, d)
+    #     for k in 1:gc.m # loop over variance components
+    #         Γ .+= qc_model.θ[k] .* gc.V[k]
+    #     end
+    #     denom = 1 + 0.5 * (res' * Γ * res)
+    #     H -= (∇resβ' * Γ * res) * (∇resβ' * Γ * res)' / denom^2
+    #     # 3rd term
+    #     H += (∇resβ' * Γ * ∇resβ) / denom
+    # end
+    # @show H
+    # ffff
+    # return H
 end
 
 # 4 term hessian using autodiff
