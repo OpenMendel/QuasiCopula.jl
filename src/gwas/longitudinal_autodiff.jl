@@ -149,6 +149,10 @@ function GWASCopulaVCModel_autodiff(
     fullβ = [qc_model.β; qc_model.θ; 0.0]
     Hfull = ∇²logl(fullβ)
     Pinv = inv(-Hfull[1:end-1, 1:end-1])
+    # @show Pinv
+    P = -Hfull[1:end-1, 1:end-1]
+    @show P
+    fff
     # score test for each SNP
     pvals = zeros(T, q)
     grad_store = zeros(T, p + m + 1)
@@ -214,6 +218,13 @@ function GWASCopulaVCModel_autodiff(
         S = R * inv(Q - W'*Pinv*W) * R
         pval = ccdf(Chisq(1), S)
         pvals[j] = pval == 0 ? 1 : pval
+
+        @show Pinv
+        @show R
+        @show Q
+        @show W
+        j == 2 && fdsa
+
     end
     return pvals
 end

@@ -15,11 +15,11 @@ Computes the Hessian of the σ^2 function with respect to β for sample i (Xi) a
 """
 function ∇²σ²_j(d::Distribution, l::Link, xj::Union{AbstractVector, Number}, μj::Number, ηj::Number)
     c = sigmamu2(d, μj)*GLM.mueta(l, ηj)^2 + sigmamu(d, μj)*mueta2(l, ηj)
-    return c * xj * xj'
+    return c * xj * xj' # p × p or 1 × 1
 end
 function ∇²σ²_j(d::Distribution, l::Link, xj::Union{AbstractVector, Number}, zj::Number, μj::Number, ηj::Number)
     c = sigmamu2(d, μj)*GLM.mueta(l, ηj)^2 + sigmamu(d, μj)*mueta2(l, ηj)
-    return c * zj * xj
+    return c * zj * xj # p × 1
 end
 
 """
@@ -29,11 +29,11 @@ Computes the Hessian of the mean function with respect to β for sample i (Xi) a
 """
 function ∇²μ_j(l::Link, ηj::Number, xj::Union{AbstractVector, Number})
     d²μdη² = mueta2(l, ηj)
-    return d²μdη² * xj * xj'
+    return d²μdη² * xj * xj' # p × p or 1 × 1
 end
 function ∇²μ_j(l::Link, ηj::Number, xj::Union{AbstractVector, Number}, zj::Number)
     d²μdη² = mueta2(l, ηj)
-    return d²μdη² * zj * xj 
+    return d²μdη² * zj * xj # p × 1
 end
 
 """
@@ -78,12 +78,6 @@ Computes ∇²resβ_ij, the Hessian of the standardized residuals for sample i
 at the j'th measurement. 
 """
 function ∇²resβ_ij(dist, link, xj, η_j, μ_j, varμ_j, res_j)
-    # intermediate quantities
-    # η_j = dot(xj, β)
-    # μ_j = GLM.linkinv(link, η_j)
-    # varμ_j = GLM.glmvar(dist, μ_j)
-    # res_j = (yj - μ_j) / sqrt(varμ_j)
-
     invσ_j = inv(sqrt(varμ_j))
     ∇μ_ij  = GLM.mueta(link, η_j) * xj
     ∇σ²_ij = sigmamu(dist, μ_j) * GLM.mueta(link, η_j) * xj
@@ -99,12 +93,6 @@ function ∇²resβ_ij(dist, link, xj, η_j, μ_j, varμ_j, res_j)
     return ∇²resβ_ij # p × p
 end
 function ∇²resβ_ij(dist, link, xj, z, η_j, μ_j, varμ_j, res_j)
-    # intermediate quantities
-    # η_j = dot(xj, β)
-    # μ_j = GLM.linkinv(link, η_j)
-    # varμ_j = GLM.glmvar(dist, μ_j)
-    # res_j = (yj - μ_j) / sqrt(varμ_j)
-
     invσ_j = inv(sqrt(varμ_j))
     ∇ᵧμ_ij  = GLM.mueta(link, η_j) * z # 1 × 1
     ∇ᵦμ_ij  = GLM.mueta(link, η_j) * xj # p × 1
@@ -119,7 +107,7 @@ function ∇²resβ_ij(dist, link, xj, z, η_j, μ_j, varμ_j, res_j)
     term5 = 0.75res_j * inv(varμ_j^2) * ∇ᵦσ²_ij * ∇ᵧσ²_ij
     ∇²resβ_ij = term1 + term2 + term3 + term4 + term5
 
-    return ∇²resβ_ij # p × p
+    return ∇²resβ_ij # p × 1
 end
 
 """
@@ -225,7 +213,7 @@ function GWASCopulaVCModel(
             denom = 1 + 0.5 * (res' * Γ * res)
             denom2 = abs2(denom)
             # calculate W
-            Hβγ_i = get_Hβγ_i(gc, Γ, ∇resβ, ∇resγ, zi) # exact
+            Hβγ_i = get_Hβγ_i(gc, Γ, ∇resβ, ∇resγ, zi, gcm.β) # exact
             Hθγ_i = get_neg_Hθγ_i(gc, gcm.θ, ∇resγ) # exact
             W .+= vcat(Hβγ_i, Hθγ_i)
             # calculate Q
@@ -239,15 +227,13 @@ function GWASCopulaVCModel(
                 Q -= (ek' * Γ * res * ∇²resβ_ij(gc.d, gc.link, z[i], gc.η[k], gc.μ[k], gc.varμ[k], res[k])) / denom
             end
             # calculate R
-            Rtrail = (∇resγ' * Γ * res) / denom
-            R += Transpose(zi) * Diagonal(gc.w1) * (gc.y - gc.μ) + Rtrail
+            R += Transpose(zi) * Diagonal(gc.w1) * (gc.y - gc.μ) + (∇resγ' * Γ * res) / denom
         end
-        # score test (todo: efficiency)
-        @show R
-        @show Q
-        @show W
-        j == 2 && fdsa
-
+        # score test
+        # @show R
+        # @show Q
+        # @show W
+        # j == 2 && fdsa
         S = R * inv(Q - W'*Pinv*W) * R
         pvals[j] = ccdf(χ2, S)
     end
@@ -257,28 +243,24 @@ end
 function GWASCopulaVCModel(
     gcm::GaussianCopulaVCModel,
     G::SnpArray;
-    num_Hessian_terms::Int = 2
     )
-    n, q = size(G)
-    p = length(gcm.β)
+    n = size(G, 1)    # number of samples with genotypes
+    q = size(G, 2)    # number of SNPs in each sample
+    p = length(gcm.β) # number of fixed effects in each sample
+    m = length(gcm.θ) # number of variance components in each sample
     T = eltype(gcm.data[1].X)
     n == length(gcm.data) || error("sample size do not agree")
-    any(x -> abs(x) > 1e-3, gcm.∇β) && error("Null model gradient of beta is not zero!")
-    any(x -> abs(x) > 1e-3, gcm.∇θ) && error("Null model gradient of variance components is not zero!")
-    # approximate FIM by negative Hessian (todo: is the Hessian in gaussian_VC.jl actually the expect Hessian?)
-    if num_Hessian_terms == 2
-        P = -two_term_Hββ(gcm)
-    elseif num_Hessian_terms == 3
-        P = -three_term_Hββ(gcm)
-    elseif num_Hessian_terms == 4
-        P = -four_term_Hessian(gcm)
-    else
-        error("num_Hessian_terms should be 2, 3, or 4 but was $num_Hessian_terms")
-    end
+    any(x -> abs(x) > 0.005, gcm.∇β) && error("Null model gradient of beta is not zero!")
+    any(x -> abs(x) > 0.005, gcm.∇θ) && error("Null model gradient of variance components is not zero!")
+    # compute P (negative Hessian) and inv(P)
+    Hββ = -get_Hββ(gcm)
+    Hθθ = -get_Hθθ(gcm)
+    Hβθ = -get_Hβθ(gcm)
+    P = [Hββ Hβθ; Hβθ' Hθθ]
     Pinv = inv(P)
     # preallocated arrays for efficiency
     z = zeros(T, n)
-    W = zeros(T, p)
+    W = zeros(T, p + m)
     χ2 = Chisq(1)
     pvals = zeros(T, q)
     # score test for each SNP
@@ -297,8 +279,6 @@ function GWASCopulaVCModel(
             # update ∇resγ
             ∇resβ = -sqrt(gcm.τ[1]) .* gc.X # see end of 11.3.1 https://arxiv.org/abs/2205.03505
             ∇resγ = -sqrt(gcm.τ[1]) .* fill(z[i], d)
-            # ∇resβ = -gcm.τ[1] .* gc.X # this is wrong mathematically but empirically gives beautiful QQ plots
-            # ∇resγ = -gcm.τ[1] .* fill(z[i], d)
             # calculate trailing terms (todo: efficiency)
             Γ = zeros(T, d, d)
             for k in 1:gc.m # loop over variance components
@@ -307,20 +287,47 @@ function GWASCopulaVCModel(
             # denom = 1 + dot(gcm.θ, gc.q) # note dot(θ, gc.q) = qsum = 0.5 r'Γr
             denom = 1 + 0.5 * (res' * Γ * res)
             denom2 = abs2(denom)
-            Wtrail = (∇resβ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
-            Qtrail = (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
-            Rtrail = (∇resγ' * Γ * res) / denom
-            # third Hessian term
-            Wtrail2 = ∇resβ' * Γ * ∇resγ / denom
-            Qtrail2 = ∇resγ' * Γ * ∇resγ / denom
-            # score test variables
-            W .+= Transpose(gc.X) * zi .+ Wtrail
-            Q += Transpose(zi) * zi + Qtrail
-            # W .+= Transpose(gc.X) * zi .+ Wtrail .- Wtrail2
-            # Q += Transpose(zi) * zi + Qtrail - Qtrail2
-            R += Transpose(zi) * (gc.y - gc.X * gcm.β) + Rtrail
+            # calculate W
+            Hβγ_i = get_Hβγ_i(gc, Γ, ∇resβ, ∇resγ, zi, gcm.β) # exact
+            Hθγ_i = get_neg_Hθγ_i(gc, gcm.θ, ∇resγ) # exact
+            W .+= vcat(Hβγ_i, Hθγ_i)
+            # calculate Q
+            Q += Transpose(zi) * zi
+            Q += (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2 # 2nd term
+            Q -= ∇resγ' * Γ * ∇resγ / denom # 3rd term
+            ek = zeros(d)
+            η = gc.X * gcm.β
+            μ = η
+            dist = Normal()
+            link = IdentityLink()
+            varμ = GLM.glmvar.(dist, μ)
+            for k in 1:d
+                fill!(ek, 0)
+                ek[k] = 1
+                Q -= (ek' * Γ * res * ∇²resβ_ij(dist, link, z[i], η[k], μ[k], varμ[k], res[k])) / denom
+            end
+            # calculate R
+            R += Transpose(zi) * (gc.y - μ) + (∇resγ' * Γ * res) / denom
+
+
+            # Wtrail = (∇resβ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
+            # Qtrail = (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
+            # Rtrail = (∇resγ' * Γ * res) / denom
+            # # third Hessian term
+            # Wtrail2 = ∇resβ' * Γ * ∇resγ / denom
+            # Qtrail2 = ∇resγ' * Γ * ∇resγ / denom
+            # # score test variables
+            # W .+= Transpose(gc.X) * zi .+ Wtrail
+            # Q += Transpose(zi) * zi + Qtrail
+            # # W .+= Transpose(gc.X) * zi .+ Wtrail .- Wtrail2
+            # # Q += Transpose(zi) * zi + Qtrail - Qtrail2
+            # R += Transpose(zi) * (gc.y - gc.X * gcm.β) + Rtrail
         end
         # score test (todo: efficiency)
+        # @show W
+        # @show R
+        # @show Q
+        # hhh
         S = R * inv(Q - W'*Pinv*W) * R
         pvals[j] = ccdf(χ2, S)
     end
@@ -343,8 +350,7 @@ function get_Hθθ(qc_model)
     # return -hess_math
 end
 
-# this is exact
-function get_Hβθ(qc_model)
+function get_Hβθ(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel})
     m = length(qc_model.data[1].V)  # number of variance components
     p = size(qc_model.data[1].X, 2) # number of fixed effects
     hess_math = zeros(p, m)
@@ -359,8 +365,23 @@ function get_Hβθ(qc_model)
     end
     return hess_math
 end
+# must distinguish for gaussian case because it doesn't have ∇resβ precomputed
+function get_Hβθ(qc_model::GaussianCopulaVCModel)
+    m = length(qc_model.data[1].V)  # number of variance components
+    p = size(qc_model.data[1].X, 2) # number of fixed effects
+    hess_math = zeros(p, m)
+    for (i, gc) in enumerate(qc_model.data)
+        r = gc.res
+        Ω = gc.V
+        θ = qc_model.θ
+        ∇resβ = -sqrt(qc_model.τ[1]) .* gc.X # see end of 11.3.1 https://arxiv.org/abs/2205.03505
+        b = [0.5r' * Ω[k] * r for k in 1:m]
+        A = hcat([∇resβ' * Ω[k] * r for k in 1:m]...)
+        hess_math += A ./ (1 + θ'*b) - (A*θ ./ (1 + θ'*b)^2) * b'
+    end
+    return hess_math
+end
 
-# this function is exact
 function get_neg_Hθγ_i(gc, θ, ∇resγ)
     m = length(gc.V)  # number of variance components
     r = gc.res
@@ -372,8 +393,7 @@ function get_neg_Hθγ_i(gc, θ, ∇resγ)
     return Hγθ'
 end
 
-# this is exact too
-function get_Hβγ_i(gc, Γ, ∇resβ, ∇resγ, z::AbstractVector) # z is a vector of SNP value (length d)
+function get_Hβγ_i(gc::Union{GLMCopulaVCObs, NBCopulaVCObs}, Γ, ∇resβ, ∇resγ, z::AbstractVector, β) # z is a vector of SNP value (length d)
     res = gc.res
     denom = 1 + 0.5 * (res' * Γ * res)
     denom2 = abs2(denom)
@@ -398,30 +418,35 @@ function get_Hβγ_i(gc, Γ, ∇resβ, ∇resγ, z::AbstractVector) # z is a vec
     end
     return Hβγ_i
 end
+# need to distinguish for gaussian case because Hessian is defined differently and η is not defined
+function get_Hβγ_i(gc::GaussianCopulaVCObs, Γ, ∇resβ, ∇resγ, z::AbstractVector, β) # z is a vector of SNP value (length d)
+    res = gc.res
+    denom = 1 + 0.5 * (res' * Γ * res)
+    denom2 = abs2(denom)
+    # 1st Hessian term
+    Hβγ_i = Transpose(gc.X) * z
+    # 2nd Hessian term
+    Hβγ_i += (∇resβ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
+    # 3rd Hessian terms
+    Hβγ_i -= ∇resβ' * Γ * ∇resγ / denom
+    # 4th Hessian term
+    ej = zeros(gc.n)
+    η = gc.X * β
+    μ = η
+    dist = Normal()
+    link = IdentityLink()
+    varμ = GLM.glmvar.(dist, μ)
+    res = gc.res
+    for j in 1:gc.n
+        fill!(ej, 0)
+        ej[j] = 1
+        xj = gc.X[j, :]
+        zi = z[1]
+        Hβγ_i -= dot(ej, Γ, res) * ∇²resβ_ij(dist, link, xj, zi, η[j], μ[j], varμ[j], res[j]) / denom
+    end
+    return Hβγ_i
+end
 
-# 2 term hessian from math
-# function two_term_Hββ(gcm::Union{GLMCopulaVCModel, NBCopulaVCModel})
-#     p = length(gcm.β)
-#     T = eltype(gcm.β)
-#     H = zeros(T, p, p)
-#     for gc in gcm.data
-#         d = gc.n # number of observations for current sample
-#         # GLM term
-#         H -= Transpose(gc.X) * Diagonal(gc.w2) * gc.X
-#         # trailing terms
-#         res = gc.res # d × 1 standardized residuals
-#         ∇resβ = gc.∇resβ # d × p
-#         Γ = zeros(T, d, d)
-#         for k in 1:gc.m # loop over variance components
-#             Γ .+= gcm.θ[k] .* gc.V[k]
-#         end
-#         denom = abs2(1 + 0.5 * (res' * Γ * res))
-#         H -= (∇resβ' * Γ * res) * (∇resβ' * Γ * res)' / denom
-#     end
-#     return H
-# end
-
-# 4 term hessian, only using autodiff to calculate ∇²r_ik
 function get_Hββ(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel})
     p = length(qc_model.β)
     T = eltype(qc_model.β)
@@ -455,32 +480,54 @@ function get_Hββ(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel})
             dist = qc_model.d[i]
             link = qc_model.link[i]
             H += (ej' * Γ * res * ∇²resβ_ij(dist, link, xj, η[j], μ[j], varμ[j], res[j])) / denom
-            # H += (ej' * Γ * res * ∇²resβ_ij(qc_model.β, xj, yj, dist, link)) / denom
+        end
+        # @show gc.w2
+        # @show res
+        # @show η
+        # @show μ
+        # @show varμ
+        # j = 1
+        # @show ∇²resβ_ij(dist, link, xj, η[j], μ[j], varμ[j], res[j])
+        # fdsa
+    end
+    return H
+end
+# must distinguish for gaussian case because it doesn't have ∇resβ precomputed
+function get_Hββ(qc_model::GaussianCopulaVCModel)
+    p = length(qc_model.β)
+    T = eltype(qc_model.β)
+    H = zeros(T, p, p)    
+    # loop over samples
+    for (i, gc) in enumerate(qc_model.data)
+        d = gc.n # number of observations for current sample
+        # GLM term
+        H -= Transpose(gc.X) * gc.X
+        # 2nd term
+        res = gc.res # d × 1 standardized residuals
+        # ∇resβ = gc.∇resβ # d × p
+        ∇resβ = -sqrt(qc_model.τ[1]) .* gc.X # see end of 11.3.1 https://arxiv.org/abs/2205.03505
+        Γ = zeros(T, d, d)
+        for k in 1:gc.m # loop over variance components
+            Γ .+= qc_model.θ[k] .* gc.V[k]
+        end
+        denom = 1 + 0.5 * (res' * Γ * res)
+        H -= (∇resβ' * Γ * res) * (∇resβ' * Γ * res)' / denom^2
+        # 3rd term
+        H += (∇resβ' * Γ * ∇resβ) / denom
+        # 4th term
+        ej = zeros(d)
+        η = gc.X * qc_model.β
+        μ = η
+        dist = Normal()
+        link = IdentityLink()
+        varμ = GLM.glmvar.(dist, μ)
+        res = gc.res
+        for j in 1:d
+            fill!(ej, 0)
+            ej[j] = 1
+            xj = gc.X[j, :]
+            H += (ej' * Γ * res * ∇²resβ_ij(dist, link, xj, η[j], μ[j], varμ[j], res[j])) / denom
         end
     end
     return H
 end
-
-# function update_∇resβ(d::Bernoulli, x_ji, res_j, μ_j, dμ_j, varμ_j)
-#     # println("dμ_j = $dμ_j, varμ_j = $varμ_j") # these are equal
-#     invσ = inv(sqrt(varμ_j))
-#     dμdβ = dμ_j * x_ji
-#     dσ2dβ = (1 - 2μ_j) * dμdβ
-#     ben = -invσ*dμdβ - 0.5 * inv(varμ_j) * res_j * dσ2dβ # this should be the correct one to use??
-
-#     sarah = -sqrt(varμ_j) * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji) # this assumes dμ/dσ^2 = 1, which seems to be true for Bernoulli with logit link
-#     empirically_desired = -varμ_j * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji)
-
-#     # println("ben = $ben, sarah = $sarah, empirically_desired = $empirically_desired")
-#     return sarah
-# end
-
-# cannot find a good way to tweak Poisson QQ plots
-# function update_∇resβ(d::Poisson, x_ji, res_j, μ_j, dμ_j, varμ_j)
-#     sarah = x_ji * (-(inv(sqrt(varμ_j)) + (0.5 * inv(varμ_j)) * res_j) * dμ_j)
-#     ben = (-inv(sqrt(varμ_j)) - 0.5inv(varμ_j) * res_j) * dμ_j * x_ji
-#     empirically_desired = (-1 - 0.5inv(varμ_j * sqrt(varμ_j)) * res_j) * dμ_j * x_ji
-#     # println("ben = $ben, sarah = $sarah, empirically_desired = $empirically_desired")
-#     # rand() < 0.1 && fdsa
-#     return sarah
-# end
