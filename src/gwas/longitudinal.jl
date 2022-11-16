@@ -215,7 +215,7 @@ function GWASCopulaVCModel(
             # calculate W
             Hβγ_i = get_Hβγ_i(gc, Γ, ∇resβ, ∇resγ, zi, gcm.β) # exact
             Hθγ_i = get_neg_Hθγ_i(gc, gcm.θ, ∇resγ) # exact
-            W .+= vcat(Hβγ_i, Hθγ_i)
+            W += vcat(Hβγ_i, Hθγ_i)
             # calculate Q
             Q += Transpose(zi) * Diagonal(gc.w2) * zi
             Q += (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2 # 2nd term
@@ -234,7 +234,7 @@ function GWASCopulaVCModel(
         # @show Q
         # @show W
         # j == 2 && fdsa
-        S = R * inv(Q - W'*Pinv*W) * R
+        S = R * inv(Q - dot(W, Pinv, W)) * R
         pvals[j] = ccdf(χ2, S)
     end
     return pvals
@@ -290,7 +290,7 @@ function GWASCopulaVCModel(
             # calculate W
             Hβγ_i = get_Hβγ_i(gc, Γ, ∇resβ, ∇resγ, zi, gcm.β) # exact
             Hθγ_i = get_neg_Hθγ_i(gc, gcm.θ, ∇resγ) # exact
-            W .+= vcat(Hβγ_i, Hθγ_i)
+            W += vcat(Hβγ_i, Hθγ_i)
             # calculate Q
             Q += Transpose(zi) * zi
             Q += (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2 # 2nd term
@@ -328,7 +328,7 @@ function GWASCopulaVCModel(
         # @show R
         # @show Q
         # hhh
-        S = R * inv(Q - W'*Pinv*W) * R
+        S = R * inv(Q - dot(W, Pinv, W)) * R
         pvals[j] = ccdf(χ2, S)
     end
     return pvals
