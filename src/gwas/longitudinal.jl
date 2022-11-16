@@ -17,6 +17,10 @@ function ∇²σ²_j(d::Distribution, l::Link, xj::Union{AbstractVector, Number}
     c = sigmamu2(d, μj)*GLM.mueta(l, ηj)^2 + sigmamu(d, μj)*mueta2(l, ηj)
     return c * xj * xj'
 end
+function ∇²σ²_j(d::Distribution, l::Link, xj::Union{AbstractVector, Number}, zj::Number, μj::Number, ηj::Number)
+    c = sigmamu2(d, μj)*GLM.mueta(l, ηj)^2 + sigmamu(d, μj)*mueta2(l, ηj)
+    return c * zj * xj
+end
 
 """
     ∇²μ_j(l::Link, Xi::Matrix, β::Vector, j)
@@ -26,6 +30,10 @@ Computes the Hessian of the mean function with respect to β for sample i (Xi) a
 function ∇²μ_j(l::Link, ηj::Number, xj::Union{AbstractVector, Number})
     d²μdη² = mueta2(l, ηj)
     return d²μdη² * xj * xj'
+end
+function ∇²μ_j(l::Link, ηj::Number, xj::Union{AbstractVector, Number}, zj::Number)
+    d²μdη² = mueta2(l, ηj)
+    return d²μdη² * zj * xj 
 end
 
 """
@@ -70,18 +78,11 @@ Computes ∇²resβ_ij, the Hessian of the standardized residuals for sample i
 at the j'th measurement. 
 """
 function ∇²resβ_ij(β, xj, yj, dist, link)
-    # X = qc_model.data[i].X
-    # y = qc_model.data[i].y
-    # β = qc_model.β
-    # xj = X[j, :]
-    # link = qc_model.link[i]
-    # dist = qc_model.d[i]
-
-    # intermediate quantities?
+    # intermediate quantities
     η_j = dot(xj, β)
     μ_j = GLM.linkinv(link, η_j)
     varμ_j = GLM.glmvar(dist, μ_j)
-    res_j = (yj - μ_j) / sqrt(varμ_j) # d by 1
+    res_j = (yj - μ_j) / sqrt(varμ_j)
     invσ_j = inv(sqrt(varμ_j))
     ∇μ_ij  = GLM.mueta(link, η_j) * xj
     ∇σ²_ij = sigmamu(dist, μ_j) * GLM.mueta(link, η_j) * xj
@@ -92,6 +93,28 @@ function ∇²resβ_ij(β, xj, yj, dist, link)
     term3 = -0.5 * res_j * inv(varμ_j) * ∇²σ²_j(dist, link, xj, μ_j, η_j)
     term4 = 0.5invσ_j^3 * ∇μ_ij * ∇σ²_ij'
     term5 = 0.75res_j * inv(varμ_j^2) * ∇σ²_ij * ∇σ²_ij'
+    ∇²resβ_ij = term1 + term2 + term3 + term4 + term5
+
+    return ∇²resβ_ij # p × p
+end
+function ∇²resβ_ij(β, xj, z, yj, dist, link)
+    # intermediate quantities
+    η_j = dot(xj, β)
+    μ_j = GLM.linkinv(link, η_j)
+    varμ_j = GLM.glmvar(dist, μ_j)
+    res_j = (yj - μ_j) / sqrt(varμ_j)
+    invσ_j = inv(sqrt(varμ_j))
+    ∇ᵧμ_ij  = GLM.mueta(link, η_j) * z # 1 × 1
+    ∇ᵦμ_ij  = GLM.mueta(link, η_j) * xj # p × 1
+    ∇ᵧσ²_ij = sigmamu(dist, μ_j) * GLM.mueta(link, η_j) * z # 1 × 1
+    ∇ᵦσ²_ij = sigmamu(dist, μ_j) * GLM.mueta(link, η_j) * xj # p × 1
+
+    # assemble 5 terms
+    term1 = -invσ_j * ∇²μ_j(link, η_j, xj, z)
+    term2 = 0.5invσ_j^3 * ∇ᵦσ²_ij * ∇ᵧμ_ij
+    term3 = -0.5 * res_j * inv(varμ_j) * ∇²σ²_j(dist, link, xj, z, μ_j, η_j)
+    term4 = 0.5invσ_j^3 * ∇ᵦμ_ij * ∇ᵧσ²_ij
+    term5 = 0.75res_j * inv(varμ_j^2) * ∇ᵦσ²_ij * ∇ᵧσ²_ij
     ∇²resβ_ij = term1 + term2 + term3 + term4 + term5
 
     return ∇²resβ_ij # p × p
@@ -200,7 +223,7 @@ function GWASCopulaVCModel(
             denom = 1 + 0.5 * (res' * Γ * res)
             denom2 = abs2(denom)
             # calculate W
-            Hβγ_i = get_Hβγ_i(gc, Γ, ∇resβ, ∇resγ, zi) # approx
+            Hβγ_i = get_Hβγ_i(gcm.β, gc, Γ, ∇resβ, ∇resγ, zi) # exact
             Hθγ_i = get_neg_Hθγ_i(gc, gcm.θ, ∇resγ) # exact
             W .+= vcat(Hβγ_i, Hθγ_i)
             # calculate Q
@@ -347,23 +370,25 @@ function get_neg_Hθγ_i(gc, θ, ∇resγ)
     return Hγθ'
 end
 
-function get_Hβγ_i(gc, Γ, ∇resβ, ∇resγ, zi)
+function get_Hβγ_i(β, gc, Γ, ∇resβ, ∇resγ, z::AbstractVector) # z is a vector of SNP value (length d)
     res = gc.res
     denom = 1 + 0.5 * (res' * Γ * res)
     denom2 = abs2(denom)
     # 1st Hessian term
-    Hβγ_i = Transpose(gc.X) * Diagonal(gc.w2) * zi
+    Hβγ_i = Transpose(gc.X) * Diagonal(gc.w2) * z
     # 2nd Hessian term
     Hβγ_i += (∇resβ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
     # 3rd Hessian terms
     Hβγ_i -= ∇resβ' * Γ * ∇resγ / denom
     # 4th Hessian term
-    # ej = zeros(size(gc.X, 2))
-    # for j in 1:d
-    #     fill!(ej, 0)
-    #     ej[j] = 1
-    #     Q -= (ej' * Γ * res * ∇²resβ_ij(0.0, z[i], gc.y[j], gcm.d[i], gcm.link[i])) / denom
-    # end
+    ej = zeros(gc.n)
+    for j in 1:gc.n
+        fill!(ej, 0)
+        ej[j] = 1
+        xj = gc.X[j, :]
+        zi = z[1]
+        Hβγ_i -= dot(ej, Γ, res) * ∇²resβ_ij(β, xj, zi, gc.y[j], gc.d, gc.link) / denom
+    end
     return Hβγ_i
 end
 
