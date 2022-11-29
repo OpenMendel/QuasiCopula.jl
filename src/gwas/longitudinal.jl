@@ -1,13 +1,3 @@
-# struct GWASCopulaVCModel{T <: BlasReal}
-#     gcm::MixedCopulaVCModel{T} # fitted null model
-#     G::SnpArray     # n by q (compressed) genotype matrix
-#     Pinv::Matrix{T} # p by p matrix
-#     W::Vector{T} # length p vector
-#     Q::Vector{T} # length 1 vector
-#     R::Vector{T} # length 1 vector
-#     pvals::Vector{T} # length q vector of p-values for each SNP in G
-# end
-
 """
     ∇²σ²_j(d::Distribution, l::Link, Xi::Matrix, β::Vector, j)
 
@@ -114,7 +104,7 @@ end
     update_∇resβ(d::Distribution, x_ji, res_j, μ_j, dμ_j, varμ_j)
 
 Computes ∇resβ_ij, the gradient of the standardized residuals for sample i 
-at the j'th measurement. 
+at the j'th measurement. Here res_j is the standardized residual
 """
 function update_∇resβ end
 update_∇resβ(d::Normal, x_ji, res_j, μ_j, dμ_j, varμ_j) = -x_ji
