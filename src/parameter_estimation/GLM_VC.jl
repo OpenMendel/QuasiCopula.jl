@@ -263,17 +263,17 @@ function loglikelihood!(
     logl = zeros(Threads.nthreads())
     Threads.@threads for i in eachindex(gcm.data)
         @inbounds logl[Threads.threadid()] += loglikelihood!(gcm.data[i], gcm.β,
-         gcm.θ, needgrad, needhess; penalized = gcm.penalized)
-     end
-     @inbounds for i in eachindex(gcm.data)
-         if needgrad
-             gcm.∇β .+= gcm.data[i].∇β
-             gcm.∇θ .+= gcm.data[i].∇θ
-         end
-         if needhess
-             gcm.Hβ .+= gcm.data[i].Hβ
-             gcm.Hθ .+= gcm.data[i].Hθ
-         end
-     end
+            gcm.θ, needgrad, needhess; penalized = gcm.penalized)
+    end
+    @inbounds for i in eachindex(gcm.data)
+        if needgrad
+            gcm.∇β .+= gcm.data[i].∇β
+            gcm.∇θ .+= gcm.data[i].∇θ
+        end
+        if needhess
+            gcm.Hβ .+= gcm.data[i].Hβ
+            gcm.Hθ .+= gcm.data[i].Hθ
+        end
+    end
     sum(logl)
 end

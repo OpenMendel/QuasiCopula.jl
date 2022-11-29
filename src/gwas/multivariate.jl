@@ -1,3 +1,17 @@
+# struct holding intermediate arrays for a given sample
+struct MultivariateCopulaVCObs{T <: BlasReal}
+    η::Vector{T} # η = B'x (linear predictor value of current sample)
+    μ::Vector{T} # μ = linkinv(link, η) (mean of current sample)
+    res::Vector{T} # res[i] = yᵢ - μᵢ (residual)
+    std_res::Vector{T} # std_res[i] = (yᵢ - μᵢ) / σᵢ (standardized residual)
+    dμ::Vector{T} # intermediate GLM quantity
+    varμ::Vector{T} # intermediate GLM quantity
+    w1::Vector{T} # intermediate GLM quantity
+    w2::Vector{T} # intermediate GLM quantity
+    ∇resβ::Matrix{T} # gradient of standardized residual with respect to beta
+    q::Vector{T} # q[k] = res_i' * V_i[k] * res_i / 2 (this is variable b in VC model, see sec 6.2 of QuasiCopula paper)
+end
+
 struct MultivariateCopulaVCModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     # data
     Y::Matrix{T}    # n × d matrix of phenotypes, each row is a sample phenotype
@@ -5,6 +19,7 @@ struct MultivariateCopulaVCModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvalu
     V::Vector{Matrix{T}} # length m vector of d × d matrices
     vecdist::Vector{<:UnivariateDistribution} # length d vector of marginal distributions for each phenotype
     veclink::Vector{<:Link} # length d vector of link functions for each phenotype's marginal distribution
+    data::Vector{MultivariateCopulaVCObs{T}}
     # data dimension
     n::Int # sample size
     d::Int # number of phenotypes per sample
@@ -14,30 +29,23 @@ struct MultivariateCopulaVCModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvalu
     B::Matrix{T}    # p × d matrix of mean regression coefficients, Y = XB
     θ::Vector{T}    # length m vector of variance components
     ϕ::Vector{T}    # nuisance parameters for each phenotype
-    # gradient/Hessians of parameters
+    t::Vector{T}    # t[k] = tr(V_i[k]) / 2 (this is variable c in VC model)
+    # working arrays
     Γ::Matrix{T}      # d × d covariance matrix, in VC model this is θ[1]*V[1] + ... + θ[m]*V[m]
     ∇vecB::Vector{T}  # length pd vector, its the gradient of vec(B) 
     ∇θ::Vector{T}     # length m vector, gradient of variance components
+    # ∇ϕ::Vector{T}
     HvecB::Matrix{T}  # pd × pd matrix of Hessian
     Hθ::Matrix{T}     # m × m matrix of Hessian for variance components
-    # working arrays (todo: consider making these matrices as well)
-    η::Vector{Vector{T}} # η[i] = B'xᵢ
-    μ::Vector{Vector{T}} # μ[i] = linkinv(veclink[i], η[i])
-    res::Vector{Vector{T}} # res[i] = yᵢ - μᵢ
-    std_res::Vector{Vector{T}} # std_res[i] = (yᵢ - μᵢ) / σᵢ
-    dμ::Vector{Vector{T}}
-    varμ::Vector{Vector{T}}
-    w1::Vector{Vector{T}}
-    w2::Vector{Vector{T}}
-    ∇resβ::Vector{Matrix{T}}
+    # Hϕ::Matrix{T}
     penalized::Bool
 end
 
 function MultivariateCopulaVCModel(
     Y::Matrix{T},
     X::Matrix{T},
-    V::Union{Matrix{T}, Vector{Matrix{T}}}, # variance component matrices
-    vecdist::Union{Vector{<:UnivariateDistribution}, Vector{UnionAll}}, # vector of marginal distributions for each data point
+    V::Union{Matrix{T}, Vector{Matrix{T}}}, # variance component matrices of the phenotypes
+    vecdist::Union{Vector{<:UnivariateDistribution}, Vector{UnionAll}}, # vector of marginal distributions for each phenotype
     veclink::Vector{<:Link}; # vector of link functions for each marginal distribution
     penalized = false
     ) where T <: BlasReal
@@ -45,8 +53,6 @@ function MultivariateCopulaVCModel(
     p = size(X, 2)
     m = typeof(V) <: Matrix ? 1 : length(V)
     n == size(X, 1) || error("Number of samples in Y and X mismatch")
-    m == (typeof(V) <: Matrix ? 1 : length(V)) || 
-        error("Number of variance components should be equal to size(Y, 2)")
     # initialize variables
     B = zeros(T, p, d)
     θ = zeros(T, m)
@@ -56,27 +62,33 @@ function MultivariateCopulaVCModel(
     ∇θ = zeros(T, m)
     HvecB = zeros(T, p*d, p*d)
     Hθ = zeros(T, m, m)
-    η = [zeros(T, d) for _ in 1:n]
-    μ = [zeros(T, d) for _ in 1:n]
-    res = [zeros(T, d) for _ in 1:n]
-    std_res = [zeros(T, d) for _ in 1:n]
-    dμ = [zeros(T, d) for _ in 1:n]
-    varμ = [zeros(T, d) for _ in 1:n]
-    w1 = [zeros(T, d) for _ in 1:n]
-    w2 = [zeros(T, d) for _ in 1:n]
-    ∇resβ = [zeros(T, p, d) for _ in 1:n]
+    t = [tr(V[k])/2 for k in 1:m] # t is variable c in f(θ) = sum ln(1 + θ'b) - sum ln(1 + θ'c) in section 6.2. Because all Vs are the same in multivariate analysis, all samples share the same t
+    # construct MultivariateCopulaVCObs that hold intermediate variables for each sample
+    data = MultivariateCopulaVCObs{T}[]
+    for _ in 1:n
+        η = zeros(T, d)
+        μ = zeros(T, d)
+        res = zeros(T, d)
+        std_res = zeros(T, d)
+        dμ = zeros(T, d)
+        varμ = zeros(T, d)
+        w1 = zeros(T, d)
+        w2 = zeros(T, d)
+        ∇resβ = zeros(T, p, d)
+        q = zeros(T, m) # q is variable b in f(θ) = sum ln(1 + θ'b) - sum ln(1 + θ'c) in section 6.2
+        obs = MultivariateCopulaVCObs(η, μ, res, std_res, dμ, varμ, w1, w2, ∇resβ, q)
+        push!(data, obs)
+    end
     # change type of variables to match struct
     if typeof(vecdist) <: Vector{UnionAll}
         vecdist = [vecdist[j]() for j in 1:d]
     end
     typeof(V) <: Matrix && (V = [V])
     return MultivariateCopulaVCModel(
-        Y, X, V, 
-        vecdist, veclink,
+        Y, X, V, vecdist, veclink, data,
         n, d, p, m,
-        B, θ, ϕ, Γ, 
-        ∇vecB, ∇θ, HvecB, Hθ, 
-        η, μ, res, std_res, dμ, varμ, w1, w2, ∇resβ,
+        B, θ, ϕ, t, 
+        Γ, ∇vecB, ∇θ, HvecB, Hθ,
         penalized
     )
 end
@@ -316,9 +328,9 @@ function loglikelihood!(
     # update residuals and its gradient
     update_res!(qc_model, i)
     std_res_differential!(qc_model, i) # compute ∇resβ
-
     # loglikelihood term 2 i.e. sum sum ln(f_ij | β)
-    logl = QuasiCopula.component_loglikelihood(gc, vecdist)
+    logl = QuasiCopula.component_loglikelihood(qc_model, i)
+    fdsa
     # loglikelihood term 1 i.e. -sum ln(1 + 0.5tr(Γ(θ)))
     tsum = dot(θ, gc.t) # tsum = 0.5tr(Γ)
     logl += -log(1 + tsum)
@@ -383,25 +395,17 @@ function update_res!(
     yi = @view(qc_model.Y[i, :])
     vecdist = qc_model.vecdist
     veclink = qc_model.veclink
-    B = qc_model.B
-    η = qc_model.η[i]
-    μ = qc_model.μ[i]
-    dμ = qc_model.dμ[i]
-    varμ = qc_model.varμ[i]
-    res = qc_model.res[i]
-    std_res = qc_model.std_res[i]
-    w1 = qc_model.w1[i]
-    w2 = qc_model.w2[i]
+    obs = qc_model.data[i]
     # update necessary quantities
-    mul!(η, B', xi)
+    mul!(obs.η, qc_model.B', xi)
     @inbounds for j in eachindex(xi)
-        μ[j] = GLM.linkinv(veclink[j], η[j])
-        varμ[j] = GLM.glmvar(vecdist[j], μ[j]) # Note: for negative binomial, d.r is used
-        dμ[j] = GLM.mueta(veclink[j], η[j])
-        w1[j] = dμ[j] / varμ[j]
-        w2[j] = w1[j] * dμ[j]
-        res[j] = yi[j] - μ[j]
-        std_res[j] = res[j] / sqrt(varμ[j]) # todo: when j is Gaussian, should we divide by ϕ[j]?
+        obs.μ[j] = GLM.linkinv(veclink[j], obs.η[j])
+        obs.varμ[j] = GLM.glmvar(vecdist[j], obs.μ[j]) # Note: for negative binomial, d.r is used
+        obs.dμ[j] = GLM.mueta(veclink[j], obs.η[j])
+        obs.w1[j] = obs.dμ[j] / obs.varμ[j]
+        obs.w2[j] = obs.w1[j] * obs.dμ[j]
+        obs.res[j] = yi[j] - obs.μ[j]
+        obs.std_res[j] = obs.res[j] / sqrt(obs.varμ[j]) # todo: when j is Gaussian, should we divide by ϕ[j]?
     end
     return nothing
 end
@@ -410,23 +414,25 @@ function std_res_differential!(
     qc_model::MultivariateCopulaVCModel,
     i::Int
     )
-    ∇resβ = qc_model.∇resβ[i]
-    p, d = size(∇resβ)
-    @inbounds for i in 1:p, j in 1:d
-        ∇resβ[j, i] = update_∇resβ(qc_model.vecdist[j], qc_model.X[j, i], 
-            qc_model.std_res[j], qc_model.μ[j], qc_model.dμ[j], qc_model.varμ[j])
+    obs = qc_model.data[i]
+    p, d = size(obs.∇resβ) # p = number of covariates, d = number of phenotypes
+    @inbounds for k in 1:p, j in 1:d
+        obs.∇resβ[k, j] = update_∇resβ(qc_model.vecdist[j], qc_model.X[i, k], 
+            obs.std_res[j], obs.μ[j], obs.dμ[j], obs.varμ[j])
     end
     return nothing
 end
 
-# function component_loglikelihood(
-#     gc::MixedCopulaVCObs{T},
-#     vecdist::Vector{<:UnivariateDistribution},
-#     ) where T <: BlasReal
-#     logl = zero(T)
-#     @inbounds for j in 1:gc.d
-#         logl += QuasiCopula.loglik_obs(vecdist[j], gc.y[j], gc.μ[j], gc.wt[j], one(T))
-#     end
-#     logl
-# end
+function component_loglikelihood(
+    qc_model::MultivariateCopulaVCModel{T},
+    i::Int
+    ) where T <: BlasReal
+    y = @view(qc_model.Y[i, :])
+    obs = qc_model.data[i]
+    logl = zero(T)
+    @inbounds for j in eachindex(y)
+        logl += QuasiCopula.loglik_obs(qc_model.vecdist[j], y[j], obs.μ[j], one(T), one(T))
+    end
+    return logl
+end
 
