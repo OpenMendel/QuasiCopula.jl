@@ -51,4 +51,5 @@ include("model_interface/show_io.jl")
 include("gwas/longitudinal.jl")
 include("gwas/longitudinal_autodiff.jl")
 include("gwas/multivariate.jl")
+include("gwas/utilities.jl")
 end # module

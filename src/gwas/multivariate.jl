@@ -10,6 +10,12 @@ struct MultivariateCopulaVCObs{T <: BlasReal}
     w2::Vector{T} # intermediate GLM quantity
     ∇resβ::Matrix{T} # gradient of standardized residual with respect to beta
     q::Vector{T} # q[k] = res_i' * V_i[k] * res_i / 2 (this is variable b in VC model, see sec 6.2 of QuasiCopula paper)
+    ∇vecB::Vector{T} # gradient of loglikelihood wrt β = vec(B)
+    ∇θ::Vector{T}   # gradient of loglikelihood wrt θ
+    # m1::Vector{T}
+    # m2::Vector{T}
+    storage_d::Vector{T}
+    # storage_dp::Matrix{T}
 end
 
 struct MultivariateCopulaVCModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
@@ -29,8 +35,8 @@ struct MultivariateCopulaVCModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvalu
     B::Matrix{T}    # p × d matrix of mean regression coefficients, Y = XB
     θ::Vector{T}    # length m vector of variance components
     ϕ::Vector{T}    # nuisance parameters for each phenotype
-    t::Vector{T}    # t[k] = tr(V_i[k]) / 2 (this is variable c in VC model)
     # working arrays
+    t::Vector{T}    # t[k] = tr(V_i[k]) / 2 (this is variable c in VC model)
     Γ::Matrix{T}      # d × d covariance matrix, in VC model this is θ[1]*V[1] + ... + θ[m]*V[m]
     ∇vecB::Vector{T}  # length pd vector, its the gradient of vec(B) 
     ∇θ::Vector{T}     # length m vector, gradient of variance components
@@ -57,12 +63,14 @@ function MultivariateCopulaVCModel(
     B = zeros(T, p, d)
     θ = zeros(T, m)
     ϕ = zeros(T, d)
+    # t is variable c in f(θ) = sum ln(1 + θ'b) - sum ln(1 + θ'c) in section 6.2
+    # Because all Vs are the same in multivariate analysis, all samples share the same t
+    t = [tr(V[k])/2 for k in 1:m]
     Γ = zeros(T, d, d)
     ∇vecB = zeros(T, p*d)
     ∇θ = zeros(T, m)
     HvecB = zeros(T, p*d, p*d)
     Hθ = zeros(T, m, m)
-    t = [tr(V[k])/2 for k in 1:m] # t is variable c in f(θ) = sum ln(1 + θ'b) - sum ln(1 + θ'c) in section 6.2. Because all Vs are the same in multivariate analysis, all samples share the same t
     # construct MultivariateCopulaVCObs that hold intermediate variables for each sample
     data = MultivariateCopulaVCObs{T}[]
     for _ in 1:n
@@ -74,9 +82,17 @@ function MultivariateCopulaVCModel(
         varμ = zeros(T, d)
         w1 = zeros(T, d)
         w2 = zeros(T, d)
-        ∇resβ = zeros(T, p, d)
+        ∇resβ = zeros(T, d * p, d)
         q = zeros(T, m) # q is variable b in f(θ) = sum ln(1 + θ'b) - sum ln(1 + θ'c) in section 6.2
-        obs = MultivariateCopulaVCObs(η, μ, res, std_res, dμ, varμ, w1, w2, ∇resβ, q)
+        ∇β = zeros(T, d * p)
+        ∇θ = zeros(T, m)
+        # m1 = zeros(T, m)
+        # m2 = zeros(T, m)
+        storage_d = zeros(T, d)
+        # storage_dp = zeros(T, d, p)
+        obs = MultivariateCopulaVCObs(
+            η, μ, res, std_res, dμ, varμ, w1, w2, ∇resβ, q, ∇β, ∇θ, storage_d
+        )
         push!(data, obs)
     end
     # change type of variables to match struct
@@ -109,12 +125,13 @@ function fit!(
     solver=Ipopt.IpoptSolver(
         print_level = 5, 
         tol = 10^-6, 
-        max_iter = 1000,
-        limited_memory_max_history = 50, 
-        accept_after_max_steps = 4,
+        max_iter = 10,
+        accept_after_max_steps = 10,
         warm_start_init_point="yes", 
-        hessian_approximation = "limited-memory")
-    )
+        limited_memory_max_history = 6, # default value
+        hessian_approximation = "limited-memory",
+#         derivative_test="second-order"
+    ))
     p, d, m = qc_model.p, qc_model.d, qc_model.m
     initialize_model!(qc_model)
     npar = p * d + m
@@ -286,7 +303,7 @@ MathProgBase.eval_jac_g(qc_model::MultivariateCopulaVCModel, J, par) = nothing
 function initialize_model!(qc_model::MultivariateCopulaVCModel)
     fill!(qc_model.B, 0)
     # fill!(qc_model.ϕ, 1)
-    fill!(qc_model.θ, 1.0)
+    fill!(qc_model.θ, 0.5)
     return nothing
 end
 
@@ -300,14 +317,15 @@ function loglikelihood!(
         fill!(qc_model.∇θ, 0)
     end
     if needhess
-        fill!(qc_model.HvecB, 0)
-        fill!(qc_model.Hθ, 0)
+        error("Hessian not implemented for multivariate GWAS yet!")
+        # fill!(qc_model.HvecB, 0)
+        # fill!(qc_model.Hθ, 0)
     end
     logl = zero(T)
     for i in 1:qc_model.n
         logl += loglikelihood!(qc_model, i, needgrad, needhess)
         if needgrad
-            qc_model.∇β .+= qc_model.data[i].∇vecB
+            qc_model.∇vecB .+= qc_model.data[i].∇vecB
             qc_model.∇θ .+= qc_model.data[i].∇θ
         end
         if needhess
@@ -320,30 +338,33 @@ end
 
 # evaluates the loglikelihood for sample i
 function loglikelihood!(
-    qc_model::MultivariateCopulaVCModel,
+    qc_model::MultivariateCopulaVCModel{T},
     i::Int,
     needgrad::Bool = false,
     needhess::Bool = false;
     ) where T <: BlasReal
+    d = qc_model.d        # number of phenotypes
+    p = qc_model.p        # number of covarites
+    θ = qc_model.θ        # variance components
+    qc = qc_model.data[i] # sample i's storage
     # update residuals and its gradient
     update_res!(qc_model, i)
     std_res_differential!(qc_model, i) # compute ∇resβ
     # loglikelihood term 2 i.e. sum sum ln(f_ij | β)
     logl = QuasiCopula.component_loglikelihood(qc_model, i)
-    fdsa
     # loglikelihood term 1 i.e. -sum ln(1 + 0.5tr(Γ(θ)))
-    tsum = dot(θ, gc.t) # tsum = 0.5tr(Γ)
+    tsum = dot(θ, qc_model.t) # tsum = 0.5tr(Γ)
     logl += -log(1 + tsum)
-    # update Γ before computing logl term3 (todo: multiple dispatch to handle VC/AR/CS)
-    @inbounds for k in 1:gc.m # loop over m variance components
-        mul!(gc.storage_d, gc.V[k], gc.res) # storage_d = V[k] * r
+    # compute ∇resβ*Γ*res and variable b for variance component model
+    @inbounds for k in 1:qc_model.m # loop over m variance components
+        mul!(qc.storage_d, qc_model.V[k], qc.std_res) # storage_d = V[k] * r
         if needgrad
-            BLAS.gemv!('T', θ[k], gc.∇resβ, gc.storage_d, 1.0, gc.∇β) # ∇β = ∇r'Γr
+            BLAS.gemv!('N', θ[k], qc.∇resβ, qc.storage_d, one(T), qc.∇vecB) # ∇β = ∇r*Γ*r
         end
-        gc.q[k] = dot(gc.res, gc.storage_d) / 2 # q[k] = 0.5 r' * V[k] * r
+        qc.q[k] = dot(qc.std_res, qc.storage_d) / 2 # q[k] = 0.5 r * V[k] * r
     end
-    # loglikelihood term 3 i.e. sum ln(1 + 0.5 r'Γr)
-    qsum = dot(θ, gc.q) # qsum = 0.5 r'Γr
+    # loglikelihood term 3 i.e. sum ln(1 + 0.5 r*Γ*r)
+    qsum = dot(θ, qc.q) # qsum = 0.5 r*Γ*r
     logl += log(1 + qsum)
     # add L2 ridge penalty
     if qc_model.penalized
@@ -353,43 +374,46 @@ function loglikelihood!(
     if needgrad
         inv1pq = inv(1 + qsum) # inv1pq = 1 / (1 + 0.5r'Γr)
         if needhess
-            # approximate Hessian of β
-            mul!(gc.storage_dp, Diagonal(gc.w2), gc.X)
-            BLAS.gemm!('T', 'N', -one(T), gc.X, gc.storage_dp, zero(T), gc.Hβ) # Hβ = -Xi'*Diagonal(W2)*Xi
-            BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, one(T), gc.Hβ) # Hβ = -Xi'*Diagonal(W2)*Xi - ∇β*∇β' / (1 + 0.5r'Γr)^2
-            copytri!(gc.Hβ, 'L') # syrk! above only lower triangular
-            # println(gc.Hβ)
-            # println(-1 .* (transpose(gc.X)*Diagonal(gc.w2)*gc.X) - abs2(inv1pq) .* (gc.∇β * transpose(gc.∇β)))
-            # Hessian of vc vector (todo: are these correct?)
-            inv1pt = inv(1 + tsum) # inv1pt = 1 / (1 + 0.5tr(Γ))
-            gc.m1 .= gc.q
-            gc.m1 .*= inv1pq # m1[k] = 0.5 r' * V[k] * r / (1 + 0.5r'Γr)
-            gc.m2 .= gc.t
-            gc.m2 .*= inv1pt
-            BLAS.syr!('U', one(T), gc.m2, gc.Hθ)
-            BLAS.syr!('U', -one(T), gc.m1, gc.Hθ)
-            copytri!(gc.Hθ, 'U')
-            # Hessian of ϕ (todo)
-            # gc.Hϕ[1, 1] = - abs2(qsum * inv1pq / ϕ)
+            # # approximate Hessian of β
+            # mul!(gc.storage_dp, Diagonal(gc.w2), gc.X)
+            # BLAS.gemm!('T', 'N', -one(T), gc.X, gc.storage_dp, zero(T), gc.Hβ) # Hβ = -Xi'*Diagonal(W2)*Xi
+            # BLAS.syrk!('L', 'N', -abs2(inv1pq), gc.∇β, one(T), gc.Hβ) # Hβ = -Xi'*Diagonal(W2)*Xi - ∇β*∇β' / (1 + 0.5r'Γr)^2
+            # copytri!(gc.Hβ, 'L') # syrk! above only lower triangular
+            # # println(gc.Hβ)
+            # # println(-1 .* (transpose(gc.X)*Diagonal(gc.w2)*gc.X) - abs2(inv1pq) .* (gc.∇β * transpose(gc.∇β)))
+            # # Hessian of vc vector (todo: are these correct?)
+            # inv1pt = inv(1 + tsum) # inv1pt = 1 / (1 + 0.5tr(Γ))
+            # gc.m1 .= gc.q
+            # gc.m1 .*= inv1pq # m1[k] = 0.5 r' * V[k] * r / (1 + 0.5r'Γr)
+            # gc.m2 .= gc.t
+            # gc.m2 .*= inv1pt
+            # BLAS.syr!('U', one(T), gc.m2, gc.Hθ)
+            # BLAS.syr!('U', -one(T), gc.m1, gc.Hθ)
+            # copytri!(gc.Hθ, 'U')
+            # # Hessian of ϕ (todo)
+            # # gc.Hϕ[1, 1] = - abs2(qsum * inv1pq / ϕ)
         end
-        # compute (y-μ)*(dg/varμ) for remaining parts of ∇β
-        gc.storage_d .= gc.w1 .* (gc.y .- gc.μ)
-        BLAS.gemv!('T', one(T), gc.X, gc.storage_d, inv1pq, gc.∇β) # ∇β = X'*Diagonal(dg/varμ)*(y-μ) + ∇r'Γr/(1 + 0.5r'Γr)
+        # compute gradient of loglikelihood = X'*Diagonal(dg/varμ)*(y-μ) + ∇r'Γr/(1 + 0.5r'Γr)
+        qc.storage_d .= qc.w1 .* qc.res
+        xi = @view(qc_model.X[i, :])
+        for j in 1:d
+            out = @view(qc.∇vecB[(j-1)*p+1:j*p])
+            out .*= inv1pq
+            out .+= xi .* qc.w1[j] * qc.res[j]
+            # BLAS.gemv!('T', one(T), xi, qc.storage_d, inv1pq, out)
+        end
         # gc.∇β .*= sqrtϕ # todo: how does ϕ get involved here?
         # gc.∇ϕ  .= (gc.n - rss + 2qsum * inv1pq) / 2ϕ # todo: deal with ϕ
-        gc.∇θ .= inv1pq .* gc.q .- inv(1 + tsum) .* gc.t
-        if penalized
-            gc.∇θ .-= θ
+        qc.∇θ .= inv1pq .* qc.q .- inv(1 + tsum) .* qc_model.t
+        if qc_model.penalized
+            qc.∇θ .-= θ
         end
     end
     # output
     logl
 end
 
-function update_res!(
-    qc_model::MultivariateCopulaVCModel,
-    i::Int
-    ) where T <: BlasReal
+function update_res!(qc_model::MultivariateCopulaVCModel, i::Int)
     # data for sample i
     xi = @view(qc_model.X[i, :])
     yi = @view(qc_model.Y[i, :])
@@ -410,23 +434,26 @@ function update_res!(
     return nothing
 end
 
-function std_res_differential!(
-    qc_model::MultivariateCopulaVCModel,
-    i::Int
-    )
+"""
+qc_model.data[i].∇resβ is dp × d matrix that stores ∇rᵢ(β), i.e. gradient of sample i's
+residuals with respect to the dp × 1 vector β. Each of the p columns of ∇rᵢ(β) 
+stores ∇rᵢⱼ(β), a length dp vector.
+"""
+function std_res_differential!(qc_model::MultivariateCopulaVCModel, i::Int)
     obs = qc_model.data[i]
-    p, d = size(obs.∇resβ) # p = number of covariates, d = number of phenotypes
-    @inbounds for k in 1:p, j in 1:d
-        obs.∇resβ[k, j] = update_∇resβ(qc_model.vecdist[j], qc_model.X[i, k], 
-            obs.std_res[j], obs.μ[j], obs.dμ[j], obs.varμ[j])
+    d = qc_model.d
+    p = qc_model.p # p = number of covariates, d = number of phenotypes
+    @inbounds for j in 1:d
+        xi = @view(qc_model.X[i, :])
+        for r in 1:d, k in 1:p
+            obs.∇resβ[(r-1)*p + k, j] = update_∇resβ(qc_model.vecdist[j], xi[k], 
+                obs.std_res[j], obs.μ[j], obs.dμ[j], obs.varμ[j])
+        end
     end
     return nothing
 end
 
-function component_loglikelihood(
-    qc_model::MultivariateCopulaVCModel{T},
-    i::Int
-    ) where T <: BlasReal
+function component_loglikelihood(qc_model::MultivariateCopulaVCModel{T}, i::Int) where T <: BlasReal
     y = @view(qc_model.Y[i, :])
     obs = qc_model.data[i]
     logl = zero(T)
