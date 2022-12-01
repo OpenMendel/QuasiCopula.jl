@@ -84,14 +84,14 @@ function MultivariateCopulaVCModel(
         w2 = zeros(T, d)
         ∇resβ = zeros(T, d * p, d)
         q = zeros(T, m) # q is variable b in f(θ) = sum ln(1 + θ'b) - sum ln(1 + θ'c) in section 6.2
-        ∇β = zeros(T, d * p)
+        ∇vecB = zeros(T, d * p)
         ∇θ = zeros(T, m)
         # m1 = zeros(T, m)
         # m2 = zeros(T, m)
         storage_d = zeros(T, d)
         # storage_dp = zeros(T, d, p)
         obs = MultivariateCopulaVCObs(
-            η, μ, res, std_res, dμ, varμ, w1, w2, ∇resβ, q, ∇β, ∇θ, storage_d
+            η, μ, res, std_res, dμ, varμ, w1, w2, ∇resβ, q, ∇vecB, ∇θ, storage_d
         )
         push!(data, obs)
     end
@@ -347,6 +347,11 @@ function loglikelihood!(
     p = qc_model.p        # number of covarites
     θ = qc_model.θ        # variance components
     qc = qc_model.data[i] # sample i's storage
+    if needgrad
+        fill!(qc.∇vecB, 0)
+        fill!(qc.∇θ, 0)
+        # fill!(qc.∇ϕ, 0)
+    end
     # update residuals and its gradient
     update_res!(qc_model, i)
     std_res_differential!(qc_model, i) # compute ∇resβ
@@ -394,7 +399,6 @@ function loglikelihood!(
             # # gc.Hϕ[1, 1] = - abs2(qsum * inv1pq / ϕ)
         end
         # compute gradient of loglikelihood = X'*Diagonal(dg/varμ)*(y-μ) + ∇r'Γr/(1 + 0.5r'Γr)
-        qc.storage_d .= qc.w1 .* qc.res
         xi = @view(qc_model.X[i, :])
         for j in 1:d
             out = @view(qc.∇vecB[(j-1)*p+1:j*p])
@@ -422,7 +426,7 @@ function update_res!(qc_model::MultivariateCopulaVCModel, i::Int)
     obs = qc_model.data[i]
     # update necessary quantities
     mul!(obs.η, qc_model.B', xi)
-    @inbounds for j in eachindex(xi)
+    @inbounds for j in eachindex(yi)
         obs.μ[j] = GLM.linkinv(veclink[j], obs.η[j])
         obs.varμ[j] = GLM.glmvar(vecdist[j], obs.μ[j]) # Note: for negative binomial, d.r is used
         obs.dμ[j] = GLM.mueta(veclink[j], obs.η[j])
@@ -436,17 +440,17 @@ end
 
 """
 qc_model.data[i].∇resβ is dp × d matrix that stores ∇rᵢ(β), i.e. gradient of sample i's
-residuals with respect to the dp × 1 vector β. Each of the p columns of ∇rᵢ(β) 
+residuals with respect to the dp × 1 vector β. Each of the d columns of ∇rᵢ(β) 
 stores ∇rᵢⱼ(β), a length dp vector.
 """
 function std_res_differential!(qc_model::MultivariateCopulaVCModel, i::Int)
     obs = qc_model.data[i]
     d = qc_model.d
     p = qc_model.p # p = number of covariates, d = number of phenotypes
-    @inbounds for j in 1:d
-        xi = @view(qc_model.X[i, :])
-        for r in 1:d, k in 1:p
-            obs.∇resβ[(r-1)*p + k, j] = update_∇resβ(qc_model.vecdist[j], xi[k], 
+    xi = @view(qc_model.X[i, :])
+    @inbounds for j in 1:d # loop over columns
+        for k in 1:p
+            obs.∇resβ[(j-1)*p + k, j] = update_∇resβ(qc_model.vecdist[j], xi[k], 
                 obs.std_res[j], obs.μ[j], obs.dμ[j], obs.varμ[j])
         end
     end

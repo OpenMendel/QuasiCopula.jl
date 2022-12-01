@@ -176,7 +176,7 @@ function loglikelihood!(
     needgrad = needgrad || needhess
     if needgrad
         fill!(gc.∇β, 0)
-        fill!(gc.∇θ, 0)
+        fill!(gc.∇θ, 0) # maybe fill Hessian with 0 too??
     end
     needhess && fill!(gc.Hβ, 0)
     update_res!(gc, β)
