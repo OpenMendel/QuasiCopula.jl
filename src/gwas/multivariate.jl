@@ -155,7 +155,7 @@ function fit!(
     optstat == :Optimal || @warn("Optimization unsuccesful; got $optstat")
     # update parameters and refresh gradient
     optimpar_to_modelpar!(qc_model, MathProgBase.getsolution(optm))
-    loglikelihood!(qc_model, true, false)
+    return loglikelihood!(qc_model, true, false)
 end
 
 """
@@ -176,7 +176,7 @@ function modelpar_to_optimpar!(
         offset += 1
     end
     # par[offset] = qc_model.ϕ[1] # todo
-    par
+    return par
 end
 
 """
@@ -197,17 +197,19 @@ function optimpar_to_modelpar!(
         offset += 1
     end
     # qc_model.ϕ[1] = par[offset] # todo
-    qc_model
+    return qc_model
 end
 
 function MathProgBase.initialize(
     qc_model::MultivariateCopulaVCModel,
     requested_features::Vector{Symbol})
     for feat in requested_features
-        if !(feat in [:Grad, :Hess])
+        # if !(feat in [:Grad, :Hess])
+        if !(feat in [:Grad])
             error("Unsupported feature $feat")
         end
     end
+    return nothing
 end
 
 MathProgBase.features_available(qc_model::MultivariateCopulaVCModel) = [:Grad]
@@ -217,7 +219,7 @@ function MathProgBase.eval_f(
     par :: Vector
     )
     optimpar_to_modelpar!(qc_model, par)
-    loglikelihood!(qc_model, false, false) # don't need gradient here
+    return loglikelihood!(qc_model, false, false) # don't need gradient here
 end
 
 function MathProgBase.eval_grad_f(
@@ -236,7 +238,7 @@ function MathProgBase.eval_grad_f(
         offset += 1
     end
     # grad[offset] = qc_model.∇ϕ[1] # todo
-    obj
+    return obj
 end
 
 MathProgBase.eval_g(qc_model::MultivariateCopulaVCModel, g, par) = nothing
@@ -304,6 +306,10 @@ function initialize_model!(qc_model::MultivariateCopulaVCModel)
     fill!(qc_model.B, 0)
     # fill!(qc_model.ϕ, 1)
     fill!(qc_model.θ, 0.5)
+
+    # qc_model.B .= [-0.2807553339022857 -0.2691545952645559 -0.09697342347444493; 0.16760308736364804 0.14478406502510632 0.09553517635564535; -0.33099570404138323 -0.39273955377865255 0.08818942673482322; -0.046941230688998026 0.026086749873018067 -0.4335605503363472; 0.4833837113778394 -0.2345342998326857 0.25036937754001465]
+    # fill!(qc_model.θ, 0.4)
+
     return nothing
 end
 
@@ -414,7 +420,7 @@ function loglikelihood!(
         end
     end
     # output
-    logl
+    return logl
 end
 
 function update_res!(qc_model::MultivariateCopulaVCModel, i::Int)
