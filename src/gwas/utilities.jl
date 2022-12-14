@@ -19,7 +19,7 @@ Computes the Hessian of the mean function with respect to β for sample i (Xi) a
 """
 function ∇²μ_j(l::Link, ηj::Number, xj::Union{AbstractVector, Number})
     d²μdη² = mueta2(l, ηj)
-    return d²μdη² * xj * xj' # p × p or 1 × 1
+    return d²μdη² * xj * xj' # p × p (if xj is p dimensional covariatess) or 1 × 1 (if xj is a single SNP)
 end
 function ∇²μ_j(l::Link, ηj::Number, xj::Union{AbstractVector, Number}, zj::Number)
     d²μdη² = mueta2(l, ηj)
@@ -109,19 +109,37 @@ function dγdβresβ_ij(dist, link, xj, z, η_j, μ_j, varμ_j, res_j)
 end
 
 """
-    update_∇resβ(d::Distribution, x_ji, res_j, μ_j, dμ_j, varμ_j)
+update_∇res_ij(d::Distribution, x_ji, res_j, μ_j, dμ_j, varμ_j)
 
 Computes ∇resβ_ij, the gradient of the standardized residuals for sample i 
 at the j'th measurement. Here res_j is the standardized residual
 """
-function update_∇resβ end
-update_∇resβ(d::Normal, x_ji, res_j, μ_j, dμ_j, varμ_j) = -x_ji
-update_∇resβ(d::Bernoulli, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
+function update_∇res_ij end
+update_∇res_ij(d::Normal, x_ji, res_j, μ_j, dμ_j, varμ_j) = -x_ji
+update_∇res_ij(d::Bernoulli, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
     -sqrt(varμ_j) * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji)
-update_∇resβ(d::Poisson, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
+update_∇res_ij(d::Poisson, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
     x_ji * (
     -(inv(sqrt(varμ_j)) + (0.5 * inv(varμ_j)) * res_j) * dμ_j
     )
-update_∇resβ(d::NegativeBinomial, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
+update_∇res_ij(d::NegativeBinomial, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
     -inv(sqrt(varμ_j)) * dμ_j * x_ji - (0.5 * inv(varμ_j)) *
     res_j * (μ_j * inv(d.r) + (1 + inv(d.r) * μ_j)) * dμ_j * x_ji
+
+"""
+    _get_null_distribution(gcm)
+
+Tries to guess the base distribution for an abstract Copula Model.
+"""
+_get_null_distribution(gcm::GaussianCopulaVCModel) = Normal()
+_get_null_distribution(gcm::NBCopulaVCModel) = NegativeBinomial()
+function _get_null_distribution(gcm::GLMCopulaVCModel)
+    T = eltype(gcm.data[1].X)
+    if eltype(gcm.d) == Bernoulli{T}
+        return Bernoulli()
+    elseif eltype(gcm.d) == Poisson{T}
+        return Poisson()
+    else
+        error("GLMCopulaVCModel should have marginal distributions Bernoulli or Poisson but was $(eltype(gcm.d))")
+    end
+end

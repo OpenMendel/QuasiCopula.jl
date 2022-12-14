@@ -1,25 +1,4 @@
 """
-    _get_null_distribution(gcm)
-
-Tries to guess the base distribution for an abstract Copula Model.
-"""
-_get_null_distribution(gcm::GaussianCopulaVCModel) = Normal()
-_get_null_distribution(gcm::NBCopulaVCModel) = NegativeBinomial()
-function _get_null_distribution(
-    gcm::GLMCopulaVCModel
-    )
-    T = eltype(gcm.data[1].X)
-    if eltype(gcm.d) == Bernoulli{T}
-        d = Bernoulli()
-    elseif eltype(gcm.d) == Poisson{T}
-        d = Poisson()
-    else
-        error("GLMCopulaVCModel should have marginal distributions Bernoulli or Poisson but was $(eltype(gcm.d))")
-    end
-    return d
-end
-
-"""
     GWASCopulaVCModel(gcm::MixedCopulaVCModel, x::SnpArray)
 
 Performs score tests for each SNP in `x`, given a fitted (null) model on the non-genetic covariates.
@@ -32,14 +11,13 @@ Performs score tests for each SNP in `x`, given a fitted (null) model on the non
 A length `q` vector of p-values storing the score statistics for each SNP
 """
 function GWASCopulaVCModel(
-    gcm::Union{GLMCopulaVCModel, NBCopulaVCModel},
+    gcm::Union{GaussianCopulaVCModel, GLMCopulaVCModel, NBCopulaVCModel},
     G::SnpArray;
     )
     n = size(G, 1)    # number of samples with genotypes
     q = size(G, 2)    # number of SNPs in each sample
     p = length(gcm.β) # number of fixed effects in each sample
     m = length(gcm.θ) # number of variance components in each sample
-    dist = _get_null_distribution(gcm)
     T = eltype(gcm.data[1].X)
     n == length(gcm.data) || error("sample size do not agree")
     any(x -> abs(x) > 1e-3, gcm.∇β) && error("Null model gradient of beta is not zero!")
@@ -63,13 +41,10 @@ function GWASCopulaVCModel(
             gc = gcm.data[i]
             d = gc.n # number of observations for current sample
             zi = fill(z[i], d)
-            res = gc.res # d × 1 standardized residuals
-            # update ∇resγ
-            ∇resγ = zeros(T, d)
-            ∇resβ = gc.∇resβ # d × p
-            for k in 1:d # loop over each sample's observation
-                ∇resγ[k] = update_∇resβ(dist, zi[k], res[k], gc.μ[k], gc.dμ[k], gc.varμ[k])
-            end
+            res = gc.res # d × 1 residuals (for GLM case, residuals are standardized)
+            # update gradient of residual with respect to β and γ
+            ∇resγ = get_∇resγ(gcm, i, zi) # d × 1
+            ∇resβ = get_∇resβ(gcm, i) # d × p
             # form some constants 
             Γ = zeros(T, d, d)
             for k in 1:gc.m # loop over variance components
@@ -79,27 +54,17 @@ function GWASCopulaVCModel(
             denom = 1 + 0.5 * (res' * Γ * res)
             denom2 = abs2(denom)
             # calculate W
-            Hβγ_i = get_Hβγ_i(gc, Γ, ∇resβ, ∇resγ, zi, gcm.β) # exact
-            Hθγ_i = get_neg_Hθγ_i(gc, gcm.θ, ∇resγ) # exact
-            W += vcat(Hβγ_i, Hθγ_i)
-            # calculate Q
-            Q += Transpose(zi) * Diagonal(gc.w2) * zi
-            Q += (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2 # 2nd term
-            Q -= ∇resγ' * Γ * ∇resγ / denom # 3rd term
-            ek = zeros(d)
-            for k in 1:d
-                fill!(ek, 0)
-                ek[k] = 1
-                Q -= (ek' * Γ * res * dβdβ_res_ij(gc.d, gc.link, z[i], gc.η[k], gc.μ[k], gc.varμ[k], res[k])) / denom
-            end
-            # calculate R
-            R += Transpose(zi) * Diagonal(gc.w1) * (gc.y - gc.μ) + (∇resγ' * Γ * res) / denom
+            update_W!(W, gcm, i, zi, Γ, ∇resβ, ∇resγ)
+            # update Q
+            Q += calculate_Qi(gcm, i, zi, Γ, ∇resγ, denom, denom2)
+            # update R
+            R += calculate_Ri(gcm, i, zi, Γ, res, ∇resγ, denom)
         end
         # score test
         # @show R
         # @show Q
         # @show W
-        # if j == 1
+        # if j == 3
         #     fdsa
         # end
         S = R * inv(Q - dot(W, Pinv, W)) * R
@@ -108,117 +73,104 @@ function GWASCopulaVCModel(
     return pvals
 end
 
-function get_Pinv(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel})
-    Hββ = -get_Hββ(qc_model)
-    Hθθ = -get_Hθθ(qc_model)
-    Hβθ = -get_Hβθ(qc_model)
-    P = [Hββ Hβθ; Hβθ' Hθθ]
-    return inv(P)
-end
-
-function get_Pinv(qc_model::GaussianCopulaVCModel)
-    Hββ = -get_Hββ(qc_model)
-    Hθθ = -get_Hθθ(qc_model)
-    Hττ = 
-    Hβθ = -get_Hβθ(qc_model)
-    Hβτ = 
-    Hθτ = 
-    P = [Hββ Hβθ Hβτ; Hβθ' Hθθ Hθτ; Hβτ' Hθτ' Hττ]
-    return inv(P)
-end
-
-function GWASCopulaVCModel(
-    gcm::GaussianCopulaVCModel,
-    G::SnpArray;
-    )
-    n = size(G, 1)    # number of samples with genotypes
-    q = size(G, 2)    # number of SNPs in each sample
-    p = length(gcm.β) # number of fixed effects in each sample
-    m = length(gcm.θ) # number of variance components in each sample
-    T = eltype(gcm.data[1].X)
-    n == length(gcm.data) || error("sample size do not agree")
-    any(x -> abs(x) > 0.005, gcm.∇β) && error("Null model gradient of beta is not zero!")
-    any(x -> abs(x) > 0.005, gcm.∇θ) && error("Null model gradient of variance components is not zero!")
-    # compute P (negative Hessian) and inv(P)
-    Hββ = -get_Hββ(gcm)
-    Hθθ = -get_Hθθ(gcm)
-    Hβθ = -get_Hβθ(gcm)
-    P = [Hββ Hβθ; Hβθ' Hθθ]
-    Pinv = inv(P)
-    # preallocated arrays for efficiency
-    z = zeros(T, n)
-    W = zeros(T, p + m)
-    χ2 = Chisq(1)
-    pvals = zeros(T, q)
-    # score test for each SNP
-    for j in 1:q
-        # sync vectors
-        SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=true)
-        Q, R = zero(T), zero(T)
-        fill!(W, 0)
-        # accumulate precomputed quantities (todo: efficiency)
-        for i in 1:n
-            # variables for current sample
-            gc = gcm.data[i]
-            d = gc.n # number of observations for current sample
-            zi = fill(z[i], d)
-            res = gc.res # d × 1
-            # update ∇resγ
-            ∇resβ = -sqrt(gcm.τ[1]) .* gc.X # see end of 11.3.1 https://arxiv.org/abs/2205.03505
-            ∇resγ = -sqrt(gcm.τ[1]) .* fill(z[i], d)
-            # calculate trailing terms (todo: efficiency)
-            Γ = zeros(T, d, d)
-            for k in 1:gc.m # loop over variance components
-                Γ .+= gcm.θ[k] .* gc.V[k]
-            end
-            # denom = 1 + dot(gcm.θ, gc.q) # note dot(θ, gc.q) = qsum = 0.5 r'Γr
-            denom = 1 + 0.5 * (res' * Γ * res)
-            denom2 = abs2(denom)
-            # calculate W
-            Hβγ_i = get_Hβγ_i(gc, Γ, ∇resβ, ∇resγ, zi, gcm.β) # exact
-            Hθγ_i = get_neg_Hθγ_i(gc, gcm.θ, ∇resγ) # exact
-            W += vcat(Hβγ_i, Hθγ_i)
-            # calculate Q
-            Q += Transpose(zi) * zi
-            Q += (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2 # 2nd term
-            Q -= ∇resγ' * Γ * ∇resγ / denom # 3rd term
-            ek = zeros(d)
-            η = gc.X * gcm.β
-            μ = η
-            dist = Normal()
-            link = IdentityLink()
-            varμ = GLM.glmvar.(dist, μ)
-            for k in 1:d
-                fill!(ek, 0)
-                ek[k] = 1
-                Q -= (ek' * Γ * res * dβdβ_res_ij(dist, link, z[i], η[k], μ[k], varμ[k], res[k])) / denom
-            end
-            # calculate R
-            R += Transpose(zi) * (gc.y - μ) + (∇resγ' * Γ * res) / denom
-
-
-            # Wtrail = (∇resβ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
-            # Qtrail = (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
-            # Rtrail = (∇resγ' * Γ * res) / denom
-            # # third Hessian term
-            # Wtrail2 = ∇resβ' * Γ * ∇resγ / denom
-            # Qtrail2 = ∇resγ' * Γ * ∇resγ / denom
-            # # score test variables
-            # W .+= Transpose(gc.X) * zi .+ Wtrail
-            # Q += Transpose(zi) * zi + Qtrail
-            # # W .+= Transpose(gc.X) * zi .+ Wtrail .- Wtrail2
-            # # Q += Transpose(zi) * zi + Qtrail - Qtrail2
-            # R += Transpose(zi) * (gc.y - gc.X * gcm.β) + Rtrail
-        end
-        # score test (todo: efficiency)
-        # @show W
-        # @show R
-        # @show Q
-        # hhh
-        S = R * inv(Q - dot(W, Pinv, W)) * R
-        pvals[j] = ccdf(χ2, S)
+function update_W!(W, qc_model, i::Int, zi::Vector, Γ, ∇resβ, ∇resγ)
+    p, m = qc_model.p, qc_model.m
+    qc = qc_model.data[i]
+    Hβγ_i = get_Hβγ_i(qc, Γ, ∇resβ, ∇resγ, zi, qc_model.β) # exact
+    Hθγ_i = get_neg_Hθγ_i(qc, qc_model.θ, ∇resγ) # exact
+    for j in 1:p
+        W[j] += Hβγ_i[j]
     end
-    return pvals
+    offset = p
+    for j in 1:m
+        W[offset + j] += Hθγ_i[j]
+    end
+    return W
+end
+
+function calculate_Ri(qc_model::GaussianCopulaVCModel, i::Int, zi::Vector, Γ, res, ∇resγ, denom)
+    gc = qc_model.data[i]
+    return Transpose(zi) * gc.res + (∇resγ' * Γ * res) / denom
+end
+
+function calculate_Ri(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, i::Int, zi::Vector, Γ, res, ∇resγ, denom)
+    gc = qc_model.data[i]
+    return Transpose(zi) * Diagonal(gc.w1) * (gc.y - gc.μ) + (∇resγ' * Γ * res) / denom
+end
+
+function calculate_Qi(qc_model::GaussianCopulaVCModel, i::Int, zi::Vector, Γ, ∇resγ, denom, denom2)
+    gc = qc_model.data[i]
+    res = gc.res
+    d = qc_model.data[i].n # number of observation for sample i
+
+    Qi = Transpose(zi) * zi
+    Qi += (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2 # 2nd term
+    Qi -= ∇resγ' * Γ * ∇resγ / denom # 3rd term
+    η = gc.X * qc_model.β
+    μ = η
+    dist = Normal()
+    link = IdentityLink()
+    varμ = GLM.glmvar.(dist, μ)
+    ek = zeros(d)
+    for k in 1:d
+        fill!(ek, 0)
+        ek[k] = 1
+        Qi -= (ek' * Γ * res * dβdβ_res_ij(dist, link, zi[1], η[k], μ[k], varμ[k], res[k])) / denom
+    end
+    return Qi
+end
+
+function calculate_Qi(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, i::Int, zi::Vector, Γ, ∇resγ, denom, denom2)
+    gc = qc_model.data[i]
+    res = gc.res
+    d = qc_model.data[i].n # number of observation for sample i
+
+    Qi = Transpose(zi) * Diagonal(gc.w2) * zi
+    Qi += (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2 # 2nd term
+    Qi -= ∇resγ' * Γ * ∇resγ / denom # 3rd term
+    ek = zeros(d)
+    for k in 1:d
+        fill!(ek, 0)
+        ek[k] = 1
+        Qi -= (ek' * Γ * res * dβdβ_res_ij(gc.d, gc.link, zi[1], gc.η[k], gc.μ[k], gc.varμ[k], res[k])) / denom
+    end
+    return Qi
+end
+
+function get_∇resγ(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, i::Int, zi::Vector)
+    d = size(qc_model.data[i].X, 1)
+    T = eltype(qc_model.data[i].X)
+    ∇resγ = zeros(T, d)
+    for k in 1:d # loop over each sample's observation
+        ∇resγ[k] = update_∇res_ij(dist, zi[k], res[k], gc.μ[k], gc.dμ[k], gc.varμ[k])
+    end
+    return ∇resγ
+end
+function get_∇resγ(qc_model::GaussianCopulaVCModel, i::Int, zi::Vector)
+    d = size(qc_model.data[i].X, 1)
+    T = eltype(qc_model.data[i].X)
+    ∇resγ = zeros(T, d)
+    # ∇resγ = -sqrt(gcm.τ[1]) .* fill(z[i], d) # for gaussian case
+    for k in 1:d # loop over each sample's observation
+        ∇resγ[k] = update_∇res_ij(Normal(), zi[k], zero(T), zero(T), zero(T), zero(T))
+    end
+    return ∇resγ
+end
+
+function get_∇resβ(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, i::Int)
+    return qc_model.data[i].∇resβ # d × p
+end
+function get_∇resβ(qc_model::GaussianCopulaVCModel, i::Int)
+    ∇resβ = -sqrt(qc_model.τ[1]) .* qc_model.data[i].X # see end of 11.3.1 https://arxiv.org/abs/2205.03505
+    return ∇resβ
+end
+
+function get_Pinv(qc_model::Union{GaussianCopulaVCModel, GLMCopulaVCModel, NBCopulaVCModel})
+    Hββ = -get_Hββ(qc_model)
+    Hθθ = -get_Hθθ(qc_model)
+    Hβθ = -get_Hβθ(qc_model)
+    P = [Hββ Hβθ; Hβθ' Hθθ]
+    return inv(P)
 end
 
 function get_Hθθ(qc_model)
@@ -329,7 +281,7 @@ function get_Hβγ_i(gc::GaussianCopulaVCObs, Γ, ∇resβ, ∇resγ, z::Abstrac
         ej[j] = 1
         xj = gc.X[j, :]
         zi = z[1]
-        Hβγ_i -= dot(ej, Γ, res) * ∇²resβ_ij(dist, link, xj, zi, η[j], μ[j], varμ[j], res[j]) / denom
+        Hβγ_i -= dot(ej, Γ, res) * dγdβresβ_ij(dist, link, xj, zi, η[j], μ[j], varμ[j], res[j]) / denom
     end
     return Hβγ_i
 end
