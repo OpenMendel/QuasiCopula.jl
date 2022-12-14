@@ -55,19 +55,20 @@ I.e. derivative of the mueta function in GLM.jl
 function mueta2 end
 mueta2(::IdentityLink, η::Real) = zero(η)
 function mueta2(::LogitLink, η::Real)
-    expabs = exp(-abs(η))
+    # expabs = exp(-abs(η))
+    expabs = exp(-η)
     denom = 1 + expabs
     return -expabs / denom^2 + 2expabs^2 / denom^3
 end
 mueta2(::LogLink, η::Real) = exp(η)
 
 """
-    ∇²resβ_ij(dist::Distribution, link::Link, i, j)
+    dβdβ_res_ij(dist, link, xj, η_j, μ_j, varμ_j, res_j)
 
-Computes ∇²resβ_ij, the Hessian of the standardized residuals for sample i 
-at the j'th measurement. 
+Computes the Hessian of the standardized residuals for sample i 
+at the j'th measurement, the gradient is evaluate with respect to β (or γ) twice
 """
-function ∇²resβ_ij(dist, link, xj, η_j, μ_j, varμ_j, res_j)
+function dβdβ_res_ij(dist, link, xj, η_j, μ_j, varμ_j, res_j)
     invσ_j = inv(sqrt(varμ_j))
     ∇μ_ij  = GLM.mueta(link, η_j) * xj
     ∇σ²_ij = sigmamu(dist, μ_j) * GLM.mueta(link, η_j) * xj
@@ -78,11 +79,18 @@ function ∇²resβ_ij(dist, link, xj, η_j, μ_j, varμ_j, res_j)
     term3 = -0.5 * res_j * inv(varμ_j) * ∇²σ²_j(dist, link, xj, μ_j, η_j)
     term4 = 0.5invσ_j^3 * ∇μ_ij * ∇σ²_ij'
     term5 = 0.75res_j * inv(varμ_j^2) * ∇σ²_ij * ∇σ²_ij'
-    ∇²resβ_ij = term1 + term2 + term3 + term4 + term5
+    result = term1 + term2 + term3 + term4 + term5
 
-    return ∇²resβ_ij # p × p
+    return result # p × p
 end
-function ∇²resβ_ij(dist, link, xj, z, η_j, μ_j, varμ_j, res_j)
+
+"""
+    dγdβresβ_ij(dist, link, xj, η_j, μ_j, varμ_j, res_j)
+
+Computes the Hessian of the standardized residuals for sample i 
+at the j'th measurement, first gradient respect to β, then with respect to γ 
+"""
+function dγdβresβ_ij(dist, link, xj, z, η_j, μ_j, varμ_j, res_j)
     invσ_j = inv(sqrt(varμ_j))
     ∇ᵧμ_ij  = GLM.mueta(link, η_j) * z # 1 × 1
     ∇ᵦμ_ij  = GLM.mueta(link, η_j) * xj # p × 1
@@ -95,9 +103,9 @@ function ∇²resβ_ij(dist, link, xj, z, η_j, μ_j, varμ_j, res_j)
     term3 = -0.5 * res_j * inv(varμ_j) * ∇²σ²_j(dist, link, xj, z, μ_j, η_j)
     term4 = 0.5invσ_j^3 * ∇ᵦμ_ij * ∇ᵧσ²_ij
     term5 = 0.75res_j * inv(varμ_j^2) * ∇ᵦσ²_ij * ∇ᵧσ²_ij
-    ∇²resβ_ij = term1 + term2 + term3 + term4 + term5
+    result = term1 + term2 + term3 + term4 + term5
 
-    return ∇²resβ_ij # p × 1
+    return result # p × 1
 end
 
 """

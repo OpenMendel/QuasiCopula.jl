@@ -49,12 +49,8 @@ function GWASCopulaVCModel(
     W = zeros(T, p + m)
     χ2 = Chisq(1)
     pvals = zeros(T, q)
-    # compute P (negative Hessian) and inv(P)
-    Hββ = -get_Hββ(gcm)
-    Hθθ = -get_Hθθ(gcm)
-    Hβθ = -get_Hβθ(gcm)
-    P = [Hββ Hβθ; Hβθ' Hθθ]
-    Pinv = inv(P)
+    # compute Pinv (inverse negative Hessian)
+    Pinv = get_Pinv(gcm)
     # score test for each SNP
     for j in 1:q
         # sync vectors
@@ -94,7 +90,7 @@ function GWASCopulaVCModel(
             for k in 1:d
                 fill!(ek, 0)
                 ek[k] = 1
-                Q -= (ek' * Γ * res * ∇²resβ_ij(gc.d, gc.link, z[i], gc.η[k], gc.μ[k], gc.varμ[k], res[k])) / denom
+                Q -= (ek' * Γ * res * dβdβ_res_ij(gc.d, gc.link, z[i], gc.η[k], gc.μ[k], gc.varμ[k], res[k])) / denom
             end
             # calculate R
             R += Transpose(zi) * Diagonal(gc.w1) * (gc.y - gc.μ) + (∇resγ' * Γ * res) / denom
@@ -103,11 +99,32 @@ function GWASCopulaVCModel(
         # @show R
         # @show Q
         # @show W
-        # j == 2 && fdsa
+        # if j == 1
+        #     fdsa
+        # end
         S = R * inv(Q - dot(W, Pinv, W)) * R
         pvals[j] = ccdf(χ2, S)
     end
     return pvals
+end
+
+function get_Pinv(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel})
+    Hββ = -get_Hββ(qc_model)
+    Hθθ = -get_Hθθ(qc_model)
+    Hβθ = -get_Hβθ(qc_model)
+    P = [Hββ Hβθ; Hβθ' Hθθ]
+    return inv(P)
+end
+
+function get_Pinv(qc_model::GaussianCopulaVCModel)
+    Hββ = -get_Hββ(qc_model)
+    Hθθ = -get_Hθθ(qc_model)
+    Hττ = 
+    Hβθ = -get_Hβθ(qc_model)
+    Hβτ = 
+    Hθτ = 
+    P = [Hββ Hβθ Hβτ; Hβθ' Hθθ Hθτ; Hβτ' Hθτ' Hττ]
+    return inv(P)
 end
 
 function GWASCopulaVCModel(
@@ -174,7 +191,7 @@ function GWASCopulaVCModel(
             for k in 1:d
                 fill!(ek, 0)
                 ek[k] = 1
-                Q -= (ek' * Γ * res * ∇²resβ_ij(dist, link, z[i], η[k], μ[k], varμ[k], res[k])) / denom
+                Q -= (ek' * Γ * res * dβdβ_res_ij(dist, link, z[i], η[k], μ[k], varμ[k], res[k])) / denom
             end
             # calculate R
             R += Transpose(zi) * (gc.y - μ) + (∇resγ' * Γ * res) / denom
@@ -284,7 +301,7 @@ function get_Hβγ_i(gc::Union{GLMCopulaVCObs, NBCopulaVCObs}, Γ, ∇resβ, ∇
         ej[j] = 1
         xj = gc.X[j, :]
         zi = z[1]
-        Hβγ_i -= dot(ej, Γ, res) * ∇²resβ_ij(gc.d, gc.link, xj, zi, η[j], μ[j], varμ[j], res[j]) / denom
+        Hβγ_i -= dot(ej, Γ, res) * dγdβresβ_ij(gc.d, gc.link, xj, zi, η[j], μ[j], varμ[j], res[j]) / denom
     end
     return Hβγ_i
 end
@@ -349,7 +366,7 @@ function get_Hββ(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel})
             xj = gc.X[j, :]
             dist = qc_model.d[i]
             link = qc_model.link[i]
-            H += (ej' * Γ * res * ∇²resβ_ij(dist, link, xj, η[j], μ[j], varμ[j], res[j])) / denom
+            H += (ej' * Γ * res * dβdβ_res_ij(dist, link, xj, η[j], μ[j], varμ[j], res[j])) / denom
         end
         # @show gc.w2
         # @show res
@@ -357,7 +374,7 @@ function get_Hββ(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel})
         # @show μ
         # @show varμ
         # j = 1
-        # @show ∇²resβ_ij(dist, link, xj, η[j], μ[j], varμ[j], res[j])
+        # @show dβdβ_res_ij(dist, link, xj, η[j], μ[j], varμ[j], res[j])
         # fdsa
     end
     return H
@@ -396,7 +413,7 @@ function get_Hββ(qc_model::GaussianCopulaVCModel)
             fill!(ej, 0)
             ej[j] = 1
             xj = gc.X[j, :]
-            H += (ej' * Γ * res * ∇²resβ_ij(dist, link, xj, η[j], μ[j], varμ[j], res[j])) / denom
+            H += (ej' * Γ * res * dβdβ_res_ij(dist, link, xj, η[j], μ[j], varμ[j], res[j])) / denom
         end
     end
     return H
