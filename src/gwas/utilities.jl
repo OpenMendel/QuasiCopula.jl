@@ -35,6 +35,7 @@ function sigmamu2 end
 sigmamu2(::Normal, μ::Real) = zero(μ)
 sigmamu2(::Bernoulli, μ::Real) = -2
 sigmamu2(::Poisson, μ::Real) = zero(μ)
+sigmamu2(d::NegativeBinomial, μ::Real) = 2/d.r + 1
 
 """
     sigmaeta(D::Distribution, μ::Real)
@@ -45,6 +46,7 @@ function sigmamu end
 sigmamu(::Normal, μ::Real) = zero(μ)
 sigmamu(::Bernoulli, μ::Real) = one(μ) - 2μ
 sigmamu(::Poisson, μ::Real) = one(μ)
+sigmamu(d::NegativeBinomial, μ::Real) = 2μ/d.r + 1
 
 """
     mueta2(l::Link, η::Real)

@@ -134,7 +134,8 @@ function calculate_Qi(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, i::Int
     for k in 1:d
         fill!(ek, 0)
         ek[k] = 1
-        Qi -= (ek' * Γ * res * dβdβ_res_ij(qc.d, qc.link, zi[1], qc.η[k], qc.μ[k], qc.varμ[k], res[k])) / denom
+        dist = typeof(qc_model.d[i]) <: NegativeBinomial ? NegativeBinomial(qc_model.r[1]) : qc_model.d[i]
+        Qi -= (ek' * Γ * res * dβdβ_res_ij(dist, qc.link, zi[1], qc.η[k], qc.μ[k], qc.varμ[k], res[k])) / denom
     end
     return Qi
 end
@@ -319,7 +320,7 @@ function get_Hββ(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel})
             fill!(ej, 0)
             ej[j] = 1
             xj = qc.X[j, :]
-            dist = qc_model.d[i]
+            dist = typeof(qc_model.d[i]) <: NegativeBinomial ? NegativeBinomial(qc_model.r[1]) : qc_model.d[i]
             link = qc_model.link[i]
             H += (ej' * Γ * res * dβdβ_res_ij(dist, link, xj, η[j], μ[j], varμ[j], res[j])) / denom
         end
