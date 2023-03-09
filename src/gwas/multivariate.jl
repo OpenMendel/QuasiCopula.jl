@@ -18,6 +18,29 @@ struct MultivariateCopulaVCObs{T <: BlasReal}
     # storage_dp::Matrix{T}
 end
 
+function MultivariateCopulaVCObs(T, d, p, m)
+    η = zeros(T, d)
+    μ = zeros(T, d)
+    res = zeros(T, d)
+    std_res = zeros(T, d)
+    dμ = zeros(T, d)
+    varμ = zeros(T, d)
+    w1 = zeros(T, d)
+    w2 = zeros(T, d)
+    ∇resβ = zeros(T, d * p, d)
+    q = zeros(T, m) # q is variable b in f(θ) = sum ln(1 + θ'b) - sum ln(1 + θ'c) in section 6.2
+    ∇vecB = zeros(T, d * p)
+    ∇θ = zeros(T, m)
+    # m1 = zeros(T, m)
+    # m2 = zeros(T, m)
+    storage_d = zeros(T, d)
+    # storage_dp = zeros(T, d, p)
+    obs = MultivariateCopulaVCObs(
+        η, μ, res, std_res, dμ, varμ, w1, w2, ∇resβ, q, ∇vecB, ∇θ, storage_d
+    )
+    return obs
+end
+
 struct MultivariateCopulaVCModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvaluator
     # data
     Y::Matrix{T}    # n × d matrix of phenotypes, each row is a sample phenotype
@@ -74,26 +97,7 @@ function MultivariateCopulaVCModel(
     # construct MultivariateCopulaVCObs that hold intermediate variables for each sample
     data = MultivariateCopulaVCObs{T}[]
     for _ in 1:n
-        η = zeros(T, d)
-        μ = zeros(T, d)
-        res = zeros(T, d)
-        std_res = zeros(T, d)
-        dμ = zeros(T, d)
-        varμ = zeros(T, d)
-        w1 = zeros(T, d)
-        w2 = zeros(T, d)
-        ∇resβ = zeros(T, d * p, d)
-        q = zeros(T, m) # q is variable b in f(θ) = sum ln(1 + θ'b) - sum ln(1 + θ'c) in section 6.2
-        ∇vecB = zeros(T, d * p)
-        ∇θ = zeros(T, m)
-        # m1 = zeros(T, m)
-        # m2 = zeros(T, m)
-        storage_d = zeros(T, d)
-        # storage_dp = zeros(T, d, p)
-        obs = MultivariateCopulaVCObs(
-            η, μ, res, std_res, dμ, varμ, w1, w2, ∇resβ, q, ∇vecB, ∇θ, storage_d
-        )
-        push!(data, obs)
+        push!(data, MultivariateCopulaVCObs(T, d, p, m))
     end
     # change type of variables to match struct
     if typeof(vecdist) <: Vector{UnionAll}
@@ -300,15 +304,19 @@ MathProgBase.eval_jac_g(qc_model::MultivariateCopulaVCModel, J, par) = nothing
 """
     initialize_model!(qc_model)
 
-# todo
+Initializes mean parameters B with univariate regression values (we fit a GLM
+to each y separately)
 """
 function initialize_model!(qc_model::MultivariateCopulaVCModel)
-    fill!(qc_model.B, 0)
-    # fill!(qc_model.ϕ, 1)
-    fill!(qc_model.θ, 0.5)
+    for (j, y) in enumerate(eachcol(qc_model.Y))
+        fit_glm = glm(qc_model.X, y, qc_model.vecdist[j], qc_model.veclink[j])
+        qc_model.B[:, j] .= fit_glm.pp.beta0
+    end
 
-    # qc_model.B .= [-0.2807553339022857 -0.2691545952645559 -0.09697342347444493; 0.16760308736364804 0.14478406502510632 0.09553517635564535; -0.33099570404138323 -0.39273955377865255 0.08818942673482322; -0.046941230688998026 0.026086749873018067 -0.4335605503363472; 0.4833837113778394 -0.2345342998326857 0.25036937754001465]
-    # fill!(qc_model.θ, 0.4)
+    # fill!(qc_model.ϕ, 1)
+    # fill!(qc_model.θ, 0.5)
+
+    fill!(qc_model.θ, 0.004351718491709185) # initial start as longitudinal case
 
     return nothing
 end
@@ -456,7 +464,7 @@ function std_res_differential!(qc_model::MultivariateCopulaVCModel, i::Int)
     xi = @view(qc_model.X[i, :])
     @inbounds for j in 1:d # loop over columns
         for k in 1:p
-            obs.∇resβ[(j-1)*p + k, j] = update_∇resβ(qc_model.vecdist[j], xi[k], 
+            obs.∇resβ[(j-1)*p + k, j] = update_∇res_ij(qc_model.vecdist[j], xi[k], 
                 obs.std_res[j], obs.μ[j], obs.dμ[j], obs.varμ[j])
         end
     end
