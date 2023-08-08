@@ -175,7 +175,7 @@ function loglikelihood!(
     sqrtτ = sqrt(abs(τ)) # ben: why is there abs here?
     update_res!(gc, β)
     standardize_res!(gc, sqrtτ)
-    rss  = abs2(norm(gc.res)) # RSS of standardized residual
+    rss  = abs2(norm(gc.res)) # RSS of residual
     tsum = dot(abs.(θ), gc.t) # ben: why is there abs here?
     logl = - log(1 + tsum) - (gc.n * log(2π) -  gc.n * log(abs(τ)) + rss) / 2
     @inbounds for k in 1:gc.m
@@ -211,7 +211,7 @@ function loglikelihood!(
         end
         BLAS.gemv!('T', one(T), gc.X, gc.res, -inv1pq, gc.∇β)
         gc.∇β .*= sqrtτ
-        gc.∇τ  .= (gc.n - rss + 2qsum * inv1pq) / 2τ
+        gc.∇τ  .= (gc.n - rss + 2qsum * inv1pq) / 2τ # 2nd and 3rd term shouldn't be divided by τ????
         gc.∇θ  .= inv1pq .* gc.q .- inv(1 + tsum) .* gc.t
         if penalized
             gc.∇θ .-= θ

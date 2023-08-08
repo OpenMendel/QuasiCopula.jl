@@ -103,18 +103,18 @@ function MathProgBase.eval_grad_f(
     gcm  :: Union{GLMCopulaVCModel{T, D, Link}, Poisson_Bernoulli_VCModel{T, VD, VL}},
     grad :: Vector,
     par  :: Vector
-) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link, VD, VL}
-optimpar_to_modelpar!(gcm, par)
-obj = loglikelihood!(gcm, true, false)
-# gradient wrt β
-copyto!(grad, gcm.∇β)
-# gradient wrt variance comps
-offset = gcm.p + 1
-@inbounds for k in 1:gcm.m
-    grad[offset] = gcm.∇θ[k]
-    offset += 1
-end
-obj
+    ) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link, VD, VL}
+    optimpar_to_modelpar!(gcm, par)
+    obj = loglikelihood!(gcm, true, false)
+    # gradient wrt β
+    copyto!(grad, gcm.∇β)
+    # gradient wrt variance comps
+    offset = gcm.p + 1
+    @inbounds for k in 1:gcm.m
+        grad[offset] = gcm.∇θ[k]
+        offset += 1
+    end
+    obj
 end
 
 MathProgBase.eval_g(gcm::Union{GLMCopulaVCModel, Poisson_Bernoulli_VCModel}, g, par) = nothing

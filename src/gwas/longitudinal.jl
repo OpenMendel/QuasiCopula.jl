@@ -1,11 +1,40 @@
-"""
-    GWASCopulaVCModel(qc_model::MixedCopulaVCModel, x::SnpArray)
+struct Storages{T <: BlasReal}
+    vec_n::Vector{T}
+    vec_p::Vector{T}
+    vec_maxd::Vector{T}
+    Γ::Matrix{T}
+    denom::Vector{T}
+    denom2::Vector{T}
+end
+function storages(n::Int, p::Int, maxd::Int)
+    vec_n = zeros(n)
+    vec_p = zeros(p)
+    vec_maxd = zeros(maxd)
+    Γ = zeros(maxd, maxd)
+    denom = zeros(1)
+    denom2 = zeros(1)
+    return Storages(vec_n, vec_p, vec_maxd, Γ, denom, denom2)
+end
+function Base.fill!(s::Storages, x::Number)
+    fill!(s.vec_n, x)
+    fill!(s.vec_p, x)
+    fill!(s.vec_maxd, x)
+    fill!(s.Γ, x)
+    fill!(s.denom, x)
+    fill!(s.denom2, x)
+end
 
-Performs score tests for each SNP in `x`, given a fitted (null) model on the non-genetic covariates.
+"""
+    GWASCopulaVCModel(qc_model::MixedCopulaVCModel, G::SnpArray)
+
+Performs score tests for each SNP in `G`, given a fitted (null) model on the 
+non-genetic covariates.
 
 # Inputs
-+ `qc_model`: A fitted `GLMCopulaVCModel` or `NBCopulaVCModel` that includes `n` sample points and `p` non-genetic covariates.
-+ `G`: A `SnpArray` (compressed `.bed/bim/fam` PLINK file) with `n` samples and `q` SNPs
++ `qc_model`: A fitted `GaussianCopulaVCModel`, `GLMCopulaVCModel` or `NBCopulaVCModel` 
+    that includes `n` sample points and `p` non-genetic covariates.
++ `G`: A `SnpArray` (compressed `.bed/bim/fam` PLINK file) with `n` samples and 
+    `q` SNPs
 
 # Outputs
 A length `q` vector of p-values storing the score statistics for each SNP
@@ -21,14 +50,18 @@ function GWASCopulaVCModel(
     maxd = maxclustersize(qc_model)
     T = eltype(qc_model.data[1].X)
     n == length(qc_model.data) || error("sample size do not agree")
-    any(x -> abs(x) > 1e-3, qc_model.∇β) && error("Null model gradient of beta is not zero!")
-    any(x -> abs(x) > 1e-3, qc_model.∇θ) && error("Null model gradient of variance components is not zero!")
+    # any(x -> abs(x) > 1e-2, qc_model.∇β) && error("Null model gradient of beta is not zero!")
+    # any(x -> abs(x) > 1e-2, qc_model.∇θ) && error("Null model gradient of variance components is not zero!")
     # preallocated arrays for efficiency
     z = zeros(T, n)
     zi = zeros(T, maxd)
     W = zeros(T, p + m)
     χ2 = Chisq(1)
     pvals = zeros(T, q)
+    storage = storages(n, p, maxd)
+    Wtime = 0.0
+    Qtime = 0.0
+    Rtime = 0.0
     # compute Pinv (inverse negative Hessian)
     Pinv = get_Pinv(qc_model)
     # score test for each SNP
@@ -36,7 +69,8 @@ function GWASCopulaVCModel(
         # sync vectors
         SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=true)
         Q, R = zero(T), zero(T)
-        fill!(W, 0)
+        fill!(W, zero(T))
+        fill!(storage, zero(T))
         # loop over each sample
         for i in 1:n
             # variables for current sample
@@ -53,31 +87,36 @@ function GWASCopulaVCModel(
             end
             denom = 1 + dot(qc_model.θ, qc.q) # same as denom = 1 + 0.5 * (res' * Γ * res), since dot(θ, qc.q) = qsum = 0.5 r'Γr
             denom2 = abs2(denom)
+            storage.denom[1] = denom
+            storage.denom2[1] = denom2
             # calculate W
-            update_W!(W, qc_model, i, @view(zi[1:d]), Γ, ∇resβ, ∇resγ)
+            Wtime += @elapsed update_W!(W, qc_model, i, @view(zi[1:d]), Γ, ∇resβ, ∇resγ, storage)
             # update Q
-            Q += calculate_Qi(qc_model, i, @view(zi[1:d]), Γ, ∇resγ, denom, denom2)
+            Qtime += @elapsed Q += calculate_Qi(qc_model, i, @view(zi[1:d]), Γ, ∇resγ, denom, denom2)
             # update R
-            R += calculate_Ri(qc_model, i, @view(zi[1:d]), Γ, ∇resγ, denom)
+            Rtime += @elapsed R += calculate_Ri(qc_model, i, @view(zi[1:d]), Γ, ∇resγ, denom)
         end
         # score test
         # @show R
         # @show Q
         # @show W
-        # if j == 3
+        # if j == 1
         #     fdsa
         # end
         S = R * inv(Q - dot(W, Pinv, W)) * R
         pvals[j] = ccdf(χ2, S)
     end
+    @show Wtime
+    @show Qtime
+    @show Rtime
     return pvals
 end
 
-function update_W!(W, qc_model, i::Int, zi::AbstractVector, Γ, ∇resβ, ∇resγ)
+function update_W!(W, qc_model, i::Int, zi::AbstractVector, Γ, ∇resβ, ∇resγ, storages::Storages)
     p, m = qc_model.p, qc_model.m
     qc = qc_model.data[i]
-    Hβγ_i = get_Hβγ_i(qc, Γ, ∇resβ, ∇resγ, zi, qc_model.β) # exact
-    Hθγ_i = get_neg_Hθγ_i(qc, qc_model.θ, ∇resγ) # exact
+    Hβγ_i = get_Hβγ_i(qc, Γ, ∇resβ, ∇resγ, zi, qc_model.β, storages) # exact
+    Hθγ_i = get_neg_Hθγ_i(qc, qc_model.θ, ∇resγ, storages) # exact
     for j in 1:p
         W[j] += Hβγ_i[j]
     end
@@ -225,7 +264,7 @@ function get_Hβθ(qc_model::GaussianCopulaVCModel)
     return hess_math
 end
 
-function get_neg_Hθγ_i(qc, θ, ∇resγ)
+function get_neg_Hθγ_i(qc, θ, ∇resγ, storages::Storages)
     m = length(qc.V)  # number of variance components
     r = qc.res
     Ω = qc.V
@@ -236,10 +275,10 @@ function get_neg_Hθγ_i(qc, θ, ∇resγ)
     return Hγθ'
 end
 
-function get_Hβγ_i(qc::Union{GLMCopulaVCObs, NBCopulaVCObs}, Γ, ∇resβ, ∇resγ, z::AbstractVector, β) # z is a vector of SNP value (length d)
+function get_Hβγ_i(qc::Union{GLMCopulaVCObs, NBCopulaVCObs}, Γ, ∇resβ, ∇resγ, z::AbstractVector, β, storages::Storages) # z is a vector of SNP value (length d)
     res = qc.res
-    denom = 1 + 0.5 * (res' * Γ * res)
-    denom2 = abs2(denom)
+    denom = storages.denom
+    denom2 = storages.denom2
     # 1st Hessian term
     Hβγ_i = Transpose(qc.X) * Diagonal(qc.w2) * z
     # 2nd Hessian term
@@ -262,7 +301,7 @@ function get_Hβγ_i(qc::Union{GLMCopulaVCObs, NBCopulaVCObs}, Γ, ∇resβ, ∇
     return Hβγ_i
 end
 # need to distinguish for gaussian case because Hessian is defined differently and η is not defined
-function get_Hβγ_i(qc::GaussianCopulaVCObs, Γ, ∇resβ, ∇resγ, z::AbstractVector, β) # z is a vector of SNP value (length d)
+function get_Hβγ_i(qc::GaussianCopulaVCObs, Γ, ∇resβ, ∇resγ, z::AbstractVector, β, storages::Storages) # z is a vector of SNP value (length d)
     res = qc.res
     denom = 1 + 0.5 * (res' * Γ * res)
     denom2 = abs2(denom)

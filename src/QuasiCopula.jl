@@ -7,7 +7,7 @@ using FFTW
 using SnpArrays
 using ForwardDiff
 @reexport using Ipopt
-import Base: show
+import Base: show, fill!
 
 export fit!, update_θ_jensen!, init_β!, initialize_model!, loglikelihood!, standardize_res!, std_res_differential!
 export update_res!, update_θ!
