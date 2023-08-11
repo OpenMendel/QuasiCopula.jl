@@ -47,23 +47,25 @@ function GWASCopulaVCModel(
     q = size(G, 2)    # number of SNPs in each sample
     p = length(qc_model.β) # number of fixed effects in each sample
     m = length(qc_model.θ) # number of variance components in each sample
+    s = typeof(qc_model) == GaussianCopulaVCModel ? 1 : 0 # number of nuisance parameters (only gaussian case for now)
     maxd = maxclustersize(qc_model)
     T = eltype(qc_model.data[1].X)
     n == length(qc_model.data) || error("sample size do not agree")
     # any(x -> abs(x) > 1e-2, qc_model.∇β) && error("Null model gradient of beta is not zero!")
     # any(x -> abs(x) > 1e-2, qc_model.∇θ) && error("Null model gradient of variance components is not zero!")
+
     # preallocated arrays for efficiency
     z = zeros(T, n)
     zi = zeros(T, maxd)
-    W = zeros(T, p + m)
+    W = zeros(T, p + m + s)
     χ2 = Chisq(1)
     pvals = zeros(T, q)
     storage = storages(n, p, maxd)
     Wtime = 0.0
     Qtime = 0.0
     Rtime = 0.0
-    # compute Pinv (inverse negative Hessian)
-    Pinv = get_Pinv(qc_model)
+    Pinv = get_Pinv(qc_model) # compute Pinv (inverse negative Hessian)
+
     # score test for each SNP
     for j in 1:q
         # sync vectors
@@ -120,9 +122,11 @@ function update_W!(W, qc_model, i::Int, zi::AbstractVector, Γ, ∇resβ, ∇res
     for j in 1:p
         W[j] += Hβγ_i[j]
     end
-    offset = p
     for j in 1:m
-        W[offset + j] += Hθγ_i[j]
+        W[p + j] += Hθγ_i[j]
+    end
+    if typeof(qc_model) <: GaussianCopulaVCModel
+        W[end] += get_Hτγ_i() # exact
     end
     return W
 end
@@ -208,11 +212,25 @@ function get_∇resβ(qc_model::GaussianCopulaVCModel, i::Int)
     return ∇resβ
 end
 
-function get_Pinv(qc_model::Union{GaussianCopulaVCModel, GLMCopulaVCModel, NBCopulaVCModel})
+function get_Pinv(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel})
     Hββ = -get_Hββ(qc_model)
     Hθθ = -get_Hθθ(qc_model)
     Hβθ = -get_Hβθ(qc_model)
     P = [Hββ Hβθ; Hβθ' Hθθ]
+    return inv(P)
+end
+
+# gaussian case needs to handle tau term separately
+function get_Pinv(qc_model::GaussianCopulaVCModel)
+    Hββ = -get_Hββ(qc_model)
+    Hθθ = -get_Hθθ(qc_model)
+    Hβθ = -get_Hβθ(qc_model)
+    Hβτ = -get_Hτβ(qc_model)
+    Hθτ = -get_Hτθ(qc_model)
+    Hττ = -get_Hττ(qc_model)
+    P = [Hββ  Hβθ  Hβτ;
+         Hβθ' Hθθ  Hθτ;
+         Hβτ' Hθτ' Hττ]
     return inv(P)
 end
 
@@ -256,7 +274,7 @@ function get_Hβθ(qc_model::GaussianCopulaVCModel)
         r = qc.res
         Ω = qc.V
         θ = qc_model.θ
-        ∇resβ = -sqrt(qc_model.τ[1]) .* qc.X # see end of 11.3.1 https://arxiv.org/abs/2205.03505
+        ∇resβ = -sqrt(qc_model.τ[1]) .* qc.X # see eq8 of 11.3.1 https://arxiv.org/abs/2205.03505, 2nd term is 0, and first term ∇μ = X
         b = [0.5r' * Ω[k] * r for k in 1:m]
         A = hcat([∇resβ' * Ω[k] * r for k in 1:m]...)
         hess_math += A ./ (1 + θ'*b) - (A*θ ./ (1 + θ'*b)^2) * b'
@@ -376,6 +394,9 @@ function get_Hββ(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel})
 end
 # must distinguish for gaussian case because it doesn't have ∇resβ precomputed
 function get_Hββ(qc_model::GaussianCopulaVCModel)
+    # Hββ from loglikelihood! seems to be some kind of approximate Hessian
+    # loglikelihood!(qc_model, true, true)
+    # @show qc_model.Hβ
     p = length(qc_model.β)
     T = eltype(qc_model.β)
     H = zeros(T, p, p)    
@@ -412,4 +433,49 @@ function get_Hββ(qc_model::GaussianCopulaVCModel)
         end
     end
     return H
+end
+
+# extra needed functions for gaussian case
+function get_Hτγ_i(qc_model::GaussianCopulaVCModel)
+    # todo
+end
+function get_Hτβ(qc_model::GaussianCopulaVCModel)
+    β = qc_model.β
+    θ = qc_model.θ
+    τ = qc_model.τ[1]
+    T = eltype(β)
+    Hτβ = zeros(T, length(β))
+    Hτβstore = zeros(T, length(β))
+    for qc in qc_model.data
+        fill!(Hτβstore, 0)
+        # compute Hτβstore = sqrt(τ)X'Γ(y-Xb)
+        for k in 1:qc.m
+            mul!(qc.storage_n, qc.V[k], qc.res) # storage_n = V[k] * res = V[k] * (y-Xb) * sqrt(τ) 
+            BLAS.gemv!('T', θ[k], qc.X, qc.storage_n, one(T), Hτβstore) # Hτβstore = sqrt(τ)θ[k]X'V[k](y-Xb)
+        end
+        qsum = dot(θ, qc.q) # qsum = 0.5r(β)*Γ*r(β) where r = (y-Xb) * sqrt(τ)
+        denom = abs2(1 + qsum) # denom = (1 + 0.5τ(y-Xb)'Γ(y-Xb) )^2
+        BLAS.gemv!('T', one(T), qc.X, qc.res, -inv(denom), Hτβstore) # Hτβstore = -sqrt(τ)X'Γ(y-Xb) / denom + X'(y-Xb)sqrt(τ)
+        Hτβstore ./= sqrt(τ)
+        Hτβ .+= Hτβstore
+    end
+    return Hτβ
+end
+function get_Hτθ(qc_model::GaussianCopulaVCModel)
+    θ = qc_model.θ
+    m = length(θ)
+    T = eltype(θ)
+    Hτθ = zeros(T, m)
+    qstore = zeros(T, m)
+    for qc in qc_model.data
+        copyto!(qstore, qc.q) # gc.q = 0.5r(β)*V[k]*r(β) where r = (y-Xb) * sqrt(τ)
+        qstore ./= qc_model.τ[1]
+        Hτθ .+= inv(1 + dot(θ, qstore)) .* qstore
+    end
+    return Hτθ
+end
+function get_Hττ(qc_model::GaussianCopulaVCModel)
+    # use loglikelihood! function to get Hττ, which is called in get_Hθθ already
+    # loglikelihood!(qc_model, true, true)
+    return qc_model.Hτ
 end
