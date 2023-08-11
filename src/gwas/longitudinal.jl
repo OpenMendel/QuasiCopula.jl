@@ -47,7 +47,7 @@ function GWASCopulaVCModel(
     q = size(G, 2)    # number of SNPs in each sample
     p = length(qc_model.β) # number of fixed effects in each sample
     m = length(qc_model.θ) # number of variance components in each sample
-    s = typeof(qc_model) == GaussianCopulaVCModel ? 1 : 0 # number of nuisance parameters (only gaussian case for now)
+    s = typeof(qc_model) <: GaussianCopulaVCModel ? 1 : 0 # number of nuisance parameters (only gaussian case for now)
     maxd = maxclustersize(qc_model)
     T = eltype(qc_model.data[1].X)
     n == length(qc_model.data) || error("sample size do not agree")
@@ -114,11 +114,13 @@ function GWASCopulaVCModel(
     return pvals
 end
 
+# update W expression for 1 sample
+# i stands for sample i, and zi is a d-vector of SNP value
 function update_W!(W, qc_model, i::Int, zi::AbstractVector, Γ, ∇resβ, ∇resγ, storages::Storages)
     p, m = qc_model.p, qc_model.m
     qc = qc_model.data[i]
     Hβγ_i = get_Hβγ_i(qc, Γ, ∇resβ, ∇resγ, zi, qc_model.β, storages) # exact
-    Hθγ_i = get_neg_Hθγ_i(qc, qc_model.θ, ∇resγ, storages) # exact
+    Hθγ_i = get_Hθγ_i(qc, qc_model.θ, ∇resγ, storages) # exact
     for j in 1:p
         W[j] += Hβγ_i[j]
     end
@@ -126,7 +128,7 @@ function update_W!(W, qc_model, i::Int, zi::AbstractVector, Γ, ∇resβ, ∇res
         W[p + j] += Hθγ_i[j]
     end
     if typeof(qc_model) <: GaussianCopulaVCModel
-        W[end] += get_Hτγ_i() # exact
+        W[end] += get_Hτγ_i(qc, zi, qc_model.θ, qc_model.τ[1]) # exact
     end
     return W
 end
@@ -282,14 +284,14 @@ function get_Hβθ(qc_model::GaussianCopulaVCModel)
     return hess_math
 end
 
-function get_neg_Hθγ_i(qc, θ, ∇resγ, storages::Storages)
+function get_Hθγ_i(qc, θ, ∇resγ, storages::Storages)
     m = length(qc.V)  # number of variance components
     r = qc.res
     Ω = qc.V
     b = [0.5r' * Ω[k] * r for k in 1:m]
     A = hcat([∇resγ' * Ω[k] * r for k in 1:m]...)
     # calculate Hγθ, then return Hθγ = Hγθ'
-    Hγθ = (A*θ ./ (1 + θ'*b)^2) * b' - A ./ (1 + θ'*b)
+    Hγθ = A ./ (1 + θ'*b) - (A*θ ./ (1 + θ'*b)^2) * b'
     return Hγθ'
 end
 
@@ -435,9 +437,21 @@ function get_Hββ(qc_model::GaussianCopulaVCModel)
     return H
 end
 
-# extra needed functions for gaussian case
-function get_Hτγ_i(qc_model::GaussianCopulaVCModel)
-    # todo
+# needed functions for gaussian case (zi is length d vector of SNP values)
+# i stands for sample i
+function get_Hτγ_i(qc::GaussianCopulaVCObs, zi::AbstractVector{T}, 
+    θ::AbstractVector{T}, τ::T) where T
+    Hτγ = zero(T)
+    # compute sqrt(τ)z'Γ(y-Xb) (numerator of 2nd term)
+    for k in 1:qc.m
+        mul!(qc.storage_n, qc.V[k], qc.res) # storage_n = V[k] * res = V[k] * (y-Xb) * sqrt(τ) 
+        Hτγ += θ[k] * dot(zi, qc.storage_n) # Hτγ = sqrt(τ)θ[k]z'V[k](y-Xb) = sqrt(τ)z'Γ(y-Xb)
+    end
+    qsum = dot(θ, qc.q) # qsum = 0.5r(β)*Γ*r(β) where r = (y-Xb) * sqrt(τ)
+    denom = abs2(1 + qsum) # denom = (1 + 0.5τ(y-Xb)'Γ(y-Xb) )^2
+    Hτγ /= -denom # Hτγ = -sqrt(τ)z'Γ(y-Xb) / denom
+    Hτγ += dot(zi, qc.res) # Hτγ = -sqrt(τ)z'Γ(y-Xb) / denom + z'(y-Xb)sqrt(τ)
+    return Hτγ / sqrt(τ)
 end
 function get_Hτβ(qc_model::GaussianCopulaVCModel)
     β = qc_model.β

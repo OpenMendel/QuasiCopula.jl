@@ -23,7 +23,7 @@ struct GaussianCopulaVCObs{T <: BlasReal}
     res::Vector{T}  # residual vector res_i
     xtx::Matrix{T}  # Xi'Xi
     t::Vector{T}    # t[k] = tr(V_i[k]) / 2
-    q::Vector{T}    # q[k] = res_i' * V_i[k] * res_i / 2
+    q::Vector{T}    # q[k] = res_i' * V_i[k] * res_i / 2    (res is scaled by tau)
     storage_n::Vector{T}
     storage_p::Vector{T}
     m1::Vector{T}
@@ -174,18 +174,18 @@ function loglikelihood!(
     # evaluate copula loglikelihood
     sqrtτ = sqrt(abs(τ)) # ben: why is there abs here?
     update_res!(gc, β)
-    standardize_res!(gc, sqrtτ)
+    standardize_res!(gc, sqrtτ) # res = (y - Xb) * sqrt(τ)
     rss  = abs2(norm(gc.res)) # RSS of residual
     tsum = dot(abs.(θ), gc.t) # ben: why is there abs here?
     logl = - log(1 + tsum) - (gc.n * log(2π) -  gc.n * log(abs(τ)) + rss) / 2
     @inbounds for k in 1:gc.m
-        mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res
+        mul!(gc.storage_n, gc.V[k], gc.res) # storage_n = V[k] * res = V[k] * (y-Xb) * sqrt(τ) 
         if needgrad # ∇β stores X'*Γ*res (standardized residual)
             BLAS.gemv!('T', θ[k], gc.X, gc.storage_n, one(T), gc.∇β)
         end
-        gc.q[k] = dot(gc.res, gc.storage_n) / 2
+        gc.q[k] = dot(gc.res, gc.storage_n) / 2 # gc.q = 0.5 res' * V[k] * res = 0.5τ(y-Xb)^t*V*(y-Xb)
     end
-    qsum  = dot(θ, gc.q)
+    qsum  = dot(θ, gc.q) # qsum = 0.5r(β)*Γ*r(β) where r = (y-Xb) * sqrt(τ)
     logl += log(1 + qsum)
     # add L2 ridge penalty
     if penalized
@@ -209,9 +209,9 @@ function loglikelihood!(
             BLAS.syr!('U', -one(T), gc.m1, gc.Hθ)
             copytri!(gc.Hθ, 'U')
         end
-        BLAS.gemv!('T', one(T), gc.X, gc.res, -inv1pq, gc.∇β)
+        BLAS.gemv!('T', one(T), gc.X, gc.res, -inv1pq, gc.∇β) # ∇β = -sqrt(τ)X'Γ(y-Xb) / (1+τ(y-Xb)'Γ(y-Xb)) + sqrt(τ)X'(y-Xb)
         gc.∇β .*= sqrtτ
-        gc.∇τ  .= (gc.n - rss + 2qsum * inv1pq) / 2τ # 2nd and 3rd term shouldn't be divided by τ????
+        gc.∇τ  .= (gc.n - rss + 2qsum * inv1pq) / 2τ # note: rss and qsum have τ in it
         gc.∇θ  .= inv1pq .* gc.q .- inv(1 + tsum) .* gc.t
         if penalized
             gc.∇θ .-= θ
