@@ -6,6 +6,7 @@ using SpecialFunctions
 using FFTW
 using SnpArrays
 using ForwardDiff
+using ProgressMeter
 @reexport using Ipopt
 import Base: show, fill!
 
@@ -20,6 +21,7 @@ export Poisson_Bernoulli_VCObs, Poisson_Bernoulli_VCModel
 export MixedCopulaVCObs, MixedCopulaVCModel
 export MultivariateCopulaVCModel
 export GWASCopulaVCModel_autodiff
+export multivariateGWAS_autodiff
 
 include("parameter_estimation/gaussian_CS.jl")
 include("parameter_estimation/NBCopulaCS.jl")
@@ -51,5 +53,7 @@ include("model_interface/show_io.jl")
 include("gwas/longitudinal.jl")
 include("gwas/longitudinal_autodiff.jl")
 include("gwas/multivariate.jl")
+include("gwas/multivariate_gwas.jl")
+include("gwas/multivariate_gwas_autodiff.jl")
 include("gwas/utilities.jl")
 end # module

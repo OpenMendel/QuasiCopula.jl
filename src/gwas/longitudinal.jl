@@ -25,7 +25,7 @@ function Base.fill!(s::Storages, x::Number)
 end
 
 """
-    GWASCopulaVCModel(qc_model::MixedCopulaVCModel, G::SnpArray)
+    GWASCopulaVCModel(qc_model::Union{GaussianCopulaVCModel, GLMCopulaVCModel, NBCopulaVCModel}, G::SnpArray)
 
 Performs score tests for each SNP in `G`, given a fitted (null) model on the 
 non-genetic covariates.
@@ -236,7 +236,7 @@ function get_Pinv(qc_model::GaussianCopulaVCModel)
     return inv(P)
 end
 
-function get_Hθθ(qc_model)
+function get_Hθθ(qc_model::Union{GaussianCopulaVCModel,GLMCopulaVCModel,NBCopulaVCModel})
     # use loglikelihood! function to get Hθθ. Commented out code gives the same answer
     loglikelihood!(qc_model, true, true)
     return qc_model.Hθ
