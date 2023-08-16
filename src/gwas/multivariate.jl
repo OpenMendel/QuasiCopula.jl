@@ -94,7 +94,7 @@ function MultivariateCopulaVCModel(
     # initialize variables
     B = zeros(T, p, d)
     θ = zeros(T, m)
-    ϕ = zeros(T, s)
+    ϕ = fill(one(T), s)
     # t is variable c in f(θ) = sum ln(1 + θ'b) - sum ln(1 + θ'c) in section 6.2
     # Because all Vs are the same in multivariate analysis, all samples share the same t
     t = [tr(V[k])/2 for k in 1:m]
@@ -422,12 +422,6 @@ function loglikelihood!(
     # loglikelihood term 1 i.e. -sum ln(1 + 0.5tr(Γ(θ)))
     tsum = dot(θ, qc_model.t) # tsum = 0.5tr(Γ)
     logl += -log(1 + tsum)
-    # also add contributions from nuisance parameters
-    for (j, idx) in enumerate(qc_model.nuisance_idx)
-        τ = abs(qc_model.ϕ[j])
-        rss = abs2(norm(qc.std_res[idx]))
-        logl += -(1 * log(2π) - 1 * log(abs(τ)) + rss) / 2
-    end
     # compute ∇resβ*Γ*res and variable b for variance component model
     @inbounds for k in 1:qc_model.m # loop over m variance components
         mul!(qc.storage_d, qc_model.V[k], qc.std_res) # storage_d = V[k] * r
@@ -540,9 +534,17 @@ end
 function component_loglikelihood(qc_model::MultivariateCopulaVCModel{T}, i::Int) where T <: BlasReal
     y = @view(qc_model.Y[i, :])
     obs = qc_model.data[i]
+    nuisance_counter = 1
     logl = zero(T)
     @inbounds for j in eachindex(y)
-        logl += QuasiCopula.loglik_obs(qc_model.vecdist[j], y[j], obs.μ[j], one(T), one(T))
+        dist = qc_model.vecdist[j]
+        if typeof(dist) <: Normal
+            τ = inv(qc_model.ϕ[nuisance_counter])
+            logl += QuasiCopula.loglik_obs(dist, y[j], obs.μ[j], one(T), τ)
+            nuisance_counter += 1
+        else
+            logl += QuasiCopula.loglik_obs(dist, y[j], obs.μ[j], one(T), one(T))
+        end
     end
     return logl
 end
