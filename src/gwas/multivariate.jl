@@ -8,17 +8,18 @@ struct MultivariateCopulaVCObs{T <: BlasReal}
     varμ::Vector{T} # intermediate GLM quantity
     w1::Vector{T} # intermediate GLM quantity
     w2::Vector{T} # intermediate GLM quantity
-    ∇resβ::Matrix{T} # gradient of standardized residual with respect to beta
     q::Vector{T} # q[k] = res_i' * V_i[k] * res_i / 2 (this is variable b in VC model, see sec 6.2 of QuasiCopula paper)
+    ∇resβ::Matrix{T} # gradient of standardized residual with respect to beta
     ∇vecB::Vector{T} # gradient of loglikelihood wrt β = vec(B)
-    ∇θ::Vector{T}   # gradient of loglikelihood wrt θ
+    ∇θ::Vector{T}   # gradient of loglikelihood wrt θ (variance components)
+    ∇ϕ::Vector{T}   # gradient of loglikelihood wrt ϕ (nuisnace parameters)
     # m1::Vector{T}
     # m2::Vector{T}
     storage_d::Vector{T}
     # storage_dp::Matrix{T}
 end
 
-function MultivariateCopulaVCObs(T, d, p, m)
+function MultivariateCopulaVCObs(T, d, p, m, s)
     η = zeros(T, d)
     μ = zeros(T, d)
     res = zeros(T, d)
@@ -27,16 +28,17 @@ function MultivariateCopulaVCObs(T, d, p, m)
     varμ = zeros(T, d)
     w1 = zeros(T, d)
     w2 = zeros(T, d)
-    ∇resβ = zeros(T, d * p, d)
     q = zeros(T, m) # q is variable b in f(θ) = sum ln(1 + θ'b) - sum ln(1 + θ'c) in section 6.2
+    ∇resβ = zeros(T, d * p, d)
     ∇vecB = zeros(T, d * p)
     ∇θ = zeros(T, m)
+    ∇ϕ = zeros(T, s)
     # m1 = zeros(T, m)
     # m2 = zeros(T, m)
     storage_d = zeros(T, d)
     # storage_dp = zeros(T, d, p)
     obs = MultivariateCopulaVCObs(
-        η, μ, res, std_res, dμ, varμ, w1, w2, ∇resβ, q, ∇vecB, ∇θ, storage_d
+        η, μ, res, std_res, dμ, varμ, w1, w2, q, ∇resβ, ∇vecB, ∇θ, ∇ϕ, storage_d
     )
     return obs
 end
@@ -54,15 +56,18 @@ struct MultivariateCopulaVCModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvalu
     d::Int # number of phenotypes per sample
     p::Int # number of (non-genetic) covariates per sample
     m::Int # number of variance components
+    s::Int # number of nuisance parameters 
     # parameters
     B::Matrix{T}    # p × d matrix of mean regression coefficients, Y = XB
     θ::Vector{T}    # length m vector of variance components
-    ϕ::Vector{T}    # nuisance parameters for each phenotype
+    ϕ::Vector{T}    # s-vector of nuisance parameters. Currently only Gaussian works, so ϕ is just a vector of `τ`s (inverse variance)
+    nuisance_idx::Vector{Int} # indices that are nuisance parameters, indexing into vecdist
     # working arrays
     t::Vector{T}    # t[k] = tr(V_i[k]) / 2 (this is variable c in VC model)
     Γ::Matrix{T}      # d × d covariance matrix, in VC model this is θ[1]*V[1] + ... + θ[m]*V[m]
     ∇vecB::Vector{T}  # length pd vector, its the gradient of vec(B) 
     ∇θ::Vector{T}     # length m vector, gradient of variance components
+    ∇ϕ::Vector{T}     # length s vector, gradient of nuisance parameters
     # ∇ϕ::Vector{T}
     HvecB::Matrix{T}  # pd × pd matrix of Hessian
     Hθ::Matrix{T}     # m × m matrix of Hessian for variance components
@@ -82,22 +87,27 @@ function MultivariateCopulaVCModel(
     p = size(X, 2)
     m = typeof(V) <: Matrix ? 1 : length(V)
     n == size(X, 1) || error("Number of samples in Y and X mismatch")
+    nuisance_idx = findall(x -> x == Normal || typeof(x) <: Normal, vecdist)
+    s = length(nuisance_idx)
+    any(x -> typeof(x) <: NegativeBinomial, vecdist) && 
+        error("Negative binomial base not supported yet")
     # initialize variables
     B = zeros(T, p, d)
     θ = zeros(T, m)
-    ϕ = zeros(T, d)
+    ϕ = zeros(T, s)
     # t is variable c in f(θ) = sum ln(1 + θ'b) - sum ln(1 + θ'c) in section 6.2
     # Because all Vs are the same in multivariate analysis, all samples share the same t
     t = [tr(V[k])/2 for k in 1:m]
     Γ = zeros(T, d, d)
     ∇vecB = zeros(T, p*d)
     ∇θ = zeros(T, m)
+    ∇ϕ = zeros(T, s)
     HvecB = zeros(T, p*d, p*d)
     Hθ = zeros(T, m, m)
     # construct MultivariateCopulaVCObs that hold intermediate variables for each sample
     data = MultivariateCopulaVCObs{T}[]
     for _ in 1:n
-        push!(data, MultivariateCopulaVCObs(T, d, p, m))
+        push!(data, MultivariateCopulaVCObs(T, d, p, m, s))
     end
     # change type of variables to match struct
     if typeof(vecdist) <: Vector{UnionAll}
@@ -106,9 +116,9 @@ function MultivariateCopulaVCModel(
     typeof(V) <: Matrix && (V = [V])
     return MultivariateCopulaVCModel(
         Y, X, V, vecdist, veclink, data,
-        n, d, p, m,
-        B, θ, ϕ, t, 
-        Γ, ∇vecB, ∇θ, HvecB, Hθ,
+        n, d, p, m, s, 
+        B, θ, ϕ, nuisance_idx, t, 
+        Γ, ∇vecB, ∇θ, ∇ϕ, HvecB, Hθ,
         penalized
     )
 end
@@ -116,35 +126,35 @@ end
 """
     fit!(qc_model::MultivariateCopulaVCModel, solver=Ipopt.IpoptSolver)
 
-Fit an `MultivariateCopulaVCModel` object by MLE using a nonlinear programming solver. Start point
-should be provided in `qc_model.β`, `qc_model.θ`, `qc_model.ϕ` this is for Normal base.
+Fit an `MultivariateCopulaVCModel` object by MLE using a nonlinear programming
+solver. Start point should be provided in `qc_model.β`, `qc_model.θ`, `qc_model.ϕ`
 
 # Arguments
 - `qc_model`: A `MultivariateCopulaVCModel` model object.
-- `solver`: Specified solver to use. By default we use IPOPT with 100 quas-newton iterations with convergence tolerance 10^-6.
-    (default `solver = Ipopt.IpoptSolver(print_level=3, max_iter = 100, tol = 10^-6, limited_memory_max_history = 20, warm_start_init_point="yes", hessian_approximation = "limited-memory")`)
+- `solver`: Specified solver to use. By default we use IPOPT with 100 quas-newton
+    iterations with convergence tolerance 10^-6. (default `solver = Ipopt.IpoptSolver(print_level=3, max_iter = 100, tol = 10^-6, limited_memory_max_history = 20, warm_start_init_point="yes", hessian_approximation = "limited-memory")`)
 """
 function fit!(
     qc_model::MultivariateCopulaVCModel,
     solver=Ipopt.IpoptSolver(
         print_level = 5, 
         tol = 10^-6, 
-        max_iter = 10,
+        max_iter = 100,
         accept_after_max_steps = 10,
         warm_start_init_point="yes", 
         limited_memory_max_history = 6, # default value
         hessian_approximation = "limited-memory",
 #         derivative_test="second-order"
     ))
-    p, d, m = qc_model.p, qc_model.d, qc_model.m
+    p, d, m, s = qc_model.p, qc_model.d, qc_model.m, qc_model.s
     initialize_model!(qc_model)
-    npar = p * d + m
+    npar = p * d + m + s
     optm = MathProgBase.NonlinearModel(solver)
     # set lower bounds and upper bounds of parameters
     lb   = fill(-Inf, npar)
     ub   = fill( Inf, npar)
     offset = p*d + 1
-    for k in 1:m # variance components must be >0
+    for k in 1:m+s # variance components and variance of gaussian must be >0
         lb[offset] = 0
         offset += 1
     end
@@ -179,7 +189,10 @@ function modelpar_to_optimpar!(
         par[offset] = qc_model.θ[k]
         offset += 1
     end
-    # par[offset] = qc_model.ϕ[1] # todo
+    @inbounds for i in 1:qc_model.s
+        par[offset] = qc_model.ϕ[i]
+        offset += 1
+    end
     return par
 end
 
@@ -200,7 +213,10 @@ function optimpar_to_modelpar!(
         qc_model.θ[k] = par[offset]
         offset += 1
     end
-    # qc_model.ϕ[1] = par[offset] # todo
+    @inbounds for i in 1:qc_model.s
+        qc_model.ϕ[i] = par[offset]
+        offset += 1
+    end
     return qc_model
 end
 
@@ -208,7 +224,6 @@ function MathProgBase.initialize(
     qc_model::MultivariateCopulaVCModel,
     requested_features::Vector{Symbol})
     for feat in requested_features
-        # if !(feat in [:Grad, :Hess])
         if !(feat in [:Grad])
             error("Unsupported feature $feat")
         end
@@ -241,7 +256,10 @@ function MathProgBase.eval_grad_f(
         grad[offset] = qc_model.∇θ[k]
         offset += 1
     end
-    # grad[offset] = qc_model.∇ϕ[1] # todo
+    @inbounds for k in 1:qc_model.s
+        grad[offset] = qc_model.∇ϕ[k]
+        offset += 1
+    end
     return obj
 end
 
@@ -312,12 +330,8 @@ function initialize_model!(qc_model::MultivariateCopulaVCModel)
         fit_glm = glm(qc_model.X, y, qc_model.vecdist[j], qc_model.veclink[j])
         qc_model.B[:, j] .= fit_glm.pp.beta0
     end
-
-    # fill!(qc_model.ϕ, 1)
-    # fill!(qc_model.θ, 0.5)
-
-    fill!(qc_model.θ, 0.004351718491709185) # initial start as longitudinal case
-
+    fill!(qc_model.ϕ, 1)
+    fill!(qc_model.θ, 0.5)
     return nothing
 end
 
@@ -329,9 +343,10 @@ function loglikelihood!(
     if needgrad
         fill!(qc_model.∇vecB, 0)
         fill!(qc_model.∇θ, 0)
+        fill!(qc_model.∇ϕ, 0)
     end
     if needhess
-        error("Hessian not implemented for multivariate GWAS yet!")
+        error("Hessian not implemented for MultivariateCopulaVCModel!")
         # fill!(qc_model.HvecB, 0)
         # fill!(qc_model.Hθ, 0)
     end
@@ -341,10 +356,11 @@ function loglikelihood!(
         if needgrad
             qc_model.∇vecB .+= qc_model.data[i].∇vecB
             qc_model.∇θ .+= qc_model.data[i].∇θ
+            qc_model.∇ϕ .+= qc_model.data[i].∇ϕ
         end
         if needhess
-            qc_model.Hβ .+= qc_model.data[i].HvecB
-            qc_model.Hθ .+= qc_model.data[i].Hθ
+            # qc_model.Hβ .+= qc_model.data[i].HvecB
+            # qc_model.Hθ .+= qc_model.data[i].Hθ
         end
     end
     return logl
@@ -364,16 +380,54 @@ function loglikelihood!(
     if needgrad
         fill!(qc.∇vecB, 0)
         fill!(qc.∇θ, 0)
-        # fill!(qc.∇ϕ, 0)
+        fill!(qc.∇ϕ, 0)
     end
     # update residuals and its gradient
     update_res!(qc_model, i)
     std_res_differential!(qc_model, i) # compute ∇resβ
+
+
+
+    # xi = @view(qc_model.X[i, :])
+    # yi = @view(qc_model.Y[i, :])
+    # B = qc_model.B
+    # @show yi
+    # @show qc_model.data[1].μ
+    # @show qc_model.data[1].res
+    # @show qc_model.data[1].std_res
+    # @show qc_model.data[1].∇resβ
+    # @show qc_model.ϕ
+    # counter = 1
+    # for j in 1:d
+    #     βj = @view(B[:, j])
+    #     correct_eta = dot(xi, βj)
+    #     correct_mu = GLM.linkinv(qc_model.veclink[j], correct_eta)
+    #     correct_res = yi[j] - correct_mu
+    #     if typeof(qc_model.vecdist[j]) <: Normal
+    #         correct_std_res = correct_res * sqrt(qc_model.ϕ[counter])
+    #         counter += 1
+    #     else
+    #         correct_std_res = correct_res / sqrt(GLM.glmvar(qc_model.vecdist[j], correct_mu))
+    #     end
+    #     # @show correct_res
+    #     @show correct_std_res
+    # end
+    # fdsa
+
+
+
+
     # loglikelihood term 2 i.e. sum sum ln(f_ij | β)
     logl = QuasiCopula.component_loglikelihood(qc_model, i)
     # loglikelihood term 1 i.e. -sum ln(1 + 0.5tr(Γ(θ)))
     tsum = dot(θ, qc_model.t) # tsum = 0.5tr(Γ)
     logl += -log(1 + tsum)
+    # also add contributions from nuisance parameters
+    for (j, idx) in enumerate(qc_model.nuisance_idx)
+        τ = abs(qc_model.ϕ[j])
+        rss = abs2(norm(qc.std_res[idx]))
+        logl += -(1 * log(2π) - 1 * log(abs(τ)) + rss) / 2
+    end
     # compute ∇resβ*Γ*res and variable b for variance component model
     @inbounds for k in 1:qc_model.m # loop over m variance components
         mul!(qc.storage_d, qc_model.V[k], qc.std_res) # storage_d = V[k] * r
@@ -420,8 +474,14 @@ function loglikelihood!(
             out .+= xi .* qc.w1[j] * qc.res[j]
             # BLAS.gemv!('T', one(T), xi, qc.storage_d, inv1pq, out)
         end
-        # gc.∇β .*= sqrtϕ # todo: how does ϕ get involved here?
-        # gc.∇ϕ  .= (gc.n - rss + 2qsum * inv1pq) / 2ϕ # todo: deal with ϕ
+        for (j, idx) in enumerate(qc_model.nuisance_idx)
+            vecB_range = (j-1)*p+1:j*p
+            τ = abs(qc_model.ϕ[j])
+            sqrtτ = sqrt(τ)
+            rss = abs2(norm(qc.std_res[idx]))
+            qc.∇vecB[vecB_range] .*= sqrtτ
+            qc.∇ϕ .= (1 - rss + 2qsum * inv1pq) / 2τ
+        end
         qc.∇θ .= inv1pq .* qc.q .- inv(1 + tsum) .* qc_model.t
         if qc_model.penalized
             qc.∇θ .-= θ
@@ -435,10 +495,10 @@ function update_res!(qc_model::MultivariateCopulaVCModel, i::Int)
     # data for sample i
     xi = @view(qc_model.X[i, :])
     yi = @view(qc_model.Y[i, :])
+    nuisance_counter = 1
     vecdist = qc_model.vecdist
     veclink = qc_model.veclink
     obs = qc_model.data[i]
-    # update necessary quantities
     mul!(obs.η, qc_model.B', xi)
     @inbounds for j in eachindex(yi)
         obs.μ[j] = GLM.linkinv(veclink[j], obs.η[j])
@@ -447,7 +507,13 @@ function update_res!(qc_model::MultivariateCopulaVCModel, i::Int)
         obs.w1[j] = obs.dμ[j] / obs.varμ[j]
         obs.w2[j] = obs.w1[j] * obs.dμ[j]
         obs.res[j] = yi[j] - obs.μ[j]
-        obs.std_res[j] = obs.res[j] / sqrt(obs.varμ[j]) # todo: when j is Gaussian, should we divide by ϕ[j]?
+        if typeof(vecdist[j]) <: Normal
+            τ = abs(qc_model.ϕ[nuisance_counter])
+            obs.std_res[j] = obs.res[j] * sqrt(τ)
+            nuisance_counter += 1
+        else
+            obs.std_res[j] = obs.res[j] / sqrt(obs.varμ[j])
+        end
     end
     return nothing
 end

@@ -7,6 +7,7 @@ function multivariateGWAS_autodiff(
     q = size(G, 2)    # number of SNPs in each sample
     p, d = size(qc_model.B)    # dimension of fixed effects in each sample
     m = length(qc_model.θ)     # number of variance components in each sample
+    s = count(x -> typeof(x) <: Normal, qc_model.vecdist) # number of nuisance parameters (only Gaussian for now)
     T = eltype(qc_model.X)
     n == length(qc_model.data) || error("sample size do not agree")
 
