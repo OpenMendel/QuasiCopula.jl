@@ -7,6 +7,7 @@ using FFTW
 using SnpArrays
 using ForwardDiff
 using ProgressMeter
+using Random
 @reexport using Ipopt
 import Base: show, fill!
 
@@ -22,6 +23,10 @@ export MixedCopulaVCObs, MixedCopulaVCModel
 export MultivariateCopulaVCModel
 export GWASCopulaVCModel_autodiff
 export multivariateGWAS_autodiff
+# for GWAS simulations
+export simulate_random_snparray
+export simulate_multivariate_traits
+export simulate_longitudinal_traits
 
 include("parameter_estimation/gaussian_CS.jl")
 include("parameter_estimation/NBCopulaCS.jl")

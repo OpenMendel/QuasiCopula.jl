@@ -111,9 +111,9 @@ function dγdβresβ_ij(dist, link, xj, z, η_j, μ_j, varμ_j, res_j)
 end
 
 """
-update_∇res_ij(d::Distribution, x_ji, res_j, μ_j, dμ_j, varμ_j)
+    update_∇res_ij(d::Distribution, x_ji, res_j, μ_j, dμ_j, varμ_j)
 
-Computes ∇resβ_ij, the gradient of the standardized residuals for sample i 
+Computes ∇resβ_ij, the gradient (wrt β) of the standardized residuals for sample i 
 at the j'th measurement. Here res_j is the standardized residual
 """
 function update_∇res_ij end
@@ -144,4 +144,256 @@ function _get_null_distribution(gcm::GLMCopulaVCModel)
     else
         error("GLMCopulaVCModel should have marginal distributions Bernoulli or Poisson but was $(eltype(gcm.d))")
     end
+end
+
+function simulate_random_snparray(s::Union{String, UndefInitializer}, n::Int64,
+    p::Int64; mafs::Vector{Float64}=zeros(Float64, p), min_ma::Int = 5)
+
+    #first simulate a random {0, 1, 2} matrix with each SNP drawn from Binomial(2, r[i])
+    A1 = BitArray(undef, n, p) 
+    A2 = BitArray(undef, n, p) 
+    for j in 1:p
+        minor_alleles = 0
+        maf = 0
+        while minor_alleles <= min_ma
+            maf = 0.5rand()
+            for i in 1:n
+                A1[i, j] = rand(Bernoulli(maf))
+                A2[i, j] = rand(Bernoulli(maf))
+            end
+            minor_alleles = sum(view(A1, :, j)) + sum(view(A2, :, j))
+        end
+        mafs[j] = maf
+    end
+
+    #fill the SnpArray with the corresponding x_tmp entry
+    return _make_snparray(s, A1, A2)
+end
+
+function _make_snparray(s::Union{String, UndefInitializer}, A1::BitArray, A2::BitArray)
+    n, p = size(A1)
+    x = SnpArray(s, n, p)
+    for i in 1:(n*p)
+        c = A1[i] + A2[i]
+        if c == 0
+            x[i] = 0x00
+        elseif c == 1
+            x[i] = 0x02
+        elseif c == 2
+            x[i] = 0x03
+        else
+            throw(MissingException("matrix shouldn't have missing values!"))
+        end
+    end
+    return x
+end
+
+function simulate_multivariate_traits(;
+    p = 5,    # number of fixed effects, including intercept
+    m = 2,    # number of variance componentsac
+    n = 1000, # number of sample
+    d = 3,    # number of phenotypes per sample
+    q = 1000, # number of SNPs
+    k = 0,    # number of causal SNPs
+    seed::Int = 2023,
+    possible_distributions = [Bernoulli, Poisson, Normal],
+    τtrue = 0.01, # true nuisance parameter used for Gaussian phenoypes (assumes all gaussian phenotype have same variance)
+    Btrue = rand(Uniform(-0.5, 0.5), p, d), # true effect sizes for nongenetic covariates
+    θtrue = fill(0.1, m), # true variance component parameters
+    )
+    m == 1 || m == 2 || error("m (number of VC) must be 1 or 2")
+
+    # sample d marginal distributions for each phenotype within samples
+    Random.seed!(seed)
+    vecdist = rand(possible_distributions, d)
+    veclink = [canonicallink(vecdist[j]()) for j in 1:d]
+
+    # simulate nongenetic coefficient and variance component params
+    Random.seed!(seed)
+    V1 = ones(d, d)
+    V2 = Matrix(I, d, d)
+    Γ = m == 1 ? θtrue[1] * V1 : θtrue[1] * V1 + θtrue[2] * V2
+
+    # simulate non-genetic design matrix
+    Random.seed!(seed)
+    X = [ones(n) randn(n, p - 1)]
+
+    # simulate random SnpArray with q SNPs and randomly choose k SNPs to be causal
+    Random.seed!(seed)
+    G = simulate_random_snparray(undef, n, q)
+    Gfloat = convert(Matrix{Float64}, G, center=true, scale=true)
+    γtrue = zeros(q, d)
+    causal_snps = sample(1:q, k, replace=false) |> sort
+    γtrue[causal_snps, 1] .= rand([-0.2, 0.2], k)
+    for j in 2:d
+        γtrue[causal_snps, j] .= 0.5^j .* γtrue[causal_snps, 1]
+    end
+
+    # sample phenotypes
+    Y = zeros(n, d)
+    y = Vector{Float64}(undef, d)
+    for i in 1:n
+        Xi = X[i, :]
+        Gi = Gfloat[i, :]
+        η = Btrue' * Xi + γtrue' * Gi
+        vecd_tmp = Vector{UnivariateDistribution}(undef, d)
+        for j in 1:d
+            dist = vecdist[j]
+            μj = GLM.linkinv(canonicallink(dist()), η[j])
+            if dist == Normal
+                σ2 = inv(τtrue)
+                σ = sqrt(σ2)
+                vecd_tmp[j] = Normal(μj, σ)
+            else
+                vecd_tmp[j] = dist(μj)
+            end
+        end
+        multivariate_dist = MultivariateMix(vecd_tmp, Γ)
+        res = Vector{Float64}(undef, d)
+        rand(multivariate_dist, y, res)
+        Y[i, :] .= y
+    end
+
+    # form model
+    V = m == 1 ? [V1] : [V1, V2]
+    qc_model = MultivariateCopulaVCModel(Y, X, V, vecdist, veclink)
+    initialize_model!(qc_model)
+
+    return qc_model, G, Btrue, θtrue, γtrue, τtrue
+end
+
+function simulate_longitudinal_traits(;
+    n = 1000, # sample size
+    d_min = 1, # min number of observations per sample
+    d_max = 5, # max number of observations per sample
+    p = 3, # number of nongenetic covariates, including intercept
+    m = 1, # number of variance components
+    q = 1000, # number of SNPs
+    k = 10, # number of causal SNPs
+    maf = 0.5rand(),
+    causal_snp_β = 0.5rand(),
+    τtrue = 0.01, # inverse variance for gaussian case (e.g. σ^2 = 100)
+    seed = 2022,
+    y_distribution = Bernoulli,
+    T = Float64,
+    )
+    Random.seed!(seed)
+    m == 1 || m == 2 || error("m (number of VC) must be 1 or 2")
+    
+    # non-genetic effect sizes
+    Random.seed!(seed)
+    βtrue = [1.0; rand(-0.5:1:0.5, p-1)]
+    dist = y_distribution()
+    link = y_distribution == NegativeBinomial ? LogLink() : canonicallink(dist)
+    Dist = typeof(dist)
+    Link = typeof(link)
+
+    # variance components
+    θtrue = fill(0.1, m)
+
+    # simulate (nongenetic) design matrices
+    Random.seed!(seed)
+    X_full = Matrix{Float64}[]
+    for i in 1:n
+        nobs = rand(d_min:d_max) # number of obs for this sample
+        push!(X_full, hcat(ones(nobs), randn(nobs, p - 1)))
+    end
+    
+    # simulate causal alleles
+    Random.seed!(seed)
+    γtrue = zeros(q)
+    γtrue[1:k] .= causal_snp_β
+    shuffle!(γtrue)
+    
+    # set minor allele freq
+    mafs = fill(maf, q)
+    
+    # simulate random SnpArray with q SNPs with prespecified maf
+    Random.seed!(seed)
+    G = simulate_random_snparray(undef, n, q, mafs=mafs)
+    Gfloat = convert(Matrix{T}, G, center=true, scale=false)
+    
+    # effect of causal alleles
+    η_G = Gfloat * γtrue
+
+    # simulate phenotypes
+    if y_distribution == Normal
+        σ2 = inv(τtrue)
+        σ = sqrt(σ2)
+        obs = Vector{GaussianCopulaVCObs{T}}(undef, n)
+        for i in 1:n
+            # data matrix
+            X = X_full[i]
+            η = X * βtrue
+            η .+= η_G[i] # add genetic effects
+            μ = GLM.linkinv.(link, η)
+            vecd = Vector{ContinuousUnivariateDistribution}(undef, size(X, 1))
+            # VC matrices
+            V1 = ones(size(X, 1), size(X, 1))
+            V2 = Matrix(I, size(X, 1), size(X, 1))
+            Γ = m == 1 ? θtrue[1] * V1 : θtrue[1] * V1 + θtrue[2] * V2
+            for i in 1:size(X, 1)
+                vecd[i] = y_distribution(μ[i], σ)
+            end
+            nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
+            # simuate single vector y
+            y = Vector{T}(undef, size(X, 1))
+            res = Vector{T}(undef, size(X, 1))
+            rand(nonmixed_multivariate_dist, y, res)
+            V = m == 1 ? [V1] : [V1, V2]
+            obs[i] = GaussianCopulaVCObs(y, X, V)
+        end
+        qc_model = GaussianCopulaVCModel(obs)
+    elseif y_distribution == NegativeBinomial
+        rtrue = 1.0
+        obs = Vector{NBCopulaVCObs{T, Dist, Link}}(undef, n)
+        for i in 1:n
+            # data matrix
+            X = X_full[i]
+            η = X * βtrue
+            η .+= η_G[i] # add genetic effects
+            μ = GLM.linkinv.(link, η)
+            p = rtrue ./ (μ .+ rtrue)
+            vecd = [NegativeBinomial(rtrue, p[i]) for i in 1:size(X, 1)]
+            # VC matrices
+            V1 = ones(size(X, 1), size(X, 1))
+            V2 = Matrix(I, size(X, 1), size(X, 1))
+            Γ = m == 1 ? θtrue[1] * V1 : θtrue[1] * V1 + θtrue[2] * V2
+            nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
+            # simuate single vector y
+            y = Vector{Float64}(undef, size(X, 1))
+            res = Vector{Float64}(undef, size(X, 1))
+            rand(nonmixed_multivariate_dist, y, res)
+            V = m == 1 ? [V1] : [V1, V2]
+            obs[i] = NBCopulaVCObs(y, X, V, dist, link)
+        end
+        qc_model = NBCopulaVCModel(obs)
+    else # Bernoulli or Poisson
+        obs = Vector{GLMCopulaVCObs{T, Dist, Link}}(undef, n)
+        for i in 1:n
+            # data matrix
+            X = X_full[i]
+            η = X * βtrue
+            η .+= η_G[i] # add genetic effects
+            μ = GLM.linkinv.(link, η)
+            # VC matrices
+            V1 = ones(size(X, 1), size(X, 1))
+            V2 = Matrix(I, size(X, 1), size(X, 1))
+            Γ = m == 1 ? θtrue[1] * V1 : θtrue[1] * V1 + θtrue[2] * V2
+            vecd = Vector{DiscreteUnivariateDistribution}(undef, size(X, 1))
+            for i in 1:size(X, 1)
+                vecd[i] = y_distribution(μ[i])
+            end
+            nonmixed_multivariate_dist = NonMixedMultivariateDistribution(vecd, Γ)
+            # simuate single vector y
+            y = Vector{T}(undef, size(X, 1))
+            res = Vector{T}(undef, size(X, 1))
+            rand(nonmixed_multivariate_dist, y, res)
+            V = m == 1 ? [V1] : [V1, V2]
+            obs[i] = GLMCopulaVCObs(y, X, V, dist, link)
+        end
+        qc_model = GLMCopulaVCModel(obs)
+    end
+    initialize_model!(qc_model)
+    return qc_model, G, βtrue, θtrue, γtrue, τtrue
 end
