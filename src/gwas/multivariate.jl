@@ -64,13 +64,12 @@ struct MultivariateCopulaVCModel{T <: BlasReal} <: MathProgBase.AbstractNLPEvalu
     nuisance_idx::Vector{Int} # indices that are nuisance parameters, indexing into vecdist
     # working arrays
     t::Vector{T}    # t[k] = tr(V_i[k]) / 2 (this is variable c in VC model)
-    Γ::Matrix{T}      # d × d covariance matrix, in VC model this is θ[1]*V[1] + ... + θ[m]*V[m]
+    # Γ::Matrix{T}      # d × d covariance matrix, in VC model this is θ[1]*V[1] + ... + θ[m]*V[m]
     ∇vecB::Vector{T}  # length pd vector, its the gradient of vec(B) 
     ∇θ::Vector{T}     # length m vector, gradient of variance components
     ∇ϕ::Vector{T}     # length s vector, gradient of nuisance parameters
-    # ∇ϕ::Vector{T}
-    HvecB::Matrix{T}  # pd × pd matrix of Hessian
-    Hθ::Matrix{T}     # m × m matrix of Hessian for variance components
+    # HvecB::Matrix{T}  # pd × pd matrix of Hessian
+    # Hθ::Matrix{T}     # m × m matrix of Hessian for variance components
     # Hϕ::Matrix{T}
     penalized::Bool
 end
@@ -98,12 +97,12 @@ function MultivariateCopulaVCModel(
     # t is variable c in f(θ) = sum ln(1 + θ'b) - sum ln(1 + θ'c) in section 6.2
     # Because all Vs are the same in multivariate analysis, all samples share the same t
     t = [tr(V[k])/2 for k in 1:m]
-    Γ = zeros(T, d, d)
+    # Γ = zeros(T, d, d)
     ∇vecB = zeros(T, p*d)
     ∇θ = zeros(T, m)
     ∇ϕ = zeros(T, s)
-    HvecB = zeros(T, p*d, p*d)
-    Hθ = zeros(T, m, m)
+    # HvecB = zeros(T, p*d, p*d)
+    # Hθ = zeros(T, m, m)
     # construct MultivariateCopulaVCObs that hold intermediate variables for each sample
     data = MultivariateCopulaVCObs{T}[]
     for _ in 1:n
@@ -118,7 +117,7 @@ function MultivariateCopulaVCModel(
         Y, X, V, vecdist, veclink, data,
         n, d, p, m, s, 
         B, θ, ϕ, nuisance_idx, t, 
-        Γ, ∇vecB, ∇θ, ∇ϕ, HvecB, Hθ,
+        ∇vecB, ∇θ, ∇ϕ, 
         penalized
     )
 end
@@ -465,15 +464,16 @@ function loglikelihood!(
         for j in 1:d
             out = @view(qc.∇vecB[(j-1)*p+1:j*p])
             out .*= inv1pq
-            out .+= xi .* qc.w1[j] * qc.res[j]
+            out .+= j in qc_model.nuisance_idx ? xi .* qc.w1[j] * qc.std_res[j] :
+                xi .* qc.w1[j] * qc.res[j]
             # BLAS.gemv!('T', one(T), xi, qc.storage_d, inv1pq, out)
         end
         for (j, idx) in enumerate(qc_model.nuisance_idx)
-            vecB_range = (j-1)*p+1:j*p
+            vecB_range = (idx-1)*p+1:idx*p
             τ = abs(qc_model.ϕ[j])
             sqrtτ = sqrt(τ)
-            rss = abs2(norm(qc.std_res[idx]))
             qc.∇vecB[vecB_range] .*= sqrtτ
+            rss = abs2(norm(qc.std_res[idx]))
             qc.∇ϕ .= (1 - rss + 2qsum * inv1pq) / 2τ
         end
         qc.∇θ .= inv1pq .* qc.q .- inv(1 + tsum) .* qc_model.t
