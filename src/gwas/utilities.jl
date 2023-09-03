@@ -154,9 +154,9 @@ function simulate_random_snparray(s::Union{String, UndefInitializer}, n::Int64,
     A2 = BitArray(undef, n, p) 
     for j in 1:p
         minor_alleles = 0
-        maf = 0
+        maf = NaN
         while minor_alleles <= min_ma
-            maf = 0.5rand()
+            maf = mafs[j] == 0 ? 0.5rand() : mafs[j]
             for i in 1:n
                 A1[i, j] = rand(Bernoulli(maf))
                 A2[i, j] = rand(Bernoulli(maf))
@@ -200,6 +200,7 @@ function simulate_multivariate_traits(;
     τtrue = 0.01, # true nuisance parameter used for Gaussian phenoypes (assumes all gaussian phenotype have same variance)
     Btrue = rand(Uniform(-0.5, 0.5), p, d), # true effect sizes for nongenetic covariates
     θtrue = fill(0.1, m), # true variance component parameters
+    maf = 0.5rand(),
     )
     m == 1 || m == 2 || error("m (number of VC) must be 1 or 2")
 
@@ -218,9 +219,12 @@ function simulate_multivariate_traits(;
     Random.seed!(seed)
     X = [ones(n) randn(n, p - 1)]
 
+    # set minor allele freq
+    mafs = fill(maf, q)
+
     # simulate random SnpArray with q SNPs and randomly choose k SNPs to be causal
     Random.seed!(seed)
-    G = simulate_random_snparray(undef, n, q)
+    G = simulate_random_snparray(undef, n, q, mafs=mafs)
     Gfloat = convert(Matrix{Float64}, G, center=true, scale=true)
     γtrue = zeros(q, d)
     causal_snps = sample(1:q, k, replace=false) |> sort
@@ -311,8 +315,8 @@ function simulate_longitudinal_traits(;
     # simulate random SnpArray with q SNPs with prespecified maf
     Random.seed!(seed)
     G = simulate_random_snparray(undef, n, q, mafs=mafs)
-    Gfloat = convert(Matrix{T}, G, center=true, scale=false)
-    
+    Gfloat = convert(Matrix{T}, G, center=true, scale=true)
+
     # effect of causal alleles
     η_G = Gfloat * γtrue
 

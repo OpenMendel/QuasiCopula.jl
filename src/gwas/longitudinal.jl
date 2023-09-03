@@ -51,8 +51,8 @@ function GWASCopulaVCModel(
     maxd = maxclustersize(qc_model)
     T = eltype(qc_model.data[1].X)
     n == length(qc_model.data) || error("sample size do not agree")
-    # any(x -> abs(x) > 1e-2, qc_model.∇β) && error("Null model gradient of beta is not zero!")
-    # any(x -> abs(x) > 1e-2, qc_model.∇θ) && error("Null model gradient of variance components is not zero!")
+    any(x -> abs(x) > 1e-1, qc_model.∇β) && error("Null model gradient of beta is not zero!")
+    any(x -> abs(x) > 1e-1, qc_model.∇θ) && error("Null model gradient of variance components is not zero!")
 
     # preallocated arrays for efficiency
     z = zeros(T, n)
@@ -108,9 +108,9 @@ function GWASCopulaVCModel(
         S = R * inv(Q - dot(W, Pinv, W)) * R
         pvals[j] = ccdf(χ2, S)
     end
-    @show Wtime
-    @show Qtime
-    @show Rtime
+    # @show Wtime
+    # @show Qtime
+    # @show Rtime
     return pvals
 end
 

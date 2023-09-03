@@ -468,6 +468,7 @@ function loglikelihood!(
                 xi .* qc.w1[j] * qc.res[j]
             # BLAS.gemv!('T', one(T), xi, qc.storage_d, inv1pq, out)
         end
+        # Gaussian case: compute ∇τ and unto scaling by τ
         for (j, idx) in enumerate(qc_model.nuisance_idx)
             vecB_range = (idx-1)*p+1:idx*p
             τ = abs(qc_model.ϕ[j])

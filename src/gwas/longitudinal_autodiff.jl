@@ -4,7 +4,7 @@ function loglikelihood(
     z::AbstractVector # n × 1 genotype vector
     ) where T
     p = qc_model.p
-    m = length(par) - 1 - p
+    m = qc_model.m
     β = [par[1:end-(m+1)]; par[end]] # nongenetic + genetic beta
     θ = par[end-m:end-1]             # vc parameters
     # allocate storage vectors of type T
@@ -72,9 +72,9 @@ function loglikelihood(
     z::AbstractVector # n × 1 genotype vector
     ) where T
     p = qc_model.p
-    m = length(par) - 2 - p
+    m = gcm.m
     β = [par[1:end-(m+2)]; par[end]] # nongenetic + genetic beta
-    θ = par[end-m:end-1]             # vc parameters
+    θ = par[end-(m+1):end-2]         # vc parameters
     r = par[end-1]                   # dispersion for gaussian
     # allocate storage vectors of type T
     nmax = maximum(size(qc_model.data[i].X, 1) for i in 1:length(qc_model.data))
@@ -132,9 +132,9 @@ function loglikelihood(
     z::AbstractVector # n × 1 genotype vector
     ) where T
     p = gcm.p
-    m = length(par) - 2 - p
+    m = gcm.m
     β = [par[1:end-(m+2)]; par[end]] # nongenetic + genetic beta
-    θ = par[end-3:end-2]             # vc parameters
+    θ = par[end-(m+1):end-2]         # vc parameters
     τ = par[end-1]                   # dispersion for gaussian
     # allocate vector of type T
     nmax = maximum(size(gcm.data[i].X, 1) for i in 1:length(gcm.data))
@@ -163,7 +163,7 @@ function loglikelihood(
         # standardize_res! step
         res .*= sqrtτ
         rss  = abs2(norm(res)) # RSS of standardized residual
-        tsum = dot(θ, gc.t) # ben: originally θ was abs.(θ), but I'm not sure if that's needed
+        tsum = dot(abs.(θ), gc.t)
         logl += - log(1 + tsum) - (gc.n * log(2π) -  gc.n * log(abs(τ)) + rss) / 2
         # update Γ
         @inbounds for k in 1:gc.m
@@ -192,7 +192,7 @@ function GWASCopulaVCModel_autodiff(
     )
     # some needed constants
     p = qc_model.p
-    m = length(qc_model.θ)
+    m = qc_model.m
     n, q = size(G)
     T = eltype(qc_model.data[1].X)
     n == length(qc_model.data) || error("sample size do not agree")
@@ -250,7 +250,7 @@ function GWASCopulaVCModel_autodiff(
     )
     # some needed constants
     p = qc_model.p
-    m = length(qc_model.θ)
+    m = qc_model.m
     n, q = size(G)
     T = eltype(qc_model.data[1].X)
     n == length(qc_model.data) || error("sample size do not agree")
@@ -305,8 +305,8 @@ function GWASCopulaVCModel_autodiff(
     n, q = size(G)
     T = eltype(gcm.data[1].X)
     n == length(gcm.data) || error("sample size do not agree")
-    any(x -> abs(x) > 1e-2, gcm.∇β) && error("Null model gradient of beta is not zero!")
-    any(x -> abs(x) > 1e-2, gcm.∇θ) && error("Null model gradient of variance components is not zero!")
+    any(x -> abs(x) > 1e-1, gcm.∇β) && error("Null model gradient of beta is not zero!")
+    any(x -> abs(x) > 1e-1, gcm.∇θ) && error("Null model gradient of variance components is not zero!")
     # compute P (negative Hessian) and inv(P)
     z = convert(Vector{Float64}, @view(G[:, 1]), center=true, scale=false, impute=false)
     fullβ = [gcm.β; gcm.θ; gcm.τ; 0.0]

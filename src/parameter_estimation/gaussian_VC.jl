@@ -185,7 +185,7 @@ function loglikelihood!(
         end
         gc.q[k] = dot(gc.res, gc.storage_n) / 2 # gc.q = 0.5 res' * V[k] * res = 0.5τ(y-Xb)^t*V*(y-Xb)
     end
-    qsum  = dot(θ, gc.q) # qsum = 0.5r(β)*Γ*r(β) where r = (y-Xb) * sqrt(τ)
+    qsum  = dot(abs.(θ), gc.q) # qsum = 0.5r(β)*Γ*r(β) where r = (y-Xb) * sqrt(τ)
     logl += log(1 + qsum)
     # add L2 ridge penalty
     if penalized

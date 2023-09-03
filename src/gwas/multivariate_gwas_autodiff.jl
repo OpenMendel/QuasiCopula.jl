@@ -10,6 +10,10 @@ function multivariateGWAS_autodiff(
     s = count(x -> typeof(x) <: Normal, qc_model.vecdist) # number of nuisance parameters (only Gaussian for now)
     T = eltype(qc_model.X)
     n == length(qc_model.data) || error("sample size do not agree")
+    any(x -> abs(x) > 1e-1, qc_model.∇vecB) && 
+        error("Null model gradient of beta is not zero!")
+    any(x -> abs(x) > 1e-1, qc_model.∇θ) && 
+        error("Null model gradient of variance components is not zero!")
 
     # define autodiff likelihood, gradient, and Hessians
     autodiff_loglikelihood(vecB) = loglikelihood(vecB, qc_model, z)
