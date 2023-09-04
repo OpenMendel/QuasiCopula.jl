@@ -99,13 +99,15 @@ function GWASCopulaVCModel(
             Rtime += @elapsed R += calculate_Ri(qc_model, i, @view(zi[1:d]), Γ, ∇resγ, denom)
         end
         # score test
+        S = R * inv(Q - dot(W, Pinv, W)) * R
+        # @show Pinv
         # @show R
         # @show Q
         # @show W
+        # @show S
         # if j == 1
         #     fdsa
         # end
-        S = R * inv(Q - dot(W, Pinv, W)) * R
         pvals[j] = ccdf(χ2, S)
     end
     # @show Wtime
@@ -116,27 +118,41 @@ end
 
 # update W expression for 1 sample
 # i stands for sample i, and zi is a d-vector of SNP value
-function update_W!(W, qc_model, i::Int, zi::AbstractVector, Γ, ∇resβ, ∇resγ, storages::Storages)
+function update_W!(W, qc_model::GLMCopulaVCModel, i::Int, zi::AbstractVector, Γ, ∇resβ, ∇resγ, storages::Storages)
     p, m = qc_model.p, qc_model.m
     qc = qc_model.data[i]
     Hβγ_i = get_Hβγ_i(qc, Γ, ∇resβ, ∇resγ, zi, qc_model.β, storages) # exact
-    Hθγ_i = get_Hθγ_i(qc, qc_model.θ, ∇resγ, storages) # exact
+    Hθγ_i = get_neg_Hθγ_i(qc, qc_model.θ, ∇resγ, storages) # exact
     for j in 1:p
         W[j] += Hβγ_i[j]
     end
     for j in 1:m
         W[p + j] += Hθγ_i[j]
     end
-    if typeof(qc_model) <: GaussianCopulaVCModel
-        W[end] += get_Hτγ_i(qc, zi, qc_model.θ, qc_model.τ[1]) # exact
+    return W
+end
+
+function update_W!(W, qc_model::GaussianCopulaVCModel, i::Int, zi::AbstractVector, Γ, ∇resβ, ∇resγ, storages::Storages)
+    p, m = qc_model.p, qc_model.m
+    qc = qc_model.data[i]
+    Hβγ_i = get_Hβγ_i(qc, Γ, ∇resβ, ∇resγ, zi, qc_model.β, qc_model.τ[1], storages) # exact
+    Hθγ_i = get_neg_Hθγ_i(qc, qc_model.θ, ∇resγ, storages) # exact
+    for j in 1:p
+        W[j] -= Hβγ_i[j]
     end
+    for j in 1:m
+        W[p + j] -= Hθγ_i[j]
+    end
+    W[end] -= get_Hτγ_i(qc, zi, qc_model.θ, qc_model.τ[1]) # exact
     return W
 end
 
 function calculate_Ri(qc_model::GaussianCopulaVCModel, i::Int, zi::AbstractVector, Γ, ∇resγ, denom)
+    τ = qc_model.τ[1]
     qc = qc_model.data[i]
-    res = qc.res # y - Xb
-    return Transpose(zi) * qc.res + (∇resγ' * Γ * res) / denom
+    res = qc.y - qc.X * qc_model.β # y - Xb
+    tmp = Transpose(zi) * Γ * res
+    return τ * (Transpose(zi) * res - Transpose(zi) * Γ * res / denom)
 end
 
 function calculate_Ri(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, i::Int, zi::AbstractVector, Γ, ∇resγ, denom)
@@ -147,23 +163,14 @@ end
 
 function calculate_Qi(qc_model::GaussianCopulaVCModel, i::Int, zi::AbstractVector, Γ, ∇resγ, denom, denom2)
     qc = qc_model.data[i]
-    res = qc.res
+    res = qc.y - qc.X*qc_model.β
     d = qc_model.data[i].n # number of observation for sample i
+    τ = qc_model.τ[1]
 
-    Qi = Transpose(zi) * zi
-    Qi += (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2 # 2nd term
-    Qi -= ∇resγ' * Γ * ∇resγ / denom # 3rd term
-    η = qc.X * qc_model.β
-    μ = η
-    dist = Normal()
-    link = IdentityLink()
-    varμ = GLM.glmvar.(dist, μ)
-    ek = zeros(d)
-    for k in 1:d
-        fill!(ek, 0)
-        ek[k] = 1
-        Qi -= (ek' * Γ * res * dβdβ_res_ij(dist, link, zi[1], η[k], μ[k], varμ[k], res[k])) / denom
-    end
+    Qi = τ * Transpose(zi) * zi # 1st term
+    Qi -= τ * Transpose(zi) * Γ * zi / denom # 2nd term
+    tmp =  Transpose(zi) * Γ * res
+    Qi += τ^2 * tmp * tmp' / denom2 # 3rd term
     return Qi
 end
 
@@ -284,18 +291,18 @@ function get_Hβθ(qc_model::GaussianCopulaVCModel)
     return hess_math
 end
 
-function get_Hθγ_i(qc, θ, ∇resγ, storages::Storages)
-    m = length(qc.V)  # number of variance components
-    r = qc.res
-    Ω = qc.V
+function get_neg_Hθγ_i(gc, θ, ∇resγ, storages::Storages)
+    m = length(gc.V)  # number of variance components
+    r = gc.res
+    Ω = gc.V
     b = [0.5r' * Ω[k] * r for k in 1:m]
     A = hcat([∇resγ' * Ω[k] * r for k in 1:m]...)
     # calculate Hγθ, then return Hθγ = Hγθ'
-    Hγθ = A ./ (1 + θ'*b) - (A*θ ./ (1 + θ'*b)^2) * b'
+    Hγθ = (A*θ ./ (1 + θ'*b)^2) * b' - A ./ (1 + θ'*b)
     return Hγθ'
 end
 
-function get_Hβγ_i(qc::Union{GLMCopulaVCObs, NBCopulaVCObs}, Γ, ∇resβ, ∇resγ, z::AbstractVector, β, storages::Storages) # z is a vector of SNP value (length d)
+function get_Hβγ_i(qc::GLMCopulaVCObs, Γ, ∇resβ, ∇resγ, z::AbstractVector, β, storages::Storages) # z is a vector of SNP value (length d)
     res = qc.res
     denom = storages.denom
     denom2 = storages.denom2
@@ -320,32 +327,19 @@ function get_Hβγ_i(qc::Union{GLMCopulaVCObs, NBCopulaVCObs}, Γ, ∇resβ, ∇
     end
     return Hβγ_i
 end
-# need to distinguish for gaussian case because Hessian is defined differently and η is not defined
-function get_Hβγ_i(qc::GaussianCopulaVCObs, Γ, ∇resβ, ∇resγ, z::AbstractVector, β, storages::Storages) # z is a vector of SNP value (length d)
-    res = qc.res
-    denom = 1 + 0.5 * (res' * Γ * res)
-    denom2 = abs2(denom)
+
+function get_Hβγ_i(qc::GaussianCopulaVCObs, Γ, ∇resβ, ∇resγ, z::AbstractVector, β, τ, storages::Storages) # z is a vector of SNP value (length d)
+    res = qc.y - qc.X * β
+    denom = 1 + 0.5τ * (res' * Γ * res)
     # 1st Hessian term
-    Hβγ_i = Transpose(qc.X) * z
+    Hβγ_i = -τ * Transpose(qc.X) * z
     # 2nd Hessian term
-    Hβγ_i += (∇resβ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
-    # 3rd Hessian terms
-    Hβγ_i -= ∇resβ' * Γ * ∇resγ / denom
-    # 4th Hessian term
-    ej = zeros(qc.n)
-    η = qc.X * β
-    μ = η
-    dist = Normal()
-    link = IdentityLink()
-    varμ = GLM.glmvar.(dist, μ)
-    res = qc.res
-    for j in 1:qc.n
-        fill!(ej, 0)
-        ej[j] = 1
-        xj = qc.X[j, :]
-        zi = z[1]
-        Hβγ_i -= dot(ej, Γ, res) * dγdβresβ_ij(dist, link, xj, zi, η[j], μ[j], varμ[j], res[j]) / denom
-    end
+    res = qc.y - (qc.X * β)
+    Hβγ_i += τ * Transpose(qc.X) * Γ * z / denom
+    # 3rd term
+    tmp1 = Transpose(qc.X) * Γ * res
+    tmp2 = Transpose(z) * Γ * res
+    Hβγ_i -= τ^2 * tmp1 * tmp2' / denom^2
     return Hβγ_i
 end
 
@@ -396,43 +390,26 @@ function get_Hββ(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel})
 end
 # must distinguish for gaussian case because it doesn't have ∇resβ precomputed
 function get_Hββ(qc_model::GaussianCopulaVCModel)
-    # Hββ from loglikelihood! seems to be some kind of approximate Hessian
-    # loglikelihood!(qc_model, true, true)
-    # @show qc_model.Hβ
     p = length(qc_model.β)
     T = eltype(qc_model.β)
-    H = zeros(T, p, p)    
+    H = zeros(T, p, p)
+    τ = qc_model.τ[1]
     # loop over samples
-    for (i, qc) in enumerate(qc_model.data)
-        d = qc.n # number of observations for current sample
+    for qc in qc_model.data
+        d = qc.n
         # GLM term
-        H -= Transpose(qc.X) * qc.X
+        H -= τ .* (Transpose(qc.X) * qc.X)
         # 2nd term
-        res = qc.res # d × 1 standardized residuals
-        # ∇resβ = qc.∇resβ # d × p
-        ∇resβ = -sqrt(qc_model.τ[1]) .* qc.X # see end of 11.3.1 https://arxiv.org/abs/2205.03505
+        res = qc.y - qc.X * qc_model.β
         Γ = zeros(T, d, d)
         for k in 1:qc.m # loop over variance components
             Γ .+= qc_model.θ[k] .* qc.V[k]
         end
-        denom = 1 + 0.5 * (res' * Γ * res)
-        H -= (∇resβ' * Γ * res) * (∇resβ' * Γ * res)' / denom^2
+        denom = 1 + 0.5τ * (res' * Γ * res)
+        H += τ * Transpose(qc.X) * Γ * qc.X / denom
         # 3rd term
-        H += (∇resβ' * Γ * ∇resβ) / denom
-        # 4th term
-        ej = zeros(d)
-        η = qc.X * qc_model.β
-        μ = η
-        dist = Normal()
-        link = IdentityLink()
-        varμ = GLM.glmvar.(dist, μ)
-        res = qc.res
-        for j in 1:d
-            fill!(ej, 0)
-            ej[j] = 1
-            xj = qc.X[j, :]
-            H += (ej' * Γ * res * dβdβ_res_ij(dist, link, xj, η[j], μ[j], varμ[j], res[j])) / denom
-        end
+        tmp = Transpose(qc.X) * Γ * res
+        H -= τ^2 * tmp * tmp' / denom^2
     end
     return H
 end

@@ -205,7 +205,7 @@ function GWASCopulaVCModel_autodiff(
     ∇logl! = (grad, x) -> ForwardDiff.gradient!(grad, autodiff_loglikelihood, x)
     ∇²logl! = (hess, x) -> ForwardDiff.hessian!(hess, autodiff_loglikelihood, x)
     # compute P (negative Hessian) and inv(P)
-    z = convert(Vector{Float64}, @view(G[:, 1]), center=true, scale=false, impute=false)
+    z = convert(Vector{Float64}, @view(G[:, 1]), center=true, scale=false, impute=true)
     fullβ = [qc_model.β; qc_model.θ; 0.0]
     Hfull = ∇²logl(fullβ)
     Pinv = inv(-Hfull[1:end-1, 1:end-1])
@@ -215,7 +215,7 @@ function GWASCopulaVCModel_autodiff(
     W = zeros(T, p + m)
     for j in 1:q
         # grab current SNP needed in logl (z used by autodiff grad and hess)
-        SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=false)
+        SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=true)
         # compute W/Q/R using in-place versions of ForwardDiff grad/hess
         ∇²logl!(Hfull, fullβ)
         for i in eachindex(W)
@@ -230,12 +230,12 @@ function GWASCopulaVCModel_autodiff(
         # Q = -Hfull[end, end]
         # R = ∇logl(fullβ)[end]
 
-        # @show R
-        # @show Q
-        # @show W
-        # if j == 1
-        #     fdsa
-        # end
+        @show R
+        @show Q
+        @show W
+        if j == 1
+            fdsa
+        end
 
         S = R * inv(Q - W'*Pinv*W) * R
         pval = ccdf(Chisq(1), S)
@@ -261,7 +261,7 @@ function GWASCopulaVCModel_autodiff(
     ∇logl = x -> ForwardDiff.gradient(autodiff_loglikelihood, x)
     ∇²logl = x -> ForwardDiff.hessian(autodiff_loglikelihood, x)
     # compute P (negative Hessian) and inv(P)
-    z = convert(Vector{Float64}, @view(G[:, 1]), center=true, scale=false, impute=false)
+    z = convert(Vector{Float64}, @view(G[:, 1]), center=true, scale=false, impute=true)
     fullβ = [qc_model.β; qc_model.θ; qc_model.r; 0.0]
     Hfull = ∇²logl(fullβ)
     @show size(Hfull, 1)
@@ -273,7 +273,7 @@ function GWASCopulaVCModel_autodiff(
     W = zeros(T, p + m)
     for j in 1:q
         # grab current SNP needed in logl (z used by autodiff grad and hess)
-        SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=false)
+        SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=true)
         # compute W/Q/R
         Hfull = ∇²logl(fullβ)
         W = -Hfull[1:end-1, end]
@@ -308,7 +308,7 @@ function GWASCopulaVCModel_autodiff(
     any(x -> abs(x) > 1e-1, gcm.∇β) && error("Null model gradient of beta is not zero!")
     any(x -> abs(x) > 1e-1, gcm.∇θ) && error("Null model gradient of variance components is not zero!")
     # compute P (negative Hessian) and inv(P)
-    z = convert(Vector{Float64}, @view(G[:, 1]), center=true, scale=false, impute=false)
+    z = convert(Vector{Float64}, @view(G[:, 1]), center=true, scale=false, impute=true)
     fullβ = [gcm.β; gcm.θ; gcm.τ; 0.0]
     Hfull = ∇²logl(fullβ)
     Pinv = inv(-Hfull[1:end-1, 1:end-1])
@@ -316,7 +316,7 @@ function GWASCopulaVCModel_autodiff(
     pvals = zeros(T, q)
     for j in 1:q
         # grab current SNP needed in logl (z used by autodiff grad and hess)
-        SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=false)
+        SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=true)
         # compute W/Q/R
         Hfull = ∇²logl(fullβ)
         W = -Hfull[1:end-1, end]
@@ -325,11 +325,12 @@ function GWASCopulaVCModel_autodiff(
         S = R * inv(Q - W'*Pinv*W) * R
         pval = ccdf(Chisq(1), S)
         pvals[j] = pval == 0 ? 1 : pval
-
+        # @show Pinv
         # @show R
         # @show Q
         # @show W
-        # j == 3 && fdsa
+        # @show S
+        # j == 1 && fdsa
 
     end
     return pvals
