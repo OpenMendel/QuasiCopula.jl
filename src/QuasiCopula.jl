@@ -22,6 +22,7 @@ export Poisson_Bernoulli_VCObs, Poisson_Bernoulli_VCModel
 export MixedCopulaVCObs, MixedCopulaVCModel
 export MultivariateCopulaVCModel
 export GWASCopulaVCModel_autodiff
+export GWASCopulaVCModel_autodiff_fast
 export multivariateGWAS_autodiff
 # for GWAS simulations
 export simulate_random_snparray
@@ -57,6 +58,7 @@ include("model_interface/VC_interface.jl")
 include("model_interface/show_io.jl")
 include("gwas/longitudinal.jl")
 include("gwas/longitudinal_autodiff.jl")
+include("gwas/longitudinal_autodiff_fast.jl")
 include("gwas/multivariate.jl")
 # include("gwas/multivariate_gwas.jl")
 include("gwas/multivariate_gwas_autodiff.jl")
