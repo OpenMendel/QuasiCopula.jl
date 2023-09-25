@@ -24,7 +24,7 @@ function multivariateGWAS_autodiff(
 
     # compute P (negative Hessian) and inv(P)
     z = convert(Vector{Float64}, @view(G[:, 2]), center=true, scale=true, impute=true)
-    fullβ = [vec(qc_model.B); qc_model.θ; zeros(d)]
+    fullβ = [vec(qc_model.B); qc_model.θ; qc_model.ϕ; zeros(d)]
     Hfull = ∇²logl(fullβ)
     Pinv = inv(-Hfull[1:end-d, 1:end-d])
 
@@ -69,10 +69,12 @@ function loglikelihood(
 
     # parameters
     p, d = size(qc_model.B)
-    m = length(par) - p*d - d          # number of variance components
+    m = qc_model.m                     # number of variance components
+    s = qc_model.s                     # number of nuisance parameters 
     B = reshape(par[1:p*d], p, d)      # nongenetic covariates
+    θ = par[p*d+1:p*d+m]               # vc parameters
+    τ = par[p*d+m+1:p*d+m+s]           # nuisance parameters
     γ = par[end-d+1:end]               # genetic beta
-    θ = par[end-m-d+1:end-d]           # vc parameters
 
     # storages friendly to autodiff
     ηstore = zeros(T, d)

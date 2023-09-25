@@ -384,38 +384,6 @@ function loglikelihood!(
     # update residuals and its gradient
     update_res!(qc_model, i)
     std_res_differential!(qc_model, i) # compute ∇resβ
-
-
-
-    # xi = @view(qc_model.X[i, :])
-    # yi = @view(qc_model.Y[i, :])
-    # B = qc_model.B
-    # @show yi
-    # @show qc_model.data[1].μ
-    # @show qc_model.data[1].res
-    # @show qc_model.data[1].std_res
-    # @show qc_model.data[1].∇resβ
-    # @show qc_model.ϕ
-    # counter = 1
-    # for j in 1:d
-    #     βj = @view(B[:, j])
-    #     correct_eta = dot(xi, βj)
-    #     correct_mu = GLM.linkinv(qc_model.veclink[j], correct_eta)
-    #     correct_res = yi[j] - correct_mu
-    #     if typeof(qc_model.vecdist[j]) <: Normal
-    #         correct_std_res = correct_res * sqrt(qc_model.ϕ[counter])
-    #         counter += 1
-    #     else
-    #         correct_std_res = correct_res / sqrt(GLM.glmvar(qc_model.vecdist[j], correct_mu))
-    #     end
-    #     # @show correct_res
-    #     @show correct_std_res
-    # end
-    # fdsa
-
-
-
-
     # loglikelihood term 2 i.e. sum sum ln(f_ij | β)
     logl = QuasiCopula.component_loglikelihood(qc_model, i)
     # loglikelihood term 1 i.e. -sum ln(1 + 0.5tr(Γ(θ)))
@@ -459,7 +427,7 @@ function loglikelihood!(
             # # Hessian of ϕ (todo)
             # # gc.Hϕ[1, 1] = - abs2(qsum * inv1pq / ϕ)
         end
-        # compute gradient of loglikelihood = X'*Diagonal(dg/varμ)*(y-μ) + ∇r'Γr/(1 + 0.5r'Γr)
+        # compute X'*Diagonal(dg/varμ)*(y-μ) + ∇r'Γr/(1+0.5r'Γr)  (gradient of logl wrt vecB)
         xi = @view(qc_model.X[i, :])
         for j in 1:d
             out = @view(qc.∇vecB[(j-1)*p+1:j*p])
@@ -474,8 +442,8 @@ function loglikelihood!(
             τ = abs(qc_model.ϕ[j])
             sqrtτ = sqrt(τ)
             qc.∇vecB[vecB_range] .*= sqrtτ
-            rss = abs2(norm(qc.std_res[idx]))
-            qc.∇ϕ .= (1 - rss + 2qsum * inv1pq) / 2τ
+            rss = abs2(qc.std_res[idx])
+            qc.∇ϕ[j] = (1 - rss + 2qsum * inv1pq) / 2τ
         end
         qc.∇θ .= inv1pq .* qc.q .- inv(1 + tsum) .* qc_model.t
         if qc_model.penalized
