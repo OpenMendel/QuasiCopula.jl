@@ -189,6 +189,7 @@ end
 function GWASCopulaVCModel_autodiff(
     qc_model::GLMCopulaVCModel,
     G::SnpArray;
+    check_grad::Bool=true
     )
     # some needed constants
     p = qc_model.p
@@ -196,8 +197,8 @@ function GWASCopulaVCModel_autodiff(
     n, q = size(G)
     T = eltype(qc_model.data[1].X)
     n == length(qc_model.data) || error("sample size do not agree")
-    any(x -> abs(x) > 1e-2, qc_model.∇β) && error("Null model gradient of beta is not zero!")
-    any(x -> abs(x) > 1e-2, qc_model.∇θ) && error("Null model gradient of variance components is not zero!")
+    check_grad && any(x -> abs(x) > 1e-2, qc_model.∇β) && error("Null model gradient of beta is not zero!")
+    check_grad && any(x -> abs(x) > 1e-2, qc_model.∇θ) && error("Null model gradient of variance components is not zero!")
     # define autodiff likelihood, gradient, and Hessians
     autodiff_loglikelihood(β) = loglikelihood(β, qc_model, z)
     ∇logl = x -> ForwardDiff.gradient(autodiff_loglikelihood, x)
@@ -213,7 +214,7 @@ function GWASCopulaVCModel_autodiff(
     pvals = zeros(T, q)
     grad_store = zeros(T, p + m + 1)
     W = zeros(T, p + m)
-    for j in 1:q
+    @showprogress for j in 1:q
         # grab current SNP needed in logl (z used by autodiff grad and hess)
         SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=true)
         # compute W/Q/R using in-place versions of ForwardDiff grad/hess
@@ -247,6 +248,7 @@ end
 function GWASCopulaVCModel_autodiff(
     qc_model::NBCopulaVCModel,
     G::SnpArray;
+    check_grad::Bool=true
     )
     # some needed constants
     p = qc_model.p
@@ -254,8 +256,8 @@ function GWASCopulaVCModel_autodiff(
     n, q = size(G)
     T = eltype(qc_model.data[1].X)
     n == length(qc_model.data) || error("sample size do not agree")
-    # any(x -> abs(x) > 1e-2, qc_model.∇β) && error("Null model gradient of beta is not zero!")
-    # any(x -> abs(x) > 1e-2, qc_model.∇θ) && error("Null model gradient of variance components is not zero!")
+    check_grad && any(x -> abs(x) > 1e-2, qc_model.∇β) && error("Null model gradient of beta is not zero!")
+    check_grad && any(x -> abs(x) > 1e-2, qc_model.∇θ) && error("Null model gradient of variance components is not zero!")
     # define autodiff likelihood, gradient, and Hessians
     autodiff_loglikelihood(β) = loglikelihood(β, qc_model, z)
     ∇logl = x -> ForwardDiff.gradient(autodiff_loglikelihood, x)
@@ -271,7 +273,7 @@ function GWASCopulaVCModel_autodiff(
     # score test for each SNP
     pvals = zeros(T, q)
     W = zeros(T, p + m)
-    for j in 1:q
+    @showprogress for j in 1:q
         # grab current SNP needed in logl (z used by autodiff grad and hess)
         SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=true)
         # compute W/Q/R
@@ -296,6 +298,7 @@ end
 function GWASCopulaVCModel_autodiff(
     gcm::GaussianCopulaVCModel,
     G::SnpArray;
+    check_grad::Bool=true
     )
     # define autodiff likelihood, gradient, and Hessians
     autodiff_loglikelihood(β) = loglikelihood(β, gcm, z)
@@ -305,8 +308,8 @@ function GWASCopulaVCModel_autodiff(
     n, q = size(G)
     T = eltype(gcm.data[1].X)
     n == length(gcm.data) || error("sample size do not agree")
-    any(x -> abs(x) > 1e-1, gcm.∇β) && error("Null model gradient of beta is not zero!")
-    any(x -> abs(x) > 1e-1, gcm.∇θ) && error("Null model gradient of variance components is not zero!")
+    check_grad && any(x -> abs(x) > 1e-1, gcm.∇β) && error("Null model gradient of beta is not zero!")
+    check_grad && any(x -> abs(x) > 1e-1, gcm.∇θ) && error("Null model gradient of variance components is not zero!")
     # compute P (negative Hessian) and inv(P)
     z = convert(Vector{Float64}, @view(G[:, 1]), center=true, scale=false, impute=true)
     fullβ = [gcm.β; gcm.θ; gcm.τ; 0.0]
@@ -314,7 +317,7 @@ function GWASCopulaVCModel_autodiff(
     Pinv = inv(-Hfull[1:end-1, 1:end-1])
     # score test for each SNP
     pvals = zeros(T, q)
-    for j in 1:q
+    @showprogress for j in 1:q
         # grab current SNP needed in logl (z used by autodiff grad and hess)
         SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=true)
         # compute W/Q/R

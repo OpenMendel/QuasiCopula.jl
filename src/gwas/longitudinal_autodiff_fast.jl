@@ -11,7 +11,7 @@ function loglikelihood(
     p = qc_model.p
     m = qc_model.m
     β = [par[1:end-(m+1)]; par[end]] # nongenetic + genetic beta
-    θ = par[end-m:end-1]             # vc parameters
+    θ = @view(par[end-m:end-1])             # vc parameters
     T = eltype(par)
     # allocate storage vectors of type T
     nmax = maximum(size(qc_model.data[i].X, 1) for i in 1:length(qc_model.data))
@@ -35,19 +35,15 @@ function loglikelihood(
         copyto!(X, gc.X)
         X[:, end] .= z[i]
         y = gc.y
-        # update_res! step (need to avoid BLAS)
+        # update_res! + standardize_res! step (need to avoid BLAS)
         A_mul_b!(η, X, β)
         for j in 1:gc.n
             μ[j] = GLM.linkinv(gc.link, η[j])
             varμ[j] = GLM.glmvar(gc.d, μ[j]) # Note: for negative binomial, d.r is used
-            res[j] = y[j] - μ[j]
-        end
-        # standardize_res! step
-        for j in eachindex(y)
-            res[j] /= sqrt(varμ[j])
+            res[j] = (y[j] - μ[j]) / sqrt(varμ[j])
         end
         # update Γ
-        @inbounds for k in 1:gc.m
+        for k in 1:gc.m
             A_mul_b!(storage_n, gc.V[k], res)
             q[k] = dot(res, storage_n) / 2 # q[k] = 0.5 r' * V[k] * r (update variable b for variance component model)
         end
@@ -66,6 +62,7 @@ end
 function GWASCopulaVCModel_autodiff_fast(
     qc_model::GLMCopulaVCModel,
     G::SnpArray;
+    check_grad::Bool=true
     )
     # some needed constants
     p = qc_model.p
@@ -73,8 +70,11 @@ function GWASCopulaVCModel_autodiff_fast(
     n, q = size(G)
     T = eltype(qc_model.data[1].X)
     n == length(qc_model.data) || error("sample size do not agree")
-    any(x -> abs(x) > 1e-2, qc_model.∇β) && error("Null model gradient of beta is not zero!")
-    any(x -> abs(x) > 1e-2, qc_model.∇θ) && error("Null model gradient of variance components is not zero!")
+    check_grad && any(x -> abs(x) > 1e-2, qc_model.∇β) && error("Null model gradient of beta is not zero!")
+    check_grad && any(x -> abs(x) > 1e-2, qc_model.∇θ) && error("Null model gradient of variance components is not zero!")
+    # timers 
+    grad_time = 0.0
+    hess_time = 0.0
     # estimated parameters
     β = qc_model.β
     θ = qc_model.θ
@@ -94,19 +94,19 @@ function GWASCopulaVCModel_autodiff_fast(
     end
     get_grad_last(γ) = ForwardDiff.derivative(loglikelihood, γ)
     # compute P (negative Hessian) and inv(P)
-    z = convert(Vector{Float64}, @view(G[:, 1]), center=true, scale=false, impute=true)
+    z = convert(Vector{Float64}, @view(G[:, 1]))
     Hfull = ForwardDiff.hessian(loglikelihood, par)
     Pinv = inv(-Hfull[1:end-1, 1:end-1])
     # storages
     pvals = zeros(T, q)
     W = zeros(T, p + m)
     # score test for each SNP
-    for j in 1:q
+    @showprogress for j in 1:q
         # sync SNP values
         SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=true)
         # compute W/Q/R
-        R = get_grad_last(0.0)
-        Hlast = hessian_column(par)
+        grad_time += @elapsed R = get_grad_last(0.0)
+        hess_time += @elapsed Hlast = hessian_column(par)
         Hlast .*= -1
         W .= @view(Hlast[1:end-1])
         Q = Hlast[end]
@@ -120,5 +120,68 @@ function GWASCopulaVCModel_autodiff_fast(
         pval = ccdf(Chisq(1), S)
         pvals[j] = pval == 0 ? 1 : pval
     end
+    println("grad time = ", grad_time)
+    println("hess time = ", hess_time)
+    return pvals
+end
+
+function GWASCopulaVCModel_autodiff_fast(
+    qc_model::GaussianCopulaVCModel,
+    G::SnpArray;
+    check_grad::Bool=true
+    )
+    # some needed constants
+    p = qc_model.p
+    m = qc_model.m
+    n, q = size(G)
+    T = eltype(qc_model.data[1].X)
+    n == length(qc_model.data) || error("sample size do not agree")
+    check_grad && any(x -> abs(x) > 1e-1, qc_model.∇β) && error("Null model gradient of beta is not zero!")
+    check_grad && any(x -> abs(x) > 1e-1, qc_model.∇θ) && error("Null model gradient of variance components is not zero!")
+    # timers 
+    grad_time = 0.0
+    hess_time = 0.0
+    # estimated parameters
+    β = qc_model.β
+    θ = qc_model.θ
+    τ = qc_model.τ
+    γ = zero(T)
+    fullβ = [qc_model.β; qc_model.θ; qc_model.τ; 0.0]
+    # needed internal helper functions
+    loglikelihood(par::AbstractVector) = QuasiCopula.loglikelihood(par, qc_model, z)
+    loglikelihood(βθτ, γ, qc_model, z) = QuasiCopula.loglikelihood([βθτ; γ], qc_model, z)
+    loglikelihood(γ::Number) = QuasiCopula.loglikelihood([β; θ; τ; γ], qc_model, z)
+    function hessian_column(par) # computes last column of Hessian
+        function element_derivative(par)
+            βθτ = @view(par[1:end-1])
+            γ   = par[end]
+            return ForwardDiff.derivative(γ -> loglikelihood(βθτ,γ,qc_model,z), γ)
+        end
+        ForwardDiff.gradient(element_derivative, par)
+    end
+    get_grad_last(γ) = ForwardDiff.derivative(loglikelihood, γ)
+    # compute P (negative Hessian) and inv(P)
+    z = convert(Vector{Float64}, @view(G[:, 1]), center=true, scale=false, impute=true)
+    Hfull = ForwardDiff.hessian(loglikelihood, fullβ)
+    Pinv = inv(-Hfull[1:end-1, 1:end-1])
+    # storages
+    pvals = zeros(T, q)
+    W = zeros(T, p + m + 1)
+    # score test for each SNP
+    @showprogress for j in 1:q
+        # grab current SNP needed in logl (z used by autodiff grad and hess)
+        SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=true)
+        # compute W/Q/R
+        grad_time += @elapsed R = get_grad_last(0.0)
+        hess_time += @elapsed Hlast = hessian_column(fullβ)
+        Hlast .*= -1
+        W .= @view(Hlast[1:end-1])
+        Q = Hlast[end]
+        S = R * inv(Q - W'*Pinv*W) * R
+        pval = ccdf(Chisq(1), S)
+        pvals[j] = pval == 0 ? 1 : pval
+    end
+    println("grad time = ", grad_time)
+    println("hess time = ", hess_time)
     return pvals
 end

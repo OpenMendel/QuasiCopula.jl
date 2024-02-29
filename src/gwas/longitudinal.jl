@@ -42,6 +42,7 @@ A length `q` vector of p-values storing the score statistics for each SNP
 function GWASCopulaVCModel(
     qc_model::Union{GaussianCopulaVCModel, GLMCopulaVCModel, NBCopulaVCModel},
     G::SnpArray;
+    check_grad::Bool=true
     )
     n = size(G, 1)    # number of samples with genotypes
     q = size(G, 2)    # number of SNPs in each sample
@@ -51,8 +52,8 @@ function GWASCopulaVCModel(
     maxd = maxclustersize(qc_model)
     T = eltype(qc_model.data[1].X)
     n == length(qc_model.data) || error("sample size do not agree")
-    any(x -> abs(x) > 1e-1, qc_model.∇β) && error("Null model gradient of beta is not zero!")
-    any(x -> abs(x) > 1e-1, qc_model.∇θ) && error("Null model gradient of variance components is not zero!")
+    check_grad && any(x -> abs(x) > 1e-1, qc_model.∇β) && error("Null model gradient of beta is not zero!")
+    check_grad && any(x -> abs(x) > 1e-1, qc_model.∇θ) && error("Null model gradient of variance components is not zero!")
 
     # preallocated arrays for efficiency
     z = zeros(T, n)
@@ -67,7 +68,7 @@ function GWASCopulaVCModel(
     Pinv = get_Pinv(qc_model) # compute Pinv (inverse negative Hessian)
 
     # score test for each SNP
-    for j in 1:q
+    @showprogress for j in 1:q
         # sync vectors
         SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=true)
         Q, R = zero(T), zero(T)
