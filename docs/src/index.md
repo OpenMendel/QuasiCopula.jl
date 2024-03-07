@@ -1,5 +1,7 @@
 # QuasiCopula.jl 
 
+Authors: Sarah Ji, Kenneth Lange, Hua Zhou, Janet Sinsheimer, Benjamin Chu
+
 A Flexible Quasi-Copula Distribution for Statistical Modeling
 
 ## Package Features
