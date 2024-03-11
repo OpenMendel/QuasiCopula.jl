@@ -10,6 +10,8 @@ using ProgressMeter
 using Random
 @reexport using Ipopt
 import Base: show, fill!
+using Enzyme
+using Zygote
 
 export fit!, update_θ_jensen!, init_β!, initialize_model!, loglikelihood!, standardize_res!, std_res_differential!
 export update_res!, update_θ!
@@ -59,6 +61,7 @@ include("model_interface/show_io.jl")
 include("gwas/longitudinal.jl")
 include("gwas/longitudinal_autodiff.jl")
 include("gwas/longitudinal_autodiff_fast.jl")
+include("gwas/longitudinal_enzyme.jl")
 include("gwas/multivariate.jl")
 # include("gwas/multivariate_gwas.jl")
 include("gwas/multivariate_gwas_autodiff.jl")
