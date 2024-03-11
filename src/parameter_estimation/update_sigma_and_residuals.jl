@@ -202,7 +202,7 @@ function update_τ(
     maxiter::Integer=50000,
     reltol::Number=1e-6,
     ) where T <: BlasReal
-    @assert τ0 ≥ 0 "τ0 has to be nonnegative"
+    @assert τ0 ≥ 0 "τ0 has to be nonnegative but was $τ0"
     τ = τ0
     for τiter in 1:maxiter
         τold = τ

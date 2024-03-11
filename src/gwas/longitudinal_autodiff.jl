@@ -230,14 +230,6 @@ function GWASCopulaVCModel_autodiff(
         # W = -Hfull[1:end-1, end]
         # Q = -Hfull[end, end]
         # R = ∇logl(fullβ)[end]
-
-        @show R
-        @show Q
-        @show W
-        if j == 1
-            fdsa
-        end
-
         S = R * inv(Q - W'*Pinv*W) * R
         pval = ccdf(Chisq(1), S)
         pvals[j] = pval == 0 ? 1 : pval

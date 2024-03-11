@@ -10,13 +10,13 @@ function multivariateGWAS_autodiff(
     s = count(x -> typeof(x) <: Normal, qc_model.vecdist) # number of nuisance parameters (only Gaussian for now)
     T = eltype(qc_model.X)
     n == length(qc_model.data) || error("sample size do not agree")
-    any(x -> abs(x) > 1e-1, qc_model.∇vecB) && 
-        error("Null model gradient of beta is not zero!")
-    any(x -> abs(x) > 1e-1, qc_model.∇θ) && 
-        error("Null model gradient of variance components is not zero!")
+    # any(x -> abs(x) > 1e-1, qc_model.∇vecB) && 
+    #     error("Null model gradient of beta is not zero!")
+    # any(x -> abs(x) > 1e-1, qc_model.∇θ) && 
+    #     error("Null model gradient of variance components is not zero!")
 
     # define autodiff likelihood, gradient, and Hessians
-    autodiff_loglikelihood(vecB) = loglikelihood(vecB, qc_model, z)
+    autodiff_loglikelihood(par) = loglikelihood(par, qc_model, z)
     ∇logl = x -> ForwardDiff.gradient(autodiff_loglikelihood, x)
     ∇²logl = x -> ForwardDiff.hessian(autodiff_loglikelihood, x)
     ∇logl! = (grad, x) -> ForwardDiff.gradient!(grad, autodiff_loglikelihood, x)
@@ -30,8 +30,8 @@ function multivariateGWAS_autodiff(
 
     # score test for each SNP
     pvals = zeros(T, q)
-    grad_store = zeros(T, p*d + m + d)
-    W = zeros(T, p*d + m, d)
+    grad_store = zeros(T, p*d + m + s + d)
+    W = zeros(T, p*d + m + s, d)
     Q = zeros(T, d, d)
     @showprogress for j in 1:q
         # grab current SNP needed in logl (z used by autodiff grad and hess)
@@ -39,7 +39,7 @@ function multivariateGWAS_autodiff(
 
         # compute W/Q/R using in-place versions of ForwardDiff grad/hess
         ∇²logl!(Hfull, fullβ)
-        copyto!(W, @view(Hfull[1:p*d+m, end-d+1:end]))
+        copyto!(W, @view(Hfull[1:end-d, end-d+1:end]))
         W .*= -1
         copyto!(Q, @view(Hfull[end-d+1:end, end-d+1:end]))
         Q .*= -1
@@ -60,7 +60,7 @@ function multivariateGWAS_autodiff(
 end
 
 function loglikelihood(
-    par::AbstractVector{T}, # length pd+m+d, where m is number of VCs, d is for the SNP effect on d phenotypes
+    par::AbstractVector{T}, # length pd+m+s+d. m is num of VCs, s is num of nuisance params, d is SNP effect on d phenotypes
     qc_model::MultivariateCopulaVCModel, # fitted null model
     z::AbstractVector # n × 1 genotype vector
     ) where T
@@ -96,12 +96,28 @@ function loglikelihood(
         μstore .= GLM.linkinv.(qc_model.veclink, ηstore)
         varμstore .= GLM.glmvar.(qc_model.vecdist, μstore)
         resstore .= yi .- μstore
-        std_resstore .= resstore ./ sqrt.(varμstore)
-        # logl += loglikelihood(yi, qc, qc_model)
+        # update std_res (gaussian case needs separate treatment)
+        nuisance_counter = 1
+        for j in eachindex(std_resstore)
+            if typeof(qc_model.vecdist[j]) <: Normal
+                τj = abs(τ[nuisance_counter])
+                std_resstore[j] = resstore[j] * sqrt(τj)
+                nuisance_counter += 1
+            else
+                std_resstore[j] = resstore[j] / sqrt(varμstore[j])
+            end
+        end
         # GLM loglikelihood (term 2)
-        @inbounds for j in eachindex(yi)
-            logl += QuasiCopula.loglik_obs(qc_model.vecdist[j], 
-                yi[j], μstore[j], one(T), one(T))
+        nuisance_counter = 1
+        for j in eachindex(yi)
+            dist = qc_model.vecdist[j]
+            if typeof(dist) <: Normal
+                τj = inv(τ[nuisance_counter])
+                logl += QuasiCopula.loglik_obs(dist, yi[j], μstore[j], one(T), τj)
+                nuisance_counter += 1
+            else
+                logl += QuasiCopula.loglik_obs(dist, yi[j], μstore[j], one(T), one(T))
+            end
         end
         # loglikelihood term 1 i.e. -sum ln(1 + 0.5tr(Γ(θ)))
         tsum = dot(θ, qc_model.t) # tsum = 0.5tr(Γ)

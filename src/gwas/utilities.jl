@@ -293,7 +293,7 @@ function simulate_longitudinal_traits(;
     Link = typeof(link)
 
     # variance components
-    θtrue = fill(0.1, m)
+    θtrue = fill(100, m)
 
     # simulate (nongenetic) design matrices
     Random.seed!(seed)
@@ -382,7 +382,7 @@ function simulate_longitudinal_traits(;
             μ = GLM.linkinv.(link, η)
             # VC matrices
             V1 = ones(size(X, 1), size(X, 1))
-            V2 = Matrix(I, size(X, 1), size(X, 1))
+            V2 = 0.1Matrix(I, size(X, 1), size(X, 1))
             Γ = m == 1 ? θtrue[1] * V1 : θtrue[1] * V1 + θtrue[2] * V2
             vecd = Vector{DiscreteUnivariateDistribution}(undef, size(X, 1))
             for i in 1:size(X, 1)

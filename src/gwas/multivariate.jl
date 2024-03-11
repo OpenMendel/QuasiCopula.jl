@@ -436,14 +436,13 @@ function loglikelihood!(
                 xi .* qc.w1[j] * qc.res[j]
             # BLAS.gemv!('T', one(T), xi, qc.storage_d, inv1pq, out)
         end
-        # Gaussian case: compute ∇τ and unto scaling by τ
+        # Gaussian case: compute ∇τ and undo scaling by τ (vecB used std_res which includes extra factor of √τ)
         for (j, idx) in enumerate(qc_model.nuisance_idx)
-            vecB_range = (idx-1)*p+1:idx*p
             τ = abs(qc_model.ϕ[j])
-            sqrtτ = sqrt(τ)
-            qc.∇vecB[vecB_range] .*= sqrtτ
-            rss = abs2(qc.std_res[idx])
-            qc.∇ϕ[j] = (1 - rss + 2qsum * inv1pq) / 2τ
+            vecB_range = (idx-1)*p+1:idx*p
+            qc.∇vecB[vecB_range] .*= sqrt(τ)
+            rss = abs2(qc.std_res[idx]) # std_res contains a factor of sqrt(τ)
+            qc.∇ϕ[j] = (1 - rss + 2qsum * inv1pq) / 2τ # this is kind of wrong by autodiff but I can't figure out why
         end
         qc.∇θ .= inv1pq .* qc.q .- inv(1 + tsum) .* qc_model.t
         if qc_model.penalized
