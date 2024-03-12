@@ -1,0 +1,46 @@
+@testset "utilities" begin
+    # ∇²μ_j vs ∇²μ_j! (p × p)
+    p = 10
+    storage = zeros(p, p)
+    xj = randn(p)
+    l = GLM.LogitLink()
+    ηj = randn()
+    c = rand()
+    ∇²μ_j!(storage, l, ηj, xj, c)
+    @test all(c .* ∇²μ_j(l, ηj, xj) .≈ storage)
+
+    # ∇²μ_j vs ∇²μ_j! (p × 1)
+    storage = zeros(p)
+    xj = randn(p)
+    zj = randn()
+    l = GLM.LogitLink()
+    ηj = randn()
+    c = rand()
+    ∇²μ_j!(storage, l, ηj, xj, zj, c)
+    @test all(c .* ∇²μ_j(l, ηj, xj, zj) .≈ storage)
+
+    # ∇²σ²_j vs ∇²σ²_j! (p × p)
+    p = 10
+    storage = zeros(p, p)
+    xj = randn(p)
+    d = GLM.Bernoulli()
+    l = GLM.LogitLink()
+    ηj = randn()
+    μj = rand()
+    c = rand()
+    ∇²σ²_j!(storage, d, l, xj, μj, ηj, c)
+    @test all(c .* ∇²σ²_j(d, l, xj, μj, ηj) .≈ storage)
+
+    # ∇²σ²_j vs ∇²σ²_j! (p × 1)
+    p = 10
+    storage = zeros(p)
+    xj = randn(p)
+    zj = randn()
+    d = GLM.Bernoulli()
+    l = GLM.LogitLink()
+    ηj = randn()
+    μj = rand()
+    c = randn()
+    ∇²σ²_j!(storage, d, l, xj, μj, ηj, zj, c)
+    @test all(c .* ∇²σ²_j(d, l, xj, μj, ηj, zj) .≈ storage)
+end

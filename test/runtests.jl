@@ -34,4 +34,9 @@ end
     include("unit_test/CS/singlerun_poissonCS.jl")
 end
 
+## GWAS
+@testset "GWAS" begin
+    include("unit_test/GWAS/tests.jl")
+end
+
 end

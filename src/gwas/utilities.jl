@@ -1,29 +1,85 @@
 """
-    ∇²σ²_j(d::Distribution, l::Link, Xi::Matrix, β::Vector, j)
+    ∇²σ²_j(d::Distribution, l::Link, xj::Union{AbstractVector{T}, T}, μj::T, ηj::T)
+    ∇²σ²_j!(storage::AbstractMatrix{T}, d::Distribution, l::Link, xj::AbstractVector{T}, μj::T, ηj::T)
 
-Computes the Hessian of the σ^2 function with respect to β for sample i (Xi) at time j
+Computes the Hessian of the σ^2 function with respect to β for sample i (Xi) 
+at time j. The inplace versions is equivalent to `storage .+= c .* ∇²σ²_j` 
+
+Note: sometimes `xj` is a vector (Hessian wrt to β) and sometimes a scalar 
+(Hessian wrt to γ). 
 """
-function ∇²σ²_j(d::Distribution, l::Link, xj::Union{AbstractVector, Number}, μj::Number, ηj::Number)
+function ∇²σ²_j(d::Distribution, l::Link, xj::Union{AbstractVector{T}, T}, 
+                μj::T, ηj::T) where T
     c = sigmamu2(d, μj)*GLM.mueta(l, ηj)^2 + sigmamu(d, μj)*mueta2(l, ηj)
     return c * xj * xj' # p × p or 1 × 1
 end
-function ∇²σ²_j(d::Distribution, l::Link, xj::Union{AbstractVector, Number}, zj::Number, μj::Number, ηj::Number)
+function ∇²σ²_j!(storage::AbstractMatrix{T}, d::Distribution, l::Link, 
+                xj::AbstractVector{T}, μj::T, ηj::T, c::T) where T
+    c2 = sigmamu2(d, μj)*GLM.mueta(l, ηj)^2 + sigmamu(d, μj)*mueta2(l, ηj)
+    BLAS.gemm!('N', 'T', c * c2, xj, xj, one(T), storage) # storage = p × p
+end
+
+"""
+    ∇²σ²_j(d::Distribution, l::Link, xj::Union{AbstractVector{T}, T}, zj::T, μj::T, ηj::T)
+    ∇²σ²_j!(storage::AbstractVector{T}, d::Distribution, l::Link, xj::AbstractVector{T}, zj::T, μj::T, ηj::T, c::T)
+
+Computes the Hessian of the mean function with respect to β then γ. The inplace
+versions is equivalent to `storage .+= c .* ∇²σ²_j` 
+
+Note: sometimes `xj` is a vector (Hessian wrt to β) and sometimes a scalar 
+(Hessian wrt to γ). 
+"""
+function ∇²σ²_j(d::Distribution, l::Link, xj::Union{AbstractVector{T}, T}, 
+    zj::T, μj::T, ηj::T) where T
     c = sigmamu2(d, μj)*GLM.mueta(l, ηj)^2 + sigmamu(d, μj)*mueta2(l, ηj)
     return c * zj * xj # p × 1
 end
-
-"""
-    ∇²μ_j(l::Link, Xi::Matrix, β::Vector, j)
-
-Computes the Hessian of the mean function with respect to β for sample i (Xi) at time j
-"""
-function ∇²μ_j(l::Link, ηj::Number, xj::Union{AbstractVector, Number})
-    d²μdη² = mueta2(l, ηj)
-    return d²μdη² * xj * xj' # p × p (if xj is p dimensional covariatess) or 1 × 1 (if xj is a single SNP)
+function ∇²σ²_j!(storage::AbstractVector{T}, d::Distribution, l::Link, 
+                xj::AbstractVector{T}, zj::T, μj::T, ηj::T, c::T) where T
+    c2 = sigmamu2(d, μj)*GLM.mueta(l, ηj)^2 + sigmamu(d, μj)*mueta2(l, ηj)
+    storage .+= (c * c2 * zj) .* xj # p × 1
 end
-function ∇²μ_j(l::Link, ηj::Number, xj::Union{AbstractVector, Number}, zj::Number)
+
+"""
+    ∇²μ_j(l::Link, ηj::T, xj::Union{AbstractVector, T})
+    ∇²μ_j!(storage, l::Link, ηj::T, xj::AbstractVector, c::T)
+
+Computes the Hessian of the mean function with respect to β for sample i (Xi) 
+at time j. The inplace version is equivalent to `storage .+= c .* ∇²μ_j` 
+
+Note: sometimes `xj` is a vector (Hessian wrt to β) and sometimes a scalar 
+(Hessian wrt to γ). 
+"""
+function ∇²μ_j(l::Link, ηj::T, xj::Union{AbstractVector{T}, T}) where T
     d²μdη² = mueta2(l, ηj)
-    return d²μdη² * zj * xj # p × 1
+    return d²μdη² * xj * xj' # p × p or 1 × 1 (depending on length of xj)
+end
+function ∇²μ_j!(storage::AbstractMatrix{T}, l::Link, ηj::T, 
+    xj::AbstractVector, c::T
+    ) where T # call ∇²μ_j if xj is scalar
+    d²μdη² = mueta2(l, ηj)
+    BLAS.gemm!('N', 'T', c * d²μdη², xj, xj, one(T), storage) # storage = p × p
+end
+
+"""
+    ∇²μ_j(l::Link, ηj::T, xj::Union{AbstractVector, T}, zj::T)
+    ∇²μ_j!(storage, l::Link, ηj::T, xj::AbstractVector, zj::T, c::T)
+
+Computes the Hessian of the mean function with respect to β then γ. The inplace
+version is equivalent to `storage .+= c .* ∇²μ_j` 
+
+Note: sometimes `xj` is a vector (in which case we compute Hβγ) and sometimes 
+a scalar (in which case we compute Hγγ). 
+"""
+function ∇²μ_j(l::Link, ηj::T, xj::Union{AbstractVector{T}, T}, zj::T) where T
+    d²μdη² = mueta2(l, ηj)
+    return d²μdη² * zj * xj # p × 1 or 1 × 1
+end
+function ∇²μ_j!(storage::AbstractVector{T}, l::Link, ηj::T, 
+                xj::AbstractVector{T}, zj::Number, c::T
+                ) where T # call ∇²μ_j if xj::Number
+    d²μdη² = mueta2(l, ηj)
+    storage .+= (c * d²μdη² * zj) .* xj # p × 1
 end
 
 """
@@ -83,17 +139,19 @@ function dβdβ_res_ij(dist, link, xj, η_j, μ_j, varμ_j, res_j)
     term5 = 0.75res_j * inv(varμ_j^2) * ∇σ²_ij * ∇σ²_ij'
     result = term1 + term2 + term3 + term4 + term5
 
-    return result # p × p
+    return result # p × p or 1 × 1 depending on dimension of xj
 end
 
 """
     dγdβresβ_ij(dist, link, xj, η_j, μ_j, varμ_j, res_j)
+    dγdβresβ_ij!(storage, dist, link, xj, η_j, μ_j, varμ_j, res_j)
 
 Computes the Hessian of the standardized residuals for sample i 
-at the j'th measurement, first gradient respect to β, then with respect to γ 
+at the j'th measurement, first gradient respect to β, then with respect to γ.
+If `storage` is provided, the result will be stored in `storage.vec_p`
 """
 function dγdβresβ_ij(dist, link, xj, z, η_j, μ_j, varμ_j, res_j)
-    invσ_j = inv(sqrt(varμ_j))
+    invσ_j = inv(sqrt(varμ_j)) # 1 × 1
     ∇ᵧμ_ij  = GLM.mueta(link, η_j) * z # 1 × 1
     ∇ᵦμ_ij  = GLM.mueta(link, η_j) * xj # p × 1
     ∇ᵧσ²_ij = sigmamu(dist, μ_j) * GLM.mueta(link, η_j) * z # 1 × 1
