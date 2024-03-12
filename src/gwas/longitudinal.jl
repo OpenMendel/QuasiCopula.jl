@@ -123,11 +123,10 @@ end
 function update_W!(W, qc_model::GLMCopulaVCModel, i::Int, zi::AbstractVector, Γ, ∇resβ, ∇resγ, storages::Storages)
     p, m = qc_model.p, qc_model.m
     qc = qc_model.data[i]
-    Hβγ_i = get_Hβγ_i(qc, Γ, ∇resβ, ∇resγ, zi, qc_model.β, storages) # exact
+    # Hβγ term
+    get_Hβγ_i!(@view(W[1:p]), qc, Γ, ∇resβ, ∇resγ, zi, storages) # exact
+    # Hθγ term
     Hθγ_i = get_neg_Hθγ_i(qc, qc_model.θ, ∇resγ, storages) # exact
-    for j in 1:p
-        W[j] += Hβγ_i[j]
-    end
     for j in 1:m
         W[p + j] += Hθγ_i[j]
     end
@@ -304,7 +303,7 @@ function get_neg_Hθγ_i(gc, θ, ∇resγ, storages::Storages)
     return Hγθ'
 end
 
-function get_Hβγ_i(qc::GLMCopulaVCObs, Γ, ∇resβ, ∇resγ, z::AbstractVector, β, storages::Storages) # z is a vector of SNP value (length d)
+function get_Hβγ_i(qc::GLMCopulaVCObs, Γ, ∇resβ, ∇resγ, z::AbstractVector, storages::Storages) # z is a vector of SNP value (length d)
     res = qc.res
     denom = storages.denom
     denom2 = storages.denom2
@@ -327,7 +326,41 @@ function get_Hβγ_i(qc::GLMCopulaVCObs, Γ, ∇resβ, ∇resγ, z::AbstractVect
         zi = z[1]
         Hβγ_i -= dot(ej, Γ, res) * dγdβresβ_ij(qc.d, qc.link, xj, zi, η[j], μ[j], varμ[j], res[j]) / denom
     end
-    return Hβγ_i
+    return Hβγ_i # p × 1
+end
+
+# `get_Hβγ_i!` is equivalent to `W .+= get_Hβγ_i`
+function get_Hβγ_i!(W, qc::GLMCopulaVCObs, Γ, ∇resβ, ∇resγ, z::AbstractVector, 
+    storages::Storages
+    ) # z is a vector of SNP value (length d all storing the same SNP value)
+    length(W) == length(storages.vec_p) || error("Dimension mismatch in get_Hβγ_i!")
+    # storages
+    res = qc.res
+    denom = storages.denom[1]
+    denom2 = storages.denom2[1]
+    vec_d = @view(storages.vec_maxd[1:qc.n])
+    p_storage = storages.p_storage
+    # 1st Hessian term
+    vec_d .= qc.w2 .* z
+    mul!(p_storage, Transpose(qc.X), vec_d)
+    W .+= p_storage
+    # 2nd Hessian term (∇resβ' * Γ * res) * (∇resγ' * Γ * res)' / denom2
+    mul!(vec_d, Γ, res)
+    c = dot(∇resγ, vec_d) / denom2
+    mul!(p_storage, Transpose(∇resβ), vec_d)
+    W .+= c .* p_storage
+    # 3rd Hessian terms
+    mul!(vec_d, Γ, ∇resγ)
+    mul!(p_storage, Transpose(∇resβ), vec_d)
+    W .-= p_storage ./ denom
+    # 4th Hessian term
+    mul!(vec_d, Γ, res)
+    @inbounds for j in 1:qc.n
+        c = vec_d[j] / denom
+        dγdβresβ_ij!(W, qc.d, qc.link, @view(qc.X[j, :]), z[1], qc.η[j], 
+            qc.μ[j], qc.varμ[j], qc.res[j], c, storages)
+    end
+    return W # p × 1
 end
 
 function get_Hβγ_i(qc::GaussianCopulaVCObs, Γ, ∇resβ, ∇resγ, z::AbstractVector, β, τ, storages::Storages) # z is a vector of SNP value (length d)
