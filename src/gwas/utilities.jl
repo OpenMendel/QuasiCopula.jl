@@ -148,7 +148,7 @@ end
 
 Computes the Hessian of the standardized residuals for sample i 
 at the j'th measurement, first gradient respect to β, then with respect to γ.
-If `storage` is provided, the result will be stored in `storage.vec_p`
+The inplace version is equivalent to `result .-= c * dγdβresβ_ij`
 """
 function dγdβresβ_ij(dist, link, xj, z, η_j, μ_j, varμ_j, res_j)
     invσ_j = inv(sqrt(varμ_j)) # 1 × 1
@@ -166,6 +166,36 @@ function dγdβresβ_ij(dist, link, xj, z, η_j, μ_j, varμ_j, res_j)
     result = term1 + term2 + term3 + term4 + term5
 
     return result # p × 1
+end
+function dγdβresβ_ij!(result_final::AbstractVector{T}, dist::Distribution, link::Link,
+    xj::AbstractVector{T}, z::T, η_j::T, μ_j::T, varμ_j::T, res_j::T, 
+    c::T, storage::Storages) where T
+    result = storage.p_storage
+    ∇ᵦσ²_ij = storage.p_storage2
+    fill!(result, 0)
+
+    # needed quantities
+    invσ_j = inv(sqrt(varμ_j)) # 1 × 1
+    ∇ᵧμ_ij  = GLM.mueta(link, η_j) * z # 1 × 1
+    ∇ᵧσ²_ij = sigmamu(dist, μ_j) * GLM.mueta(link, η_j) * z # 1 × 1
+    # ∇ᵦμ_ij  = GLM.mueta(link, η_j) * xj # p × 1
+    ∇ᵦσ²_ij .= (sigmamu(dist, μ_j) * GLM.mueta(link, η_j)) .* xj # p × 1
+
+    # term1 (-invσ_j * ∇²μ_j(link, η_j, xj, z))
+    ∇²μ_j!(result, link, η_j, xj, z, -invσ_j)
+    # term2 (0.5invσ_j^3 * ∇ᵦσ²_ij * ∇ᵧμ_ij)
+    result .+= (0.5invσ_j^3 * ∇ᵧμ_ij) .* ∇ᵦσ²_ij
+    # term3 
+    ∇²σ²_j!(result, dist, link, xj, z, μ_j, η_j, -0.5 * res_j * inv(varμ_j))
+    # term 4 (0.5invσ_j^3 * ∇ᵦμ_ij * ∇ᵧσ²_ij)
+    result .+= (0.5invσ_j^3 * ∇ᵧσ²_ij * GLM.mueta(link, η_j)) .* xj
+    # term 5
+    result .+= (0.75res_j * inv(varμ_j^2) * ∇ᵧσ²_ij) .* ∇ᵦσ²_ij
+
+    # scale by c
+    result_final .-= c .* result
+
+    return result_final # p × 1
 end
 
 """

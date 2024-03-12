@@ -1,22 +1,23 @@
 struct Storages{T <: BlasReal}
-    vec_n::Vector{T}
     vec_p::Vector{T}
     vec_maxd::Vector{T}
     Γ::Matrix{T}
     denom::Vector{T}
     denom2::Vector{T}
+    p_storage::Vector{T}
+    p_storage2::Vector{T}
 end
-function storages(n::Int, p::Int, maxd::Int)
-    vec_n = zeros(n)
+function storages(p::Int, maxd::Int)
     vec_p = zeros(p)
     vec_maxd = zeros(maxd)
     Γ = zeros(maxd, maxd)
     denom = zeros(1)
     denom2 = zeros(1)
-    return Storages(vec_n, vec_p, vec_maxd, Γ, denom, denom2)
+    p_storage = zeros(p)
+    p_storage2 = zeros(p)
+    return Storages(vec_p, vec_maxd, Γ, denom, denom2, p_storage, p_storage2)
 end
 function Base.fill!(s::Storages, x::Number)
-    fill!(s.vec_n, x)
     fill!(s.vec_p, x)
     fill!(s.vec_maxd, x)
     fill!(s.Γ, x)
@@ -61,7 +62,7 @@ function GWASCopulaVCModel(
     W = zeros(T, p + m + s)
     χ2 = Chisq(1)
     pvals = zeros(T, q)
-    storage = storages(n, p, maxd)
+    storage = storages(p, maxd)
     Wtime = 0.0
     Qtime = 0.0
     Rtime = 0.0
