@@ -113,5 +113,39 @@ using LinearAlgebra
     b = @benchmark QuasiCopula.get_neg_Hθγ_i!($W, $qc, $θtrue, $∇resγ, $storages)
     @test b.allocs == 0
     @test b.memory == 0
-
 end
+
+@testset "update_W!" begin
+    n = 1000
+    p = 15
+    mind = 1
+    maxd = 10
+    m = 2
+    qc_model, G, βtrue, θtrue, γtrue, τtrue = simulate_longitudinal_traits(
+        n=n, d_min=mind, d_max=maxd, m=m, p=p)
+    i = rand(1:n)
+    qc = qc_model.data[i]
+    Γ = qc.V[1] * θtrue[1] + qc.V[2] * θtrue[2]
+    z = randn(qc.n)
+    ∇resγ = QuasiCopula.get_∇resγ(qc_model, i, z) # d × 1
+    ∇resβ = QuasiCopula.get_∇resβ(qc_model, i) # d × p
+    storages = QuasiCopula.storages(p, maxd, m)
+    denom = 1 + dot(qc_model.θ, qc.q) # same as denom = 1 + 0.5 * (res' * Γ * res), since dot(θ, qc.q) = qsum = 0.5 r'Γr
+    denom2 = abs2(denom)
+    storages.denom[1] = denom
+    storages.denom2[1] = denom2
+
+    # correctness
+    W = zeros(p + m)
+    QuasiCopula.update_W!(W, qc_model, i, z, Γ, ∇resβ, ∇resγ, storages)
+    W1true = QuasiCopula.get_Hβγ_i(qc, Γ, ∇resβ, ∇resγ, z, storages)
+    W2true = QuasiCopula.get_neg_Hθγ_i(qc, qc_model.θ, ∇resγ, storages)
+    @test all([W1true; W2true] .≈ W)
+    
+    # efficiency
+    b = @benchmark QuasiCopula.update_W!($W, $qc_model, $i, $z, $Γ, $∇resβ, $∇resγ, $storages)
+    @test b.allocs == 0
+    @test b.memory == 0
+end
+
+## Need to test: samples with only 1 observations

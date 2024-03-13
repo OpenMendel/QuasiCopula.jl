@@ -6,8 +6,13 @@ struct Storages{T <: BlasReal}
     denom2::Vector{T}
     p_storage::Vector{T}
     p_storage2::Vector{T}
+    m_storage::Vector{T}
+    m_storage2::Vector{T}
 end
-function storages(p::Int, maxd::Int)
+function storages(p::Int, maxd::Int, m::Int)
+    # p = number of fixed effects
+    # maxd = maximum number of observation within a sample
+    # m = number of variance components
     vec_p = zeros(p)
     vec_maxd = zeros(maxd)
     Γ = zeros(maxd, maxd)
@@ -15,7 +20,10 @@ function storages(p::Int, maxd::Int)
     denom2 = zeros(1)
     p_storage = zeros(p)
     p_storage2 = zeros(p)
-    return Storages(vec_p, vec_maxd, Γ, denom, denom2, p_storage, p_storage2)
+    m_storage = zeros(m)
+    m_storage2 = zeros(m)
+    return Storages(vec_p, vec_maxd, Γ, denom, denom2, p_storage, 
+        p_storage2, m_storage, m_storage2)
 end
 function Base.fill!(s::Storages, x::Number)
     fill!(s.vec_p, x)
@@ -23,6 +31,10 @@ function Base.fill!(s::Storages, x::Number)
     fill!(s.Γ, x)
     fill!(s.denom, x)
     fill!(s.denom2, x)
+    fill!(s.p_storage, x)
+    fill!(s.p_storage2, x)
+    fill!(s.m_storage, x)
+    fill!(s.m_storage2, x)
 end
 
 """
@@ -62,7 +74,7 @@ function GWASCopulaVCModel(
     W = zeros(T, p + m + s)
     χ2 = Chisq(1)
     pvals = zeros(T, q)
-    storage = storages(p, maxd)
+    storage = storages(p, maxd, m)
     Wtime = 0.0
     Qtime = 0.0
     Rtime = 0.0
@@ -102,14 +114,6 @@ function GWASCopulaVCModel(
         end
         # score test
         S = R * inv(Q - dot(W, Pinv, W)) * R
-        # @show Pinv
-        # @show R
-        # @show Q
-        # @show W
-        # @show S
-        # if j == 1
-        #     fdsa
-        # end
         pvals[j] = ccdf(χ2, S)
     end
     # @show Wtime
@@ -120,16 +124,12 @@ end
 
 # update W expression for 1 sample
 # i stands for sample i, and zi is a d-vector of SNP value
-function update_W!(W, qc_model::GLMCopulaVCModel, i::Int, zi::AbstractVector, Γ, ∇resβ, ∇resγ, storages::Storages)
-    p, m = qc_model.p, qc_model.m
+function update_W!(W, qc_model::GLMCopulaVCModel, i::Int, zi::AbstractVector, 
+    Γ, ∇resβ, ∇resγ, storages::Storages)
+    p = qc_model.p
     qc = qc_model.data[i]
-    # Hβγ term
     get_Hβγ_i!(@view(W[1:p]), qc, Γ, ∇resβ, ∇resγ, zi, storages) # exact
-    # Hθγ term
-    Hθγ_i = get_neg_Hθγ_i(qc, qc_model.θ, ∇resγ, storages) # exact
-    for j in 1:m
-        W[p + j] += Hθγ_i[j]
-    end
+    get_neg_Hθγ_i!(@view(W[p+1:end]), qc, qc_model.θ, ∇resγ, storages) # exact
     return W
 end
 
