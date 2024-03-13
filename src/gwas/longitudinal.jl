@@ -8,6 +8,7 @@ struct Storages{T <: BlasReal}
     p_storage2::Vector{T}
     m_storage::Vector{T}
     m_storage2::Vector{T}
+    pm_storage::Vector{T} # length p*m
 end
 function storages(p::Int, maxd::Int, m::Int)
     # p = number of fixed effects
@@ -22,8 +23,9 @@ function storages(p::Int, maxd::Int, m::Int)
     p_storage2 = zeros(p)
     m_storage = zeros(m)
     m_storage2 = zeros(m)
+    pm_storage = zeros(p+m)
     return Storages(vec_p, vec_maxd, Γ, denom, denom2, p_storage, 
-        p_storage2, m_storage, m_storage2)
+        p_storage2, m_storage, m_storage2, pm_storage)
 end
 function Base.fill!(s::Storages, x::Number)
     fill!(s.vec_p, x)
@@ -35,6 +37,7 @@ function Base.fill!(s::Storages, x::Number)
     fill!(s.p_storage2, x)
     fill!(s.m_storage, x)
     fill!(s.m_storage2, x)
+    fill!(s.pm_storage, x)
 end
 
 """
@@ -78,7 +81,12 @@ function GWASCopulaVCModel(
     Wtime = 0.0
     Qtime = 0.0
     Rtime = 0.0
+    grad_res_time = 0.0
+    othertime = 0.0
+    scoretest_time = 0.0
     Pinv = get_Pinv(qc_model) # compute Pinv (inverse negative Hessian)
+    ∇resγ_store = zeros(T, maxd)
+    ∇resβ_store = zeros(T, maxd, p)
 
     # score test for each SNP
     @showprogress for j in 1:q
@@ -94,33 +102,47 @@ function GWASCopulaVCModel(
             d = qc.n # number of observations for current sample
             fill!(zi, z[i])
             # update gradient of residual with respect to β and γ
-            ∇resγ = get_∇resγ(qc_model, i, @view(zi[1:d])) # d × 1
-            ∇resβ = get_∇resβ(qc_model, i) # d × p
-            # form some constants 
-            Γ = zeros(T, d, d)
-            for k in 1:qc.m # loop over variance components
-                Γ .+= qc_model.θ[k] .* qc.V[k]
+            grad_res_time += @elapsed begin
+                ∇resγ = @view(∇resγ_store[1:d])
+                ∇resβ = @view(∇resβ_store[1:d, :])
+                get_∇resγ!(∇resγ, qc_model, i, @view(zi[1:d]))
+                get_∇resβ!(∇resβ, qc_model, i)
             end
-            denom = 1 + dot(qc_model.θ, qc.q) # same as denom = 1 + 0.5 * (res' * Γ * res), since dot(θ, qc.q) = qsum = 0.5 r'Γr
-            denom2 = abs2(denom)
-            storage.denom[1] = denom
-            storage.denom2[1] = denom2
+            othertime += @elapsed begin
+                # compute covariance matrix
+                Γ = @view(storage.Γ[1:d, 1:d])
+                Γ .= zero(T)
+                for k in 1:qc.m
+                    BLAS.axpy!(qc_model.θ[k], qc.V[k], Γ) # Γ .+= θ .* V[k]
+                end
+                # form some constants 
+                denom = 1 + dot(qc_model.θ, qc.q) # same as denom = 1 + 0.5 * (res' * Γ * res), since dot(θ, qc.q) = qsum = 0.5 r'Γr
+                denom2 = abs2(denom)
+                storage.denom[1] = denom
+                storage.denom2[1] = denom2
+            end
             # calculate W
             Wtime += @elapsed update_W!(W, qc_model, i, @view(zi[1:d]), Γ, ∇resβ, ∇resγ, storage)
             # update Q
             Qtime += @elapsed Q += calculate_Qi(qc_model, i, @view(zi[1:d]), Γ, ∇resγ, denom, denom2, storage)
             # update R
-            Rtime += @elapsed R += calculate_Ri(qc_model, i, @view(zi[1:d]), Γ, ∇resγ, denom)
+            Rtime += @elapsed R += calculate_Ri(qc_model, i, @view(zi[1:d]), Γ, ∇resγ, denom, storage)
         end
         # score test
-        S = R * inv(Q - dot(W, Pinv, W)) * R
-        pvals[j] = ccdf(χ2, S)
+        scoretest_time += @elapsed begin
+            mul!(storage.pm_storage, Pinv, W)
+            S = R * inv(Q - dot(W, storage.pm_storage)) * R
+            pvals[j] = ccdf(χ2, S)
+        end
         # @show pvals[1]
         # fdsa
     end
     @show Wtime
     @show Qtime
     @show Rtime
+    @show grad_res_time
+    @show othertime
+    @show scoretest_time
     return pvals
 end
 
@@ -211,12 +233,15 @@ function calculate_Qi(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel},
     return Qi
 end
 
+# `get_∇resγ!` is equivalent to `∇resγ .= get_∇resγ(...)`
 function get_∇resγ(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, i::Int, zi::AbstractVector)
+    ∇resγ = zeros(eltype(qc.X), d)
+    return get_∇resγ!(∇resγ, qc_model, i, zi)
+end
+function get_∇resγ!(∇resγ, qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, i::Int, zi::AbstractVector)
     qc = qc_model.data[i]
     d = size(qc.X, 1)
-    T = eltype(qc.X)
-    ∇resγ = zeros(T, d)
-    for k in 1:d # loop over each sample's observation
+    for k in 1:d # loop over this sample's observations
         ∇resγ[k] = update_∇res_ij(qc.d, zi[k], qc.res[k], qc.μ[k], qc.dμ[k], qc.varμ[k])
     end
     return ∇resγ
@@ -234,6 +259,9 @@ end
 
 function get_∇resβ(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, i::Int)
     return qc_model.data[i].∇resβ # d × p
+end
+function get_∇resβ!(∇resβ, qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, i::Int)
+    ∇resβ .= qc_model.data[i].∇resβ
 end
 function get_∇resβ(qc_model::GaussianCopulaVCModel, i::Int)
     ∇resβ = -sqrt(qc_model.τ[1]) .* qc_model.data[i].X # see end of 11.3.1 https://arxiv.org/abs/2205.03505

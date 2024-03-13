@@ -8,12 +8,12 @@ at time j. The inplace versions is equivalent to `storage .+= c .* ∇²σ²_j`
 Note: sometimes `xj` is a vector (Hessian wrt to β) and sometimes a scalar 
 (Hessian wrt to γ). 
 """
-function ∇²σ²_j(d::Distribution, l::Link, xj::Union{AbstractVector{T}, T}, 
+@inline function ∇²σ²_j(d::Distribution, l::Link, xj::Union{AbstractVector{T}, T}, 
                 μj::T, ηj::T) where T
     c = sigmamu2(d, μj)*GLM.mueta(l, ηj)^2 + sigmamu(d, μj)*mueta2(l, ηj)
     return c * xj * xj' # p × p or 1 × 1
 end
-function ∇²σ²_j!(storage::AbstractMatrix{T}, d::Distribution, l::Link, 
+@inline function ∇²σ²_j!(storage::AbstractMatrix{T}, d::Distribution, l::Link, 
                 xj::AbstractVector{T}, μj::T, ηj::T, c::T) where T
     c2 = sigmamu2(d, μj)*GLM.mueta(l, ηj)^2 + sigmamu(d, μj)*mueta2(l, ηj)
     BLAS.gemm!('N', 'T', c * c2, xj, xj, one(T), storage) # storage = p × p
@@ -29,12 +29,12 @@ versions is equivalent to `storage .+= c .* ∇²σ²_j`
 Note: sometimes `xj` is a vector (Hessian wrt to β) and sometimes a scalar 
 (Hessian wrt to γ). 
 """
-function ∇²σ²_j(d::Distribution, l::Link, xj::Union{AbstractVector{T}, T}, 
+@inline function ∇²σ²_j(d::Distribution, l::Link, xj::Union{AbstractVector{T}, T}, 
     zj::T, μj::T, ηj::T) where T
     c = sigmamu2(d, μj)*GLM.mueta(l, ηj)^2 + sigmamu(d, μj)*mueta2(l, ηj)
     return c * zj * xj # p × 1
 end
-function ∇²σ²_j!(storage::AbstractVector{T}, d::Distribution, l::Link, 
+@inline function ∇²σ²_j!(storage::AbstractVector{T}, d::Distribution, l::Link, 
                 xj::AbstractVector{T}, zj::T, μj::T, ηj::T, c::T) where T
     c2 = sigmamu2(d, μj)*GLM.mueta(l, ηj)^2 + sigmamu(d, μj)*mueta2(l, ηj)
     storage .+= (c * c2 * zj) .* xj # p × 1
@@ -50,11 +50,11 @@ at time j. The inplace version is equivalent to `storage .+= c .* ∇²μ_j`
 Note: sometimes `xj` is a vector (Hessian wrt to β) and sometimes a scalar 
 (Hessian wrt to γ). 
 """
-function ∇²μ_j(l::Link, ηj::T, xj::Union{AbstractVector{T}, T}) where T
+@inline function ∇²μ_j(l::Link, ηj::T, xj::Union{AbstractVector{T}, T}) where T
     d²μdη² = mueta2(l, ηj)
     return d²μdη² * xj * xj' # p × p or 1 × 1 (depending on length of xj)
 end
-function ∇²μ_j!(storage::AbstractMatrix{T}, l::Link, ηj::T, 
+@inline function ∇²μ_j!(storage::AbstractMatrix{T}, l::Link, ηj::T, 
     xj::AbstractVector, c::T
     ) where T # call ∇²μ_j if xj is scalar
     d²μdη² = mueta2(l, ηj)
@@ -71,11 +71,11 @@ version is equivalent to `storage .+= c .* ∇²μ_j`
 Note: sometimes `xj` is a vector (in which case we compute Hβγ) and sometimes 
 a scalar (in which case we compute Hγγ). 
 """
-function ∇²μ_j(l::Link, ηj::T, xj::Union{AbstractVector{T}, T}, zj::T) where T
+@inline function ∇²μ_j(l::Link, ηj::T, xj::Union{AbstractVector{T}, T}, zj::T) where T
     d²μdη² = mueta2(l, ηj)
     return d²μdη² * zj * xj # p × 1 or 1 × 1
 end
-function ∇²μ_j!(storage::AbstractVector{T}, l::Link, ηj::T, 
+@inline function ∇²μ_j!(storage::AbstractVector{T}, l::Link, ηj::T, 
                 xj::AbstractVector{T}, zj::Number, c::T
                 ) where T # call ∇²μ_j if xj::Number
     d²μdη² = mueta2(l, ηj)
@@ -88,10 +88,10 @@ end
 Computes d²σ²/dμ²
 """
 function sigmamu2 end
-sigmamu2(::Normal, μ::Real) = zero(μ)
-sigmamu2(::Bernoulli, μ::Real) = -2
-sigmamu2(::Poisson, μ::Real) = zero(μ)
-sigmamu2(d::NegativeBinomial, μ::Real) = 2/d.r + 1
+@inline sigmamu2(::Normal, μ::Real) = zero(μ)
+@inline sigmamu2(::Bernoulli, μ::Real) = -2
+@inline sigmamu2(::Poisson, μ::Real) = zero(μ)
+@inline sigmamu2(d::NegativeBinomial, μ::Real) = 2/d.r + 1
 
 """
     sigmaeta(D::Distribution, μ::Real)
@@ -99,10 +99,10 @@ sigmamu2(d::NegativeBinomial, μ::Real) = 2/d.r + 1
 Computes dσ²/dμ
 """
 function sigmamu end
-sigmamu(::Normal, μ::Real) = zero(μ)
-sigmamu(::Bernoulli, μ::Real) = one(μ) - 2μ
-sigmamu(::Poisson, μ::Real) = one(μ)
-sigmamu(d::NegativeBinomial, μ::Real) = 2μ/d.r + 1
+@inline sigmamu(::Normal, μ::Real) = zero(μ)
+@inline sigmamu(::Bernoulli, μ::Real) = one(μ) - 2μ
+@inline sigmamu(::Poisson, μ::Real) = one(μ)
+@inline sigmamu(d::NegativeBinomial, μ::Real) = 2μ/d.r + 1
 
 """
     mueta2(l::Link, η::Real)
@@ -111,14 +111,14 @@ Second derivative of the inverse link function `d^2μ/dη^2`, for link `L` at li
 I.e. derivative of the mueta function in GLM.jl
 """
 function mueta2 end
-mueta2(::IdentityLink, η::Real) = zero(η)
-function mueta2(::LogitLink, η::Real)
+@inline mueta2(::IdentityLink, η::Real) = zero(η)
+@inline function mueta2(::LogitLink, η::Real)
     # expabs = exp(-abs(η))
     expabs = exp(-η)
     denom = 1 + expabs
     return -expabs / denom^2 + 2expabs^2 / denom^3
 end
-mueta2(::LogLink, η::Real) = exp(η)
+@inline mueta2(::LogLink, η::Real) = exp(η)
 
 """
     dβdβ_res_ij(dist, link, xj, η_j, μ_j, varμ_j, res_j)
@@ -126,7 +126,7 @@ mueta2(::LogLink, η::Real) = exp(η)
 Computes the Hessian of the standardized residuals for sample i 
 at the j'th measurement, the gradient is evaluate with respect to β (or γ) twice.
 """
-function dβdβ_res_ij(dist, link, xj, η_j, μ_j, varμ_j, res_j)
+@inline function dβdβ_res_ij(dist, link, xj, η_j, μ_j, varμ_j, res_j)
     invσ_j = inv(sqrt(varμ_j))
     ∇μ_ij  = GLM.mueta(link, η_j) * xj
     ∇σ²_ij = sigmamu(dist, μ_j) * GLM.mueta(link, η_j) * xj
@@ -150,7 +150,7 @@ Computes the Hessian of the standardized residuals for sample i
 at the j'th measurement, first gradient respect to β, then with respect to γ.
 The inplace version is equivalent to `result_final .-= c * dγdβresβ_ij`
 """
-function dγdβresβ_ij(dist, link, xj, z, η_j, μ_j, varμ_j, res_j)
+@inline function dγdβresβ_ij(dist, link, xj, z, η_j, μ_j, varμ_j, res_j)
     invσ_j = inv(sqrt(varμ_j)) # 1 × 1
     ∇ᵧμ_ij  = GLM.mueta(link, η_j) * z # 1 × 1
     ∇ᵦμ_ij  = GLM.mueta(link, η_j) * xj # p × 1
@@ -167,7 +167,7 @@ function dγdβresβ_ij(dist, link, xj, z, η_j, μ_j, varμ_j, res_j)
 
     return result # p × 1
 end
-function dγdβresβ_ij!(result_final::AbstractVector{T}, dist::Distribution, link::Link,
+@inline function dγdβresβ_ij!(result_final::AbstractVector{T}, dist::Distribution, link::Link,
     xj::AbstractVector{T}, z::T, η_j::T, μ_j::T, varμ_j::T, res_j::T, 
     c::T, storage::Storages) where T
     result = storage.p_storage
@@ -205,14 +205,14 @@ Computes ∇resβ_ij, the gradient (wrt β) of the standardized residuals for sa
 at the j'th measurement. Here res_j is the standardized residual
 """
 function update_∇res_ij end
-update_∇res_ij(d::Normal, x_ji, res_j, μ_j, dμ_j, varμ_j) = -x_ji
-update_∇res_ij(d::Bernoulli, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
+@inline update_∇res_ij(d::Normal, x_ji, res_j, μ_j, dμ_j, varμ_j) = -x_ji
+@inline update_∇res_ij(d::Bernoulli, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
     -sqrt(varμ_j) * x_ji - (0.5 * res_j * (1 - 2μ_j) * x_ji)
-update_∇res_ij(d::Poisson, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
+@inline update_∇res_ij(d::Poisson, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
     x_ji * (
     -(inv(sqrt(varμ_j)) + (0.5 * inv(varμ_j)) * res_j) * dμ_j
     )
-update_∇res_ij(d::NegativeBinomial, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
+@inline update_∇res_ij(d::NegativeBinomial, x_ji, res_j, μ_j, dμ_j, varμ_j) = 
     -inv(sqrt(varμ_j)) * dμ_j * x_ji - (0.5 * inv(varμ_j)) *
     res_j * (μ_j * inv(d.r) + (1 + inv(d.r) * μ_j)) * dμ_j * x_ji
 
