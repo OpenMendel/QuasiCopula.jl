@@ -8,9 +8,10 @@ struct Storages{T <: BlasReal}
     p_storage2::Vector{T}
     m_storage::Vector{T}
     m_storage2::Vector{T}
-    pm_storage::Vector{T} # length p*m
+    pm_storage::Vector{T} # length p*m (GLM case) or p*m+1 (Gaussian/NegBin case)
+    maxd_storage::Vector{T}
 end
-function storages(p::Int, maxd::Int, m::Int)
+function storages(p::Int, maxd::Int, m::Int, n_nuisance::Int)
     # p = number of fixed effects
     # maxd = maximum number of observation within a sample
     # m = number of variance components
@@ -23,9 +24,10 @@ function storages(p::Int, maxd::Int, m::Int)
     p_storage2 = zeros(p)
     m_storage = zeros(m)
     m_storage2 = zeros(m)
-    pm_storage = zeros(p+m)
+    pm_storage = zeros(p+m+n_nuisance)
+    maxd_storage = zeros(maxd)
     return Storages(vec_p, vec_maxd, Γ, denom, denom2, p_storage, 
-        p_storage2, m_storage, m_storage2, pm_storage)
+        p_storage2, m_storage, m_storage2, pm_storage, maxd_storage)
 end
 function Base.fill!(s::Storages, x::Number)
     fill!(s.vec_p, x)
@@ -38,6 +40,7 @@ function Base.fill!(s::Storages, x::Number)
     fill!(s.m_storage, x)
     fill!(s.m_storage2, x)
     fill!(s.pm_storage, x)
+    fill!(s.maxd_storage, x)
 end
 
 """
@@ -64,7 +67,7 @@ function GWASCopulaVCModel(
     q = size(G, 2)    # number of SNPs in each sample
     p = length(qc_model.β) # number of fixed effects in each sample
     m = length(qc_model.θ) # number of variance components in each sample
-    s = typeof(qc_model) <: GaussianCopulaVCModel ? 1 : 0 # number of nuisance parameters (only gaussian case for now)
+    s = typeof(qc_model) <: GLMCopulaVCModel ? 0 : 1 # number of nuisance parameters
     maxd = maxclustersize(qc_model)
     T = eltype(qc_model.data[1].X)
     n == length(qc_model.data) || error("sample size do not agree")
@@ -77,7 +80,7 @@ function GWASCopulaVCModel(
     W = zeros(T, p + m + s)
     χ2 = Chisq(1)
     pvals = zeros(T, q)
-    storage = storages(p, maxd, m)
+    storage = storages(p, maxd, m, s)
     Wtime = 0.0
     Qtime = 0.0
     Rtime = 0.0
@@ -172,12 +175,18 @@ function update_W!(W, qc_model::GaussianCopulaVCModel, i::Int, zi::AbstractVecto
     return W
 end
 
-function calculate_Ri(qc_model::GaussianCopulaVCModel, i::Int, zi::AbstractVector, Γ, ∇resγ, denom)
+function calculate_Ri(qc_model::GaussianCopulaVCModel, i::Int, 
+    zi::AbstractVector, Γ, ∇resγ, denom, storage::Storages)
     τ = qc_model.τ[1]
     qc = qc_model.data[i]
-    res = qc.y - qc.X * qc_model.β # y - Xb
-    tmp = Transpose(zi) * Γ * res
-    return τ * (Transpose(zi) * res - Transpose(zi) * Γ * res / denom)
+    d = qc.n # number of observation for sample i
+    storage_d = @view(storage.vec_maxd[1:d])
+    storage_d2 = @view(storage.maxd_storage[1:d])
+
+    mul!(storage_d, qc.X, qc_model.β)
+    storage_d .= qc.y .- storage_d # storage_d = y - Xb
+    mul!(storage_d2, Γ, storage_d) # storage_d2 = Γ * res
+    return τ * (dot(zi, storage_d) - dot(zi, storage_d2) / denom)
 end
 
 function calculate_Ri(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, i::Int, 
@@ -195,16 +204,21 @@ function calculate_Ri(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, i::Int
     return R
 end
 
-function calculate_Qi(qc_model::GaussianCopulaVCModel, i::Int, zi::AbstractVector, Γ, ∇resγ, denom, denom2)
+function calculate_Qi(qc_model::GaussianCopulaVCModel, i::Int, zi::AbstractVector, Γ, ∇resγ, denom, denom2, storages::Storages)
     qc = qc_model.data[i]
     res = qc.y - qc.X*qc_model.β
     d = qc_model.data[i].n # number of observation for sample i
     τ = qc_model.τ[1]
+    storage_d = @view(storages.vec_maxd[1:d])
 
-    Qi = τ * Transpose(zi) * zi # 1st term
-    Qi -= τ * Transpose(zi) * Γ * zi / denom # 2nd term
-    tmp =  Transpose(zi) * Γ * res
-    Qi += τ^2 * tmp * tmp' / denom2 # 3rd term
+    # term1
+    Qi = τ * sum(abs2, zi)
+    # term2
+    mul!(storage_d, Γ, zi)
+    Qi -= τ * dot(zi, storage_d) / denom
+    # term3
+    mul!(storage_d, Γ, res)
+    Qi += τ^2 * abs2(dot(zi, storage_d)) / denom2 
     return Qi
 end
 
