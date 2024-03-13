@@ -251,7 +251,13 @@ function get_∇resγ(qc_model::GaussianCopulaVCModel, i::Int, zi::AbstractVecto
     T = eltype(qc_model.data[i].X)
     ∇resγ = zeros(T, d)
     # ∇resγ = -sqrt(qc_model.τ[1]) .* fill(z[i], d) # for gaussian case
-    for k in 1:d # loop over each sample's observation
+    return get_∇resγ!(∇resγ, qc_model, i, zi)
+end
+function get_∇resγ!(∇resγ, qc_model::GaussianCopulaVCModel, i::Int, zi::AbstractVector)
+    qc = qc_model.data[i]
+    d = size(qc.X, 1)
+    T = eltype(zi)
+    for k in 1:d # loop over this sample's observations
         ∇resγ[k] = update_∇res_ij(Normal(), zi[k], zero(T), zero(T), zero(T), zero(T))
     end
     return ∇resγ
@@ -265,6 +271,10 @@ function get_∇resβ!(∇resβ, qc_model::Union{GLMCopulaVCModel, NBCopulaVCMod
 end
 function get_∇resβ(qc_model::GaussianCopulaVCModel, i::Int)
     ∇resβ = -sqrt(qc_model.τ[1]) .* qc_model.data[i].X # see end of 11.3.1 https://arxiv.org/abs/2205.03505
+    return ∇resβ
+end
+function get_∇resβ!(∇resβ, qc_model::GaussianCopulaVCModel, i::Int)
+    ∇resβ .= -sqrt(qc_model.τ[1]) .* qc_model.data[i].X # see end of 11.3.1 https://arxiv.org/abs/2205.03505
     return ∇resβ
 end
 
