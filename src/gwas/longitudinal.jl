@@ -108,17 +108,19 @@ function GWASCopulaVCModel(
             # calculate W
             Wtime += @elapsed update_W!(W, qc_model, i, @view(zi[1:d]), Γ, ∇resβ, ∇resγ, storage)
             # update Q
-            Qtime += @elapsed Q += calculate_Qi(qc_model, i, @view(zi[1:d]), Γ, ∇resγ, denom, denom2)
+            Qtime += @elapsed Q += calculate_Qi(qc_model, i, @view(zi[1:d]), Γ, ∇resγ, denom, denom2, storage)
             # update R
             Rtime += @elapsed R += calculate_Ri(qc_model, i, @view(zi[1:d]), Γ, ∇resγ, denom)
         end
         # score test
         S = R * inv(Q - dot(W, Pinv, W)) * R
         pvals[j] = ccdf(χ2, S)
+        # @show pvals[1]
+        # fdsa
     end
-    # @show Wtime
-    # @show Qtime
-    # @show Rtime
+    @show Wtime
+    @show Qtime
+    @show Rtime
     return pvals
 end
 
@@ -175,20 +177,27 @@ function calculate_Qi(qc_model::GaussianCopulaVCModel, i::Int, zi::AbstractVecto
     return Qi
 end
 
-function calculate_Qi(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, i::Int, zi::AbstractVector, Γ, ∇resγ, denom, denom2)
+function calculate_Qi(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, 
+    i::Int, zi::AbstractVector, Γ::AbstractMatrix{T}, ∇resγ::AbstractVector{T}, 
+    denom::T, denom2::T, storages::Storages) where T
     qc = qc_model.data[i]
     res = qc.res
     d = qc_model.data[i].n # number of observation for sample i
+    storage_d = @view(storages.vec_maxd[1:qc.n])
 
-    Qi = Transpose(zi) * Diagonal(qc.w2) * zi
-    Qi += (∇resγ' * Γ * res) * (∇resγ' * Γ * res)' / denom2 # 2nd term
-    Qi -= ∇resγ' * Γ * ∇resγ / denom # 3rd term
-    ek = zeros(d)
+    # term1
+    storage_d .= qc.w2 .* zi
+    Qi = dot(zi, storage_d)
+    # term2 
+    mul!(storage_d, Γ, ∇resγ)
+    Qi += abs2(dot(res, storage_d)) / denom2
+    # term3
+    Qi -= dot(∇resγ, storage_d) / denom
+    # term4
+    mul!(storage_d, Γ, res)
     for k in 1:d
-        fill!(ek, 0)
-        ek[k] = 1
-        dist = typeof(qc_model.d[i]) <: NegativeBinomial ? NegativeBinomial(qc_model.r[1]) : qc_model.d[i]
-        Qi -= (ek' * Γ * res * dβdβ_res_ij(dist, qc.link, zi[1], qc.η[k], qc.μ[k], qc.varμ[k], res[k])) / denom
+        Qi -= storage_d[k] * dβdβ_res_ij(
+            qc.d, qc.link, zi[1], qc.η[k], qc.μ[k], qc.varμ[k], res[k]) / denom
     end
     return Qi
 end

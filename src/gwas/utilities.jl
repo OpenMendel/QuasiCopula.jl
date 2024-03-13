@@ -1,6 +1,6 @@
 """
     ∇²σ²_j(d::Distribution, l::Link, xj::Union{AbstractVector{T}, T}, μj::T, ηj::T)
-    ∇²σ²_j!(storage::AbstractMatrix{T}, d::Distribution, l::Link, xj::AbstractVector{T}, μj::T, ηj::T)
+    ∇²σ²_j!(storage::AbstractMatrix{T}, d::Distribution, l::Link, xj::AbstractVector{T}, μj::T, ηj::T, c::T)
 
 Computes the Hessian of the σ^2 function with respect to β for sample i (Xi) 
 at time j. The inplace versions is equivalent to `storage .+= c .* ∇²σ²_j` 
@@ -124,7 +124,7 @@ mueta2(::LogLink, η::Real) = exp(η)
     dβdβ_res_ij(dist, link, xj, η_j, μ_j, varμ_j, res_j)
 
 Computes the Hessian of the standardized residuals for sample i 
-at the j'th measurement, the gradient is evaluate with respect to β (or γ) twice
+at the j'th measurement, the gradient is evaluate with respect to β (or γ) twice.
 """
 function dβdβ_res_ij(dist, link, xj, η_j, μ_j, varμ_j, res_j)
     invσ_j = inv(sqrt(varμ_j))
@@ -148,7 +148,7 @@ end
 
 Computes the Hessian of the standardized residuals for sample i 
 at the j'th measurement, first gradient respect to β, then with respect to γ.
-The inplace version is equivalent to `result .-= c * dγdβresβ_ij`
+The inplace version is equivalent to `result_final .-= c * dγdβresβ_ij`
 """
 function dγdβresβ_ij(dist, link, xj, z, η_j, μ_j, varμ_j, res_j)
     invσ_j = inv(sqrt(varμ_j)) # 1 × 1
