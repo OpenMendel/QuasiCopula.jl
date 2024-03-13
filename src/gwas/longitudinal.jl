@@ -315,19 +315,19 @@ function get_Pinv(qc_model::GaussianCopulaVCModel)
 end
 
 function get_Hθθ(qc_model::Union{GaussianCopulaVCModel,GLMCopulaVCModel,NBCopulaVCModel})
-    # use loglikelihood! function to get Hθθ. Commented out code gives the same answer
-    loglikelihood!(qc_model, true, true)
-    return qc_model.Hθ
-    # m = length(qc_model.data[1].V) # number of variance components
-    # hess_math = zeros(m, m)
-    # for i in eachindex(qc_model.data)
-    #     r = qc_model.data[i].res
-    #     Ω = qc_model.data[i].V
-    #     b = [0.5r' * Ω[k] * r for k in 1:m]
-    #     c = [0.5tr(Ω[k]) for k in 1:m]
-    #     hess_math += b*b' / (1 + qc_model.θ'*b)^2 - c*c' / (1 + qc_model.θ'*c)^2
-    # end
-    # return -hess_math
+    # loglikelihood! for Hθθ is broken for Gaussian case
+    # loglikelihood!(qc_model, true, true)
+    # return qc_model.Hθ
+    m = length(qc_model.data[1].V) # number of variance components
+    hess_math = zeros(m, m)
+    for i in eachindex(qc_model.data)
+        r = qc_model.data[i].res
+        Ω = qc_model.data[i].V
+        b = [0.5r' * Ω[k] * r for k in 1:m]
+        c = [0.5tr(Ω[k]) for k in 1:m]
+        hess_math += b*b' / (1 + qc_model.θ'*b)^2 - c*c' / (1 + qc_model.θ'*c)^2
+    end
+    return -hess_math
 end
 
 function get_Hβθ(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel})
@@ -580,14 +580,16 @@ function get_Hτβ(qc_model::GaussianCopulaVCModel)
 end
 function get_Hτθ(qc_model::GaussianCopulaVCModel)
     θ = qc_model.θ
+    τ = qc_model.τ[1]
     m = length(θ)
     T = eltype(θ)
     Hτθ = zeros(T, m)
     qstore = zeros(T, m)
     for qc in qc_model.data
         copyto!(qstore, qc.q) # gc.q = 0.5r(β)*V[k]*r(β) where r = (y-Xb) * sqrt(τ)
-        qstore ./= qc_model.τ[1]
-        Hτθ .+= inv(1 + dot(θ, qstore)) .* qstore
+        qstore ./= qc_model.τ[1] # qstore = 0.5(y-Xb)*V[k]*(y-Xb)
+        tmp_dot = τ * dot(θ, qstore)
+        Hτθ .+= inv(1 + tmp_dot) .* qstore .- tmp_dot / abs2(1 + tmp_dot) .* qstore
     end
     return Hτθ
 end
