@@ -158,10 +158,19 @@ function calculate_Ri(qc_model::GaussianCopulaVCModel, i::Int, zi::AbstractVecto
     return τ * (Transpose(zi) * res - Transpose(zi) * Γ * res / denom)
 end
 
-function calculate_Ri(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, i::Int, zi::AbstractVector, Γ, ∇resγ, denom)
+function calculate_Ri(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel}, i::Int, 
+    zi::AbstractVector, Γ, ∇resγ, denom::T, storage::Storages) where T
     qc = qc_model.data[i]
     res = qc.res # y - μ / std(σ), i.e. standardized residuals
-    return Transpose(zi) * Diagonal(qc.w1) * (qc.y - qc.μ) + (∇resγ' * Γ * res) / denom
+    d = qc.n # number of observation for sample i
+    storage_d = @view(storage.vec_maxd[1:d])
+    # term1 
+    storage_d .= qc.w1 .* (qc.y .- qc.μ)
+    R = dot(zi, storage_d)
+    # term2
+    mul!(storage_d, Γ, res)
+    R += dot(∇resγ, storage_d) / denom
+    return R
 end
 
 function calculate_Qi(qc_model::GaussianCopulaVCModel, i::Int, zi::AbstractVector, Γ, ∇resγ, denom, denom2)
@@ -182,8 +191,8 @@ function calculate_Qi(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel},
     denom::T, denom2::T, storages::Storages) where T
     qc = qc_model.data[i]
     res = qc.res
-    d = qc_model.data[i].n # number of observation for sample i
-    storage_d = @view(storages.vec_maxd[1:qc.n])
+    d = qc.n # number of observation for sample i
+    storage_d = @view(storages.vec_maxd[1:d])
 
     # term1
     storage_d .= qc.w2 .* zi

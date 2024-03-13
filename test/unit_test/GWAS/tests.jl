@@ -113,6 +113,18 @@ using LinearAlgebra
     b = @benchmark QuasiCopula.get_neg_Hθγ_i!($W, $qc, $θtrue, $∇resγ, $storages)
     @test b.allocs == 0
     @test b.memory == 0
+
+    # dβdβ_res_ij should be efficient when xj is scalar
+    dist = GLM.Bernoulli()
+    link = GLM.LogitLink()
+    xj = randn()
+    η_j = randn()
+    μ_j = randn()
+    varμ_j = rand()
+    res_j = randn()
+    b = @benchmark dβdβ_res_ij($dist, $link, $xj, $η_j, $μ_j, $varμ_j, $res_j)
+    @test b.allocs == 0
+    @test b.memory == 0
 end
 
 @testset "update_W!" begin
@@ -148,4 +160,50 @@ end
     @test b.memory == 0
 end
 
-## Need to test: samples with only 1 observations
+@testset "calculate_Qi" begin
+    n = 1000
+    p = 15
+    mind = 1
+    maxd = 10
+    m = 2
+    qc_model, G, βtrue, θtrue, γtrue, τtrue = simulate_longitudinal_traits(
+        n=n, d_min=mind, d_max=maxd, m=m, p=p)
+    i = rand(1:n)
+    qc = qc_model.data[i]
+    Γ = qc.V[1] * θtrue[1] + qc.V[2] * θtrue[2]
+    z = randn(qc.n)
+    ∇resγ = QuasiCopula.get_∇resγ(qc_model, i, z) # d × 1
+    ∇resβ = QuasiCopula.get_∇resβ(qc_model, i) # d × p
+    storages = QuasiCopula.storages(p, maxd, m)
+    denom = 1 + dot(qc_model.θ, qc.q) # same as denom = 1 + 0.5 * (res' * Γ * res), since dot(θ, qc.q) = qsum = 0.5 r'Γr
+    denom2 = abs2(denom)
+
+    # efficiency
+    b = @benchmark QuasiCopula.calculate_Qi($qc_model, $i, $z, $Γ, $∇resγ, $denom, $denom2, $storages)
+    @test b.allocs == 0
+    @test b.memory == 0
+end
+
+@testset "calculate_Ri" begin
+    n = 1000
+    p = 15
+    mind = 1
+    maxd = 10
+    m = 2
+    qc_model, G, βtrue, θtrue, γtrue, τtrue = simulate_longitudinal_traits(
+        n=n, d_min=mind, d_max=maxd, m=m, p=p)
+    i = rand(1:n)
+    qc = qc_model.data[i]
+    Γ = qc.V[1] * θtrue[1] + qc.V[2] * θtrue[2]
+    z = randn(qc.n)
+    ∇resγ = QuasiCopula.get_∇resγ(qc_model, i, z) # d × 1
+    ∇resβ = QuasiCopula.get_∇resβ(qc_model, i) # d × p
+    storages = QuasiCopula.storages(p, maxd, m)
+    denom = 1 + dot(qc_model.θ, qc.q) # same as denom = 1 + 0.5 * (res' * Γ * res), since dot(θ, qc.q) = qsum = 0.5 r'Γr
+    denom2 = abs2(denom)
+
+    # efficiency
+    b = @benchmark QuasiCopula.calculate_Ri($qc_model, $i, $z, $Γ, $∇resγ, $denom, $storages)
+    @test b.allocs == 0
+    @test b.memory == 0
+end
