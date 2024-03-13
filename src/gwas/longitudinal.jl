@@ -303,6 +303,27 @@ function get_neg_Hθγ_i(gc, θ, ∇resγ, storages::Storages)
     return Hγθ'
 end
 
+# `get_neg_Hθγ_i!` is equivalent to `W .+= get_neg_Hθγ_i`
+function get_neg_Hθγ_i!(W, qc, θ, ∇resγ, storages::Storages)
+    m = length(qc.V)  # number of variance components
+    r = qc.res
+    Ω = qc.V
+    # compute A and b
+    vec_d = @view(storages.vec_maxd[1:qc.n])
+    A = storages.m_storage
+    b = storages.m_storage2
+    for i in 1:m
+        mul!(vec_d, Ω[i], r)
+        A[i] = dot(∇resγ, vec_d)
+        b[i] = 0.5dot(r, vec_d)
+    end
+    # update W
+    denom = 1 + dot(θ, b)
+    denom2 = denom^2
+    W .+= (dot(A, θ) / denom2) .* b .- A ./ denom
+    return W
+end
+
 function get_Hβγ_i(qc::GLMCopulaVCObs, Γ, ∇resβ, ∇resγ, z::AbstractVector, storages::Storages) # z is a vector of SNP value (length d)
     res = qc.res
     denom = storages.denom
