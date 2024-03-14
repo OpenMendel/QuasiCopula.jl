@@ -454,7 +454,7 @@ function get_Hβγ_i!(W, qc::GLMCopulaVCObs, Γ, ∇resβ, ∇resγ, z::Abstract
     return W # p × 1
 end
 
-function get_Hβγ_i(qc::GaussianCopulaVCObs, Γ, ∇resβ, ∇resγ, z::AbstractVector, β, τ, storages::Storages) # z is a vector of SNP value (length d)
+function get_Hβγ_i(qc::GaussianCopulaVCObs, Γ, z::AbstractVector, β, τ, storages::Storages) # z is a vector of SNP value (length d)
     res = qc.y - qc.X * β
     denom = 1 + 0.5τ * (res' * Γ * res)
     # 1st Hessian term
@@ -467,6 +467,25 @@ function get_Hβγ_i(qc::GaussianCopulaVCObs, Γ, ∇resβ, ∇resγ, z::Abstrac
     tmp2 = Transpose(z) * Γ * res
     Hβγ_i -= τ^2 * tmp1 * tmp2' / denom^2
     return Hβγ_i
+end
+
+# `get_Hβγ_i!` is equivalent to `W .+= get_Hβγ_i`
+function get_Hβγ_i!(W, qc::GaussianCopulaVCObs, Γ::AbstractMatrix{T}, 
+    z::AbstractVector{T}, τ::T, storages::Storages
+    ) where T # z is a vector of SNP value (length d)
+    vec_d = @view(storages.vec_maxd[1:qc.n])
+    vec_d2 = @view(storages.maxd_storage[1:qc.n])
+    res = qc.res # note: qc.res = (y - X*β) * sqrt(τ)
+    mul!(vec_d, Γ, res)
+    denom = 1 + 0.5dot(res, vec_d)
+    # 2nd Hessian term
+    mul!(vec_d2, Γ, z)
+    BLAS.gemv!('T', τ / denom, qc.X, vec_d2, one(T), W)
+    # 1st Hessian term
+    BLAS.gemv!('T', -τ, qc.X, z, one(T), W)
+    c = -τ * dot(z, vec_d) / denom^2
+    BLAS.gemv!('T', c, qc.X, vec_d, one(T), W)
+    return W
 end
 
 function get_Hββ(qc_model::Union{GLMCopulaVCModel, NBCopulaVCModel})
