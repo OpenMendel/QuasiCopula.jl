@@ -61,59 +61,69 @@ A length `q` vector of p-values storing the score statistics for each SNP
 function GWASCopulaVCModel(
     qc_model::Union{GaussianCopulaVCModel, GLMCopulaVCModel, NBCopulaVCModel},
     G::SnpArray;
-    check_grad::Bool=true
+    check_grad::Bool=true,
+    ncores = Threads.nthreads(),
     )
     n = size(G, 1)    # number of samples with genotypes
     q = size(G, 2)    # number of SNPs in each sample
     p = length(qc_model.β) # number of fixed effects in each sample
     m = length(qc_model.θ) # number of variance components in each sample
     s = typeof(qc_model) <: GLMCopulaVCModel ? 0 : 1 # number of nuisance parameters
-    maxd = maxclustersize(qc_model)
+    maxd = maxclustersize(qc_model) # max number of observations in 1 sample
     T = eltype(qc_model.data[1].X)
     n == length(qc_model.data) || error("sample size do not agree")
     check_grad && any(x -> abs(x) > 1e-1, qc_model.∇β) && error("Null model gradient of beta is not zero!")
     check_grad && any(x -> abs(x) > 1e-1, qc_model.∇θ) && error("Null model gradient of variance components is not zero!")
+    
+    # test statistics
+    pvals = zeros(T, q)
+    χ2 = Chisq(1)
 
     # preallocated arrays for efficiency
-    z = zeros(T, n)
-    zi = zeros(T, maxd)
-    W = zeros(T, p + m + s)
-    χ2 = Chisq(1)
-    pvals = zeros(T, q)
-    storage = storages(p, maxd, m, s)
-    Wtime = 0.0
-    Qtime = 0.0
-    Rtime = 0.0
-    grad_res_time = 0.0
-    othertime = 0.0
-    scoretest_time = 0.0
-    Pinv = get_Pinv(qc_model) # compute Pinv (inverse negative Hessian)
-    ∇resγ_store = zeros(T, maxd)
-    ∇resβ_store = zeros(T, maxd, p)
+    z = [zeros(T, n) for _ in 1:ncores]
+    zi = [zeros(T, maxd) for _ in 1:ncores]
+    W = [zeros(T, p + m + s) for _ in 1:ncores]
+    storage = [storages(p, maxd, m, s) for _ in 1:ncores]
+    ∇resγ_store = [zeros(T, maxd) for _ in 1:ncores]
+    ∇resβ_store = [zeros(T, maxd, p) for _ in 1:ncores]
+    pmeter = Progress(q; dt=3.0)
+
+    # timers
+    Wtime = [0.0 for _ in 1:ncores]
+    Qtime = [0.0 for _ in 1:ncores]
+    Rtime = [0.0 for _ in 1:ncores]
+    grad_res_time = [0.0 for _ in 1:ncores]
+    othertime = [0.0 for _ in 1:ncores]
+    scoretest_time = [0.0 for _ in 1:ncores]
+
+    # compute Pinv (inverse negative Hessian)
+    Pinv = get_Pinv(qc_model) 
 
     # score test for each SNP
-    @showprogress for j in 1:q
+    Threads.@threads for j in 1:q
+        tid = Threads.threadid()
         # sync vectors
-        SnpArrays.copyto!(z, @view(G[:, j]), center=true, scale=false, impute=true)
+        store = storage[tid]
+        SnpArrays.copyto!(z[tid], @view(G[:, j]), center=true, scale=false, impute=true)
         Q, R = zero(T), zero(T)
-        fill!(W, zero(T))
-        fill!(storage, zero(T))
+        fill!(W[tid], zero(T))
+        fill!(store, zero(T))
         # loop over each sample
         for i in 1:n
             # variables for current sample
             qc = qc_model.data[i]
             d = qc.n # number of observations for current sample
-            fill!(zi, z[i])
+            fill!(zi[tid], z[tid][i])
             # update gradient of residual with respect to β and γ
-            grad_res_time += @elapsed begin
-                ∇resγ = @view(∇resγ_store[1:d])
-                ∇resβ = @view(∇resβ_store[1:d, :])
-                get_∇resγ!(∇resγ, qc_model, i, @view(zi[1:d]))
+            grad_res_time[tid] += @elapsed begin
+                ∇resγ = @view(∇resγ_store[tid][1:d])
+                ∇resβ = @view(∇resβ_store[tid][1:d, :])
+                get_∇resγ!(∇resγ, qc_model, i, @view(zi[tid][1:d]))
                 get_∇resβ!(∇resβ, qc_model, i)
             end
-            othertime += @elapsed begin
+            othertime[tid] += @elapsed begin
                 # compute covariance matrix
-                Γ = @view(storage.Γ[1:d, 1:d])
+                Γ = @view(store.Γ[1:d, 1:d])
                 Γ .= zero(T)
                 for k in 1:qc.m
                     BLAS.axpy!(qc_model.θ[k], qc.V[k], Γ) # Γ .+= θ .* V[k]
@@ -121,29 +131,40 @@ function GWASCopulaVCModel(
                 # form some constants 
                 denom = 1 + dot(qc_model.θ, qc.q) # same as denom = 1 + 0.5 * (res' * Γ * res), since dot(θ, qc.q) = qsum = 0.5 r'Γr
                 denom2 = abs2(denom)
-                storage.denom[1] = denom
-                storage.denom2[1] = denom2
+                store.denom[1] = denom
+                store.denom2[1] = denom2
             end
             # calculate W
-            Wtime += @elapsed update_W!(W, qc_model, i, @view(zi[1:d]), Γ, ∇resβ, ∇resγ, storage)
+            Wtime[tid] += @elapsed update_W!(W[tid], qc_model, i, @view(zi[tid][1:d]), Γ, ∇resβ, ∇resγ, store)
             # update Q
-            Qtime += @elapsed Q += calculate_Qi(qc_model, i, @view(zi[1:d]), Γ, ∇resγ, denom, denom2, storage)
+            Qtime[tid] += @elapsed Q += calculate_Qi(qc_model, i, @view(zi[tid][1:d]), Γ, ∇resγ, denom, denom2, store)
             # update R
-            Rtime += @elapsed R += calculate_Ri(qc_model, i, @view(zi[1:d]), Γ, ∇resγ, denom, storage)
+            Rtime[tid] += @elapsed R += calculate_Ri(qc_model, i, @view(zi[tid][1:d]), Γ, ∇resγ, denom, store)
         end
         # score test
-        scoretest_time += @elapsed begin
-            mul!(storage.pm_storage, Pinv, W)
-            S = R * inv(Q - dot(W, storage.pm_storage)) * R
+        scoretest_time[tid] += @elapsed begin
+            mul!(store.pm_storage, Pinv, W[tid])
+            S = R * inv(Q - dot(W[tid], store.pm_storage)) * R
             pvals[j] = ccdf(χ2, S)
         end
+        # update progress
+        next!(pmeter)
     end
+
+    # update timer
+    Wtime = sum(Wtime) / ncores
+    Qtime = sum(Qtime) / ncores
+    Rtime = sum(Rtime) / ncores
+    grad_res_time = sum(grad_res_time) / ncores
+    othertime = sum(othertime) / ncores
+    scoretest_time =  sum(scoretest_time) / ncores
     @show Wtime
     @show Qtime
     @show Rtime
     @show grad_res_time
     @show othertime
     @show scoretest_time
+
     return pvals
 end
 
