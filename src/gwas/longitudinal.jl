@@ -137,8 +137,6 @@ function GWASCopulaVCModel(
             S = R * inv(Q - dot(W, storage.pm_storage)) * R
             pvals[j] = ccdf(χ2, S)
         end
-        # @show pvals[1]
-        # fdsa
     end
     @show Wtime
     @show Qtime
@@ -155,22 +153,16 @@ function update_W!(W, qc_model::GLMCopulaVCModel, i::Int, zi::AbstractVector,
     Γ, ∇resβ, ∇resγ, storages::Storages)
     p = qc_model.p
     qc = qc_model.data[i]
-    get_Hβγ_i!(@view(W[1:p]), qc, Γ, ∇resβ, ∇resγ, zi, storages) # exact
+    get_neg_Hβγ_i!(@view(W[1:p]), qc, Γ, ∇resβ, ∇resγ, zi, storages) # exact
     get_neg_Hθγ_i!(@view(W[p+1:end]), qc, qc_model.θ, ∇resγ, storages) # exact
     return W
 end
 
 function update_W!(W, qc_model::GaussianCopulaVCModel, i::Int, zi::AbstractVector, Γ, ∇resβ, ∇resγ, storages::Storages)
-    p, m = qc_model.p, qc_model.m
+    p = qc_model.p
     qc = qc_model.data[i]
-    Hβγ_i = get_Hβγ_i(qc, Γ, ∇resβ, ∇resγ, zi, qc_model.β, qc_model.τ[1], storages) # exact
-    Hθγ_i = get_neg_Hθγ_i(qc, qc_model.θ, ∇resγ, storages) # exact
-    for j in 1:p
-        W[j] -= Hβγ_i[j]
-    end
-    for j in 1:m
-        W[p + j] -= Hθγ_i[j]
-    end
+    get_neg_Hβγ_i!(@view(W[1:p]), qc, Γ, zi, qc_model.τ[1], storages) # exact
+    get_neg_Hθγ_i!(@view(W[p+1:end-1]), qc, qc_model.θ, ∇resγ, storages) # exact
     W[end] -= get_Hτγ_i(qc, zi, qc_model.θ, qc_model.τ[1]) # exact
     return W
 end
@@ -315,7 +307,7 @@ function get_Pinv(qc_model::GaussianCopulaVCModel)
 end
 
 function get_Hθθ(qc_model::Union{GaussianCopulaVCModel,GLMCopulaVCModel,NBCopulaVCModel})
-    # loglikelihood! for Hθθ is broken for Gaussian case
+    # loglikelihood! function for Hθθ is broken under Gaussian case
     # loglikelihood!(qc_model, true, true)
     # return qc_model.Hθ
     m = length(qc_model.data[1].V) # number of variance components
@@ -394,6 +386,26 @@ function get_neg_Hθγ_i!(W, qc, θ, ∇resγ, storages::Storages)
     return W
 end
 
+function get_neg_Hθγ_i!(W, qc::GaussianCopulaVCObs, θ, ∇resγ, storages::Storages)
+    m = length(qc.V)  # number of variance components
+    r = qc.res
+    Ω = qc.V
+    # compute A and b
+    vec_d = @view(storages.vec_maxd[1:qc.n])
+    A = storages.m_storage
+    b = storages.m_storage2
+    for i in 1:m
+        mul!(vec_d, Ω[i], r)
+        A[i] = dot(∇resγ, vec_d)
+        b[i] = 0.5dot(r, vec_d)
+    end
+    # update W
+    denom = 1 + dot(θ, b)
+    denom2 = denom^2
+    W .-= (dot(A, θ) / denom2) .* b .- A ./ denom
+    return W
+end
+
 function get_Hβγ_i(qc::GLMCopulaVCObs, Γ, ∇resβ, ∇resγ, z::AbstractVector, storages::Storages) # z is a vector of SNP value (length d)
     res = qc.res
     denom = storages.denom
@@ -420,11 +432,11 @@ function get_Hβγ_i(qc::GLMCopulaVCObs, Γ, ∇resβ, ∇resγ, z::AbstractVect
     return Hβγ_i # p × 1
 end
 
-# `get_Hβγ_i!` is equivalent to `W .+= get_Hβγ_i`
-function get_Hβγ_i!(W, qc::GLMCopulaVCObs, Γ, ∇resβ, ∇resγ, z::AbstractVector, 
+# `get_neg_Hβγ_i!` is equivalent to `W .+= get_Hβγ_i`
+function get_neg_Hβγ_i!(W, qc::GLMCopulaVCObs, Γ, ∇resβ, ∇resγ, z::AbstractVector, 
     storages::Storages
     ) # z is a vector of SNP value (length d all storing the same SNP value)
-    length(W) == length(storages.vec_p) || error("Dimension mismatch in get_Hβγ_i!")
+    length(W) == length(storages.vec_p) || error("Dimension mismatch in get_neg_Hβγ_i!")
     # storages
     res = qc.res
     denom = storages.denom[1]
@@ -469,8 +481,8 @@ function get_Hβγ_i(qc::GaussianCopulaVCObs, Γ, z::AbstractVector, β, τ, sto
     return Hβγ_i
 end
 
-# `get_Hβγ_i!` is equivalent to `W .+= get_Hβγ_i`
-function get_Hβγ_i!(W, qc::GaussianCopulaVCObs, Γ::AbstractMatrix{T}, 
+# `get_neg_Hβγ_i!` is equivalent to `W .+= get_Hβγ_i`
+function get_neg_Hβγ_i!(W, qc::GaussianCopulaVCObs, Γ::AbstractMatrix{T}, 
     z::AbstractVector{T}, τ::T, storages::Storages
     ) where T # z is a vector of SNP value (length d)
     vec_d = @view(storages.vec_maxd[1:qc.n])
@@ -480,10 +492,11 @@ function get_Hβγ_i!(W, qc::GaussianCopulaVCObs, Γ::AbstractMatrix{T},
     denom = 1 + 0.5dot(res, vec_d)
     # 2nd Hessian term
     mul!(vec_d2, Γ, z)
-    BLAS.gemv!('T', τ / denom, qc.X, vec_d2, one(T), W)
+    BLAS.gemv!('T', -τ / denom, qc.X, vec_d2, one(T), W)
     # 1st Hessian term
-    BLAS.gemv!('T', -τ, qc.X, z, one(T), W)
-    c = -τ * dot(z, vec_d) / denom^2
+    BLAS.gemv!('T', τ, qc.X, z, one(T), W)
+    # 3rd Hessian term
+    c = τ * dot(z, vec_d) / denom^2
     BLAS.gemv!('T', c, qc.X, vec_d, one(T), W)
     return W
 end
