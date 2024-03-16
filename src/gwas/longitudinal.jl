@@ -1,7 +1,6 @@
 struct Storages{T <: BlasReal}
     vec_p::Vector{T}
     vec_maxd::Vector{T}
-    Γ::Matrix{T}
     denom::Vector{T}
     denom2::Vector{T}
     p_storage::Vector{T}
@@ -17,7 +16,6 @@ function storages(p::Int, maxd::Int, m::Int, n_nuisance::Int)
     # m = number of variance components
     vec_p = zeros(p)
     vec_maxd = zeros(maxd)
-    Γ = zeros(maxd, maxd)
     denom = zeros(1)
     denom2 = zeros(1)
     p_storage = zeros(p)
@@ -26,13 +24,12 @@ function storages(p::Int, maxd::Int, m::Int, n_nuisance::Int)
     m_storage2 = zeros(m)
     pm_storage = zeros(p+m+n_nuisance)
     maxd_storage = zeros(maxd)
-    return Storages(vec_p, vec_maxd, Γ, denom, denom2, p_storage, 
+    return Storages(vec_p, vec_maxd, denom, denom2, p_storage, 
         p_storage2, m_storage, m_storage2, pm_storage, maxd_storage)
 end
 function Base.fill!(s::Storages, x::Number)
     fill!(s.vec_p, x)
     fill!(s.vec_maxd, x)
-    fill!(s.Γ, x)
     fill!(s.denom, x)
     fill!(s.denom2, x)
     fill!(s.p_storage, x)
@@ -108,13 +105,19 @@ function GWASCopulaVCModel(
 
     # score test for each SNP
     Threads.@threads for j in 1:q
+        # sync thread storages
         tid = Threads.threadid()
+        Wₜ = W[tid]
+        zₜ = z[tid]
+        ziₜ = zi[tid]
+        storeₜ = storage[tid]
+        ∇resγ_storeₜ = ∇resγ_store[tid]
+        ∇resβ_storeₜ = ∇resβ_store[tid]
         # sync vectors
-        store = storage[tid]
-        SnpArrays.copyto!(z[tid], @view(G[:, j]), center=true, scale=false, impute=true)
+        SnpArrays.copyto!(zₜ, @view(G[:, j]), center=true, scale=false, impute=true)
         Q, R = zero(T), zero(T)
-        fill!(W[tid], zero(T))
-        fill!(store, zero(T))
+        fill!(Wₜ, zero(T))
+        fill!(storeₜ, zero(T))
         # thread timers
         Wtime_t = 0.0
         Qtime_t = 0.0
@@ -126,32 +129,32 @@ function GWASCopulaVCModel(
             # variables for current sample
             qc = qc_model.data[i]
             d = qc.n # number of observations for current sample
-            fill!(zi[tid], z[tid][i])
+            fill!(ziₜ, zₜ[i])
             Γstore = @view(Γ[1:d, 1:d])
             # update gradient of residual with respect to β and γ
             grad_res_time_t += @elapsed begin
-                ∇resγ = @view(∇resγ_store[tid][1:d])
-                ∇resβ = @view(∇resβ_store[tid][1:d, :])
-                get_∇resγ!(∇resγ, qc_model, i, @view(zi[tid][1:d]))
+                ∇resγ = @view(∇resγ_storeₜ[1:d])
+                ∇resβ = @view(∇resβ_storeₜ[1:d, :])
+                get_∇resγ!(∇resγ, qc_model, i, @view(ziₜ[1:d]))
                 get_∇resβ!(∇resβ, qc_model, i)
             end
             othertime_t += @elapsed begin
                 denom = 1 + dot(qc_model.θ, qc.q) # same as denom = 1 + 0.5 * (res' * Γ * res), since dot(θ, qc.q) = qsum = 0.5 r'Γr
                 denom2 = abs2(denom)
-                store.denom[1] = denom
-                store.denom2[1] = denom2
+                storeₜ.denom[1] = denom
+                storeₜ.denom2[1] = denom2
             end
             # calculate W
-            Wtime_t += @elapsed update_W!(W[tid], qc_model, i, @view(zi[tid][1:d]), Γstore, ∇resβ, ∇resγ, store)
+            Wtime_t += @elapsed update_W!(Wₜ, qc_model, i, @view(ziₜ[1:d]), Γstore, ∇resβ, ∇resγ, storeₜ)
             # update Q
-            Qtime_t += @elapsed Q += calculate_Qi(qc_model, i, @view(zi[tid][1:d]), Γstore, ∇resγ, denom, denom2, store)
+            Qtime_t += @elapsed Q += calculate_Qi(qc_model, i, @view(ziₜ[1:d]), Γstore, ∇resγ, denom, denom2, storeₜ)
             # update R
-            Rtime_t += @elapsed R += calculate_Ri(qc_model, i, @view(zi[tid][1:d]), Γstore, ∇resγ, denom, store)
+            Rtime_t += @elapsed R += calculate_Ri(qc_model, i, @view(ziₜ[1:d]), Γstore, ∇resγ, denom, storeₜ)
         end
         # score test
         scoretest_time_t = @elapsed begin
-            mul!(store.pm_storage, Pinv, W[tid])
-            S = R * inv(Q - dot(W[tid], store.pm_storage)) * R
+            mul!(storeₜ.pm_storage, Pinv, Wₜ)
+            S = R * inv(Q - dot(Wₜ, storeₜ.pm_storage)) * R
             pvals[j] = ccdf(χ2, S)
         end
         # update progress
@@ -197,7 +200,7 @@ function update_W!(W, qc_model::GaussianCopulaVCModel, i::Int, zi::AbstractVecto
     qc = qc_model.data[i]
     get_neg_Hβγ_i!(@view(W[1:p]), qc, Γ, zi, qc_model.τ[1], storages) # exact
     get_neg_Hθγ_i!(@view(W[p+1:end-1]), qc, qc_model.θ, ∇resγ, storages) # exact
-    W[end] -= get_Hτγ_i(qc, zi, qc_model.θ, qc_model.τ[1]) # exact
+    W[end] -= get_Hτγ_i(qc, zi, qc_model.θ, qc_model.τ[1], storages) # exact
     return W
 end
 
@@ -609,12 +612,13 @@ end
 # needed functions for gaussian case (zi is length d vector of SNP values)
 # i stands for sample i
 function get_Hτγ_i(qc::GaussianCopulaVCObs, zi::AbstractVector{T}, 
-    θ::AbstractVector{T}, τ::T) where T
+    θ::AbstractVector{T}, τ::T, storages::Storages) where T
     Hτγ = zero(T)
+    storage_d = @view(storages.vec_maxd[1:qc.n])
     # compute sqrt(τ)z'Γ(y-Xb) (numerator of 2nd term)
     for k in 1:qc.m
-        mul!(qc.storage_n, qc.V[k], qc.res) # storage_n = V[k] * res = V[k] * (y-Xb) * sqrt(τ) 
-        Hτγ += θ[k] * dot(zi, qc.storage_n) # Hτγ = sqrt(τ)θ[k]z'V[k](y-Xb) = sqrt(τ)z'Γ(y-Xb)
+        mul!(storage_d, qc.V[k], qc.res) # storage_d = V[k] * res = V[k] * (y-Xb) * sqrt(τ) 
+        Hτγ += θ[k] * dot(zi, storage_d) # Hτγ = sqrt(τ)θ[k]z'V[k](y-Xb) = sqrt(τ)z'Γ(y-Xb)
     end
     qsum = dot(θ, qc.q) # qsum = 0.5r(β)*Γ*r(β) where r = (y-Xb) * sqrt(τ)
     denom = abs2(1 + qsum) # denom = (1 + 0.5τ(y-Xb)'Γ(y-Xb) )^2
