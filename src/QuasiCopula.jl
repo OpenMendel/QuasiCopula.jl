@@ -1,7 +1,7 @@
 module QuasiCopula
 
 using LinearAlgebra
-using MathProgBase
+using MathOptInterface
 using Reexport
 using GLM, Distributions
 using StatsFuns
@@ -40,7 +40,7 @@ export simulate_longitudinal_traits
 include("parameter_estimation/gaussian_CS.jl")
 include("parameter_estimation/NBCopulaCS.jl")
 include("parameter_estimation/GLM_CS.jl")
-include("parameter_estimation/bivariate_mixed.jl")
+# include("parameter_estimation/bivariate_mixed.jl")
 include("parameter_estimation/GLM_VC.jl")
 include("parameter_estimation/gaussian_VC.jl")
 include("parameter_estimation/gaussian_AR.jl")
@@ -54,12 +54,12 @@ include("parameter_estimation/update_sigma_and_residuals.jl")
 include("parameter_estimation/initialize_model.jl")
 include("parameter_estimation/component_loglikelihood.jl")
 include("parameter_estimation/gradient_hessian.jl")
-include("parameter_estimation/fit_glm_ar_cs.jl")
-include("parameter_estimation/fit_gaussian_ar_cs.jl")
-include("parameter_estimation/fit_glm_vc.jl")
-include("parameter_estimation/fit_nb.jl")
+# include("parameter_estimation/fit_glm_ar_cs.jl")
+# include("parameter_estimation/fit_gaussian_ar_cs.jl")
+# include("parameter_estimation/fit_glm_vc.jl")
+# include("parameter_estimation/fit_nb.jl")
+# include("parameter_estimation/fit_gaussian_vc.jl")
 include("parameter_estimation/inference_ci.jl")
-include("parameter_estimation/fit_gaussian_vc.jl")
 include("model_interface/AR_interface.jl")
 include("model_interface/CS_interface.jl")
 include("model_interface/VC_interface.jl")
@@ -68,8 +68,8 @@ include("gwas/longitudinal.jl")
 include("gwas/longitudinal_autodiff.jl")
 include("gwas/longitudinal_autodiff_fast.jl")
 include("gwas/longitudinal_enzyme.jl")
-include("gwas/multivariate.jl")
+# include("gwas/multivariate.jl")
 # include("gwas/multivariate_gwas.jl")
-include("gwas/multivariate_gwas_autodiff.jl")
+# include("gwas/multivariate_gwas_autodiff.jl")
 include("gwas/utilities.jl")
 end # module
