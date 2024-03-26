@@ -62,7 +62,7 @@ function update_res!(
     gc::Union{GLMCopulaVCObs, NBCopulaVCObs, GLMCopulaCSObs, GLMCopulaARObs, NBCopulaARObs, NBCopulaCSObs},
     β::Vector)
     mul!(gc.η, gc.X, β)
-    @turbo for i in 1:gc.n
+    @inbounds @simd for i in 1:gc.n
         gc.μ[i] = GLM.linkinv(gc.link, gc.η[i])
         gc.varμ[i] = GLM.glmvar(gc.d, gc.μ[i]) # Note: for negative binomial, d.r is used
         gc.dμ[i] = GLM.mueta(gc.link, gc.η[i])
@@ -81,7 +81,7 @@ function update_res!(
     gc::Poisson_Bernoulli_VCObs,
     β::Vector)
     mul!(gc.η, gc.X, β)
-    @turbo for i in 1:gc.n
+    @inbounds @simd for i in 1:gc.n
         gc.μ[i] = GLM.linkinv(gc.veclink[i], gc.η[i])
         gc.varμ[i] = GLM.glmvar(gc.vecd[i], gc.μ[i]) # Note: for negative binomial, d.r is used
         gc.dμ[i] = GLM.mueta(gc.veclink[i], gc.η[i])

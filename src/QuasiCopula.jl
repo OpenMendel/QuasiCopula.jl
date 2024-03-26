@@ -1,6 +1,12 @@
 module QuasiCopula
-using Convex, LinearAlgebra, MathProgBase, Reexport, GLM, Distributions, StatsFuns, ToeplitzMatrices
-using LoopVectorization, DataFrames
+
+using LinearAlgebra
+using MathProgBase
+using Reexport
+using GLM, Distributions
+using StatsFuns
+using ToeplitzMatrices
+using DataFrames
 using LinearAlgebra: BlasReal, copytri!
 using SpecialFunctions
 using FFTW
@@ -10,8 +16,8 @@ using ProgressMeter
 using Random
 @reexport using Ipopt
 import Base: show, fill!
-using Enzyme
-using Zygote
+# using Enzyme
+# using Zygote
 
 export fit!, update_θ_jensen!, init_β!, initialize_model!, loglikelihood!, standardize_res!, std_res_differential!
 export update_res!, update_θ!

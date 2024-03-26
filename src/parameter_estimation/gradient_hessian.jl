@@ -16,8 +16,8 @@ compute the gradient of residual vector ∇resβ (standardized residual) with re
 """
 function std_res_differential!(gc::Union{NBCopulaVCObs{T, D, Link}, NBCopulaARObs{T, D, Link}, NBCopulaCSObs{T, D, Link}}
     ) where {T<: BlasReal, D<:NegativeBinomial{T}, Link}
-    @turbo for i in 1:gc.p
-        for j in 1:gc.n
+    @inbounds for i in 1:gc.p
+        @simd for j in 1:gc.n
             gc.∇resβ[j, i] = -inv(sqrt(gc.varμ[j])) * gc.dμ[j] * gc.X[j, i] - (0.5 * inv(gc.varμ[j])) * gc.res[j] * (gc.μ[j] * inv(gc.d.r) + (1 + inv(gc.d.r) * gc.μ[j])) *  gc.dμ[j] * gc.X[j, i]
         end
     end
@@ -48,8 +48,8 @@ end
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Poisson.
 """
 function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}}) where {T<: BlasReal, D<:Poisson{T}, Link}
-    @turbo for i in 1:gc.p
-        for j in 1:gc.n
+    @inbounds for i in 1:gc.p
+        @simd for j in 1:gc.n
             gc.∇resβ[j, i] = gc.X[j, i]
             gc.∇resβ[j, i] *= -(inv(sqrt(gc.varμ[j])) + (0.5 * inv(gc.varμ[j])) * gc.res[j]) * gc.dμ[j]
         end
@@ -63,8 +63,8 @@ end
 compute the gradient of residual vector ∇resβ (standardized residual) with respect to beta, for Bernoulli.
 """
 function std_res_differential!(gc::Union{GLMCopulaVCObs{T, D, Link}, GLMCopulaARObs{T, D, Link}, GLMCopulaCSObs{T, D, Link}}) where {T<: BlasReal, D<:Bernoulli{T}, Link}
-    @turbo for i in 1:gc.p
-        for j in 1:gc.n
+    @inbounds for i in 1:gc.p
+        @simd for j in 1:gc.n
             gc.∇resβ[j, i] = -sqrt(gc.varμ[j]) * gc.X[j, i] - (0.5 * gc.res[j] * (1 - (2 * gc.μ[j])) * gc.X[j, i])
         end
     end
