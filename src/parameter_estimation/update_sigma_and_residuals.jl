@@ -7,7 +7,7 @@ function update_θ_jensen!(
     gcm::Union{GLMCopulaVCModel{T, D, Link}, NBCopulaVCModel{T, D, Link}, GLMCopulaARModel{T, D, Link}, GLMCopulaCSModel{T, D, Link}, NBCopulaARModel{T, D, Link}, NBCopulaCSModel{T, D, Link}},
     maxiter::Integer=50000,
     reltol::Number=1e-6,
-    verbose::Bool=false) where {T <: BlasReal, D<:Union{Poisson, Bernoulli, NegativeBinomial}, Link, VD, VL}
+    verbose::Bool=false) where {T <: BlasReal, D<:Union{Poisson, Bernoulli, NegativeBinomial}, Link}
     rsstotal = zero(T)
     @inbounds for i in eachindex(gcm.data)
         update_res!(gcm.data[i], gcm.β)
@@ -105,7 +105,7 @@ end
 
 Update the quadratic forms `(r^T V[k] r) / 2` according to the current residual `r`.
 """
-function update_quadform!(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}}) where {T<:Real, D, Link, VD, VL}
+function update_quadform!(gc::Union{GLMCopulaVCObs{T, D, Link}, NBCopulaVCObs{T, D, Link}}) where {T<:Real, D, Link}
     @inbounds for k in 1:length(gc.V)
         mul!(gc.storage_n, gc.V[k], gc.res)
         gc.q[k] = dot(gc.res, gc.storage_n) / 2
