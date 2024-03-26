@@ -14,10 +14,15 @@ function fit!(
         qc_model :: GLMCopulaVCModel{T, D, Link},
         solver :: MOI.AbstractOptimizer = Ipopt.Optimizer();
         solver_config :: Dict = 
-            Dict("print_level"           => 5, 
-                 "mehrotra_algorithm"    => "yes",
-                 "warm_start_init_point" => "yes",
-                 "max_iter"              => 1000),
+            Dict("print_level"                => 5, 
+                 "tol"                        => 10^-3,
+                 "max_iter"                   => 100,
+                 "accept_after_max_steps"     => 50,
+                 "warm_start_init_point"      => "yes", 
+                 "limited_memory_max_history" => 6, # default value
+                 "hessian_approximation"      => "limited-memory",
+                 "derivative_test"            =>"first-order",
+                 ),
     ) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
     solvertype = typeof(solver)
     solvertype <: Ipopt.Optimizer ||

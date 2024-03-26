@@ -381,7 +381,7 @@ function simulate_longitudinal_traits(;
     Link = typeof(link)
 
     # variance components
-    θtrue = fill(100, m)
+    θtrue = fill(0.1, m)
 
     # simulate (nongenetic) design matrices
     Random.seed!(seed)
