@@ -1,7 +1,6 @@
 module QuasiCopula
 
 using LinearAlgebra
-using MathOptInterface
 using Reexport
 using GLM, Distributions
 using StatsFuns
@@ -16,8 +15,7 @@ using ProgressMeter
 using Random
 @reexport using Ipopt
 import Base: show, fill!
-# using Enzyme
-# using Zygote
+import MathOptInterface as MOI
 
 export fit!, update_θ_jensen!, init_β!, initialize_model!, loglikelihood!, standardize_res!, std_res_differential!
 export update_res!, update_θ!
@@ -56,7 +54,7 @@ include("parameter_estimation/component_loglikelihood.jl")
 include("parameter_estimation/gradient_hessian.jl")
 # include("parameter_estimation/fit_glm_ar_cs.jl")
 # include("parameter_estimation/fit_gaussian_ar_cs.jl")
-# include("parameter_estimation/fit_glm_vc.jl")
+include("parameter_estimation/fit_glm_vc.jl")
 # include("parameter_estimation/fit_nb.jl")
 # include("parameter_estimation/fit_gaussian_vc.jl")
 include("parameter_estimation/inference_ci.jl")
@@ -72,4 +70,11 @@ include("gwas/longitudinal_enzyme.jl")
 # include("gwas/multivariate_gwas.jl")
 # include("gwas/multivariate_gwas_autodiff.jl")
 include("gwas/utilities.jl")
+
+function config_solver(solver::MOI.AbstractOptimizer, solver_config::Dict)
+    for (key, val) in solver_config
+        MOI.set(solver, MOI.RawOptimizerAttribute(key), val)
+    end
+end
+
 end # module

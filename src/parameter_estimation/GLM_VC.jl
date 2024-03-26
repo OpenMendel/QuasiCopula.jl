@@ -87,7 +87,7 @@ GLMCopulaVCModel(gcs)
 Gaussian copula variance component model, which contains a vector of
 `GLMCopulaVCObs` as data, model parameters, and working arrays.
 """
-struct GLMCopulaVCModel{T <: BlasReal, D, Link}
+struct GLMCopulaVCModel{T <: BlasReal, D, Link} <: MOI.AbstractNLPEvaluator
     # data
     data::Vector{GLMCopulaVCObs{T, D, Link}}
     Ytotal::T
