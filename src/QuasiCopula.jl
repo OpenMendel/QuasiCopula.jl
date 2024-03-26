@@ -76,5 +76,6 @@ function config_solver(solver::MOI.AbstractOptimizer, solver_config::Dict)
         MOI.set(solver, MOI.RawOptimizerAttribute(key), val)
     end
 end
+@inline ◺(n::Integer) = (n * (n + 1)) >> 1
 
 end # module

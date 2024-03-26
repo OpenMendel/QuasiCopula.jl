@@ -11,27 +11,30 @@ Start point should be provided in `qc_model.β`, `qc_model.θ`.
     (default `solver = Ipopt.IpoptSolver(print_level=3, max_iter = 100, tol = 10^-6, limited_memory_max_history = 20, hessian_approximation = "limited-memory")`)
 """
 function fit!(
-        qc_model::GLMCopulaVCModel{T, D, Link},
-        solver   :: MOI.AbstractOptimizer = Ipopt.Optimizer();
-        solver_config::Dict = 
+        qc_model :: GLMCopulaVCModel{T, D, Link},
+        solver :: MOI.AbstractOptimizer = Ipopt.Optimizer();
+        solver_config :: Dict = 
             Dict("print_level"           => 5, 
                  "mehrotra_algorithm"    => "yes",
                  "warm_start_init_point" => "yes",
-                 "max_iter"              => 100),
+                 "max_iter"              => 1000),
     ) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
     solvertype = typeof(solver)
     solvertype <: Ipopt.Optimizer ||
         @warn("Optimizer object is $solvertype, `solver_config` may need to be defined.")
+
     # Pass options to solver
     config_solver(solver, solver_config)
 
     # initial conditions
+    initialize_model!(qc_model)
     npar = qc_model.p + qc_model.m
     par0 = Vector{T}(undef, npar)
-    initialize_model!(qc_model)
     modelpar_to_optimpar!(par0, qc_model)
-    solver_pars = MOI.add_variables(qc_model, npar)
-    @show qc_model.β
+    solver_pars = MOI.add_variables(solver, npar)
+    for i in 1:npar
+        MOI.set(solver, MOI.VariablePrimalStart(), solver_pars[i], par0[i])
+    end
 
     # constraints
     offset = qc_model.p + 1
@@ -41,13 +44,12 @@ function fit!(
     end
 
     # set up NLP optimization problem
-    for i in 1:npar
-        MOI.set(solver, MOI.VariablePrimalStart(), solver_pars[i], par0[i])
-    end
-    # NLPBlock = MOI.NLPBlockData(
-    #     MOI.NLPBoundsPair.(lb, ub), qc_model, true
-    # )
-    # MOI.set(solver, MOI.NLPBlock(), NLPBlock)
+    lb = T[]
+    ub = T[]
+    NLPBlock = MOI.NLPBlockData(
+        MOI.NLPBoundsPair.(lb, ub), qc_model, true
+    )
+    MOI.set(solver, MOI.NLPBlock(), NLPBlock)
     MOI.set(solver, MOI.ObjectiveSense(), MOI.MAX_SENSE)
 
     # optimize
@@ -57,11 +59,7 @@ function fit!(
         @warn("Optimization unsuccesful; got $optstat")
 
     # update parameters and refresh gradient
-    xsol = zeros(T, npar)
-    for i in eachindex(xsol)
-        xsol[i] = MOI.get(solver, MOI.VariablePrimal(), MOI.VariableIndex(i))
-    end
-    optimpar_to_modelpar!(qc_model, xsol)
+    optimpar_to_modelpar!(qc_model, MOI.get(solver, MOI.VariablePrimal(), solver_pars))
     loglikelihood!(qc_model, true, false)
 end
 
@@ -126,7 +124,7 @@ function MOI.eval_objective(
 end
 
 function MOI.eval_objective_gradient(
-    qc_model  :: GLMCopulaVCModel{T, D, Link},
+    qc_model :: GLMCopulaVCModel{T, D, Link},
     grad :: Vector,
     par  :: Vector
     ) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
@@ -155,7 +153,7 @@ function MOI.eval_constraint(
     return nothing
 end
 
-function MOI.hessian_lagrangian_structure(qc_model::GLMCopulaVCModel{T, D, Link}) where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
+function MOI.hessian_lagrangian_structure(qc_model::GLMCopulaVCModel)
     m◺ = ◺(qc_model.m)
     # we work on the upper triangular part of the Hessian
     arr1 = Vector{Int}(undef, ◺(qc_model.p) + m◺)
@@ -177,16 +175,16 @@ function MOI.hessian_lagrangian_structure(qc_model::GLMCopulaVCModel{T, D, Link}
             idx += 1
         end
     end
-    return (arr1, arr2)
+    return collect(zip(arr1, arr2))
 end
 
 function MOI.eval_hessian_lagrangian(
-    qc_model :: GLMCopulaVCModel{T, D, Link},
-    H   :: Vector{T},
-    par :: Vector{T},
+    qc_model :: GLMCopulaVCModel,
+    H   :: AbstractVector{T},
+    par :: AbstractVector{T},
     σ   :: T,
-    μ   :: Vector{T}
-    )where {T <: BlasReal, D<:Union{Poisson, Bernoulli}, Link}
+    μ   :: AbstractVector{T}
+    )where T <: BlasReal
     optimpar_to_modelpar!(qc_model, par)
     loglikelihood!(qc_model, true, true)
     # Hβ block
